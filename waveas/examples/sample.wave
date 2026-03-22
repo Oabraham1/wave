@@ -1,0 +1,51 @@
+; Sample WAVE assembly program
+; Demonstrates basic WAVE ISA features
+
+.kernel vector_add
+.registers 8
+.local_memory 1024
+
+    ; Load thread ID
+    mov r0, sr_thread_id_x
+
+    ; Compute addresses
+    mov_imm r1, 2            ; shift amount = 2 (for * 4)
+    shl r1, r0, r1           ; offset = tid * 4
+
+    ; Load values from input arrays
+    device_load_u32 r2, r1   ; load a[i]
+    iadd r3, r1, r4          ; address of b[i]
+    device_load_u32 r5, r3   ; load b[i]
+
+    ; Add vectors
+    fadd r6, r2, r5          ; c[i] = a[i] + b[i]
+
+    ; Store result
+    iadd r7, r1, r4          ; address of c[i]
+    device_store_u32 r7, r6
+
+    ; Synchronize
+    barrier
+
+.end
+
+.kernel reduction
+.registers 16
+.local_memory 2048
+
+    mov r0, sr_thread_id_x
+    mov r1, sr_lane_id
+
+    ; Load initial value
+    device_load_u32 r2, r0
+
+    ; Wave-level reduction
+    wave_reduce_add r3, r2
+
+    ; First lane stores result
+    icmp_eq p0, r1, r0
+    @p0 local_store_u32 r0, r3
+
+    barrier
+
+.end
