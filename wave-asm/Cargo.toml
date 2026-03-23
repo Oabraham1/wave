@@ -1,0 +1,19 @@
+[package]
+name = "wave-asm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE assembler - translates WAVE assembly to binary"
+license = "Apache 2.0"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+thiserror = "1"
+ariadne = "0.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

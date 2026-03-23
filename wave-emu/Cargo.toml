@@ -1,0 +1,24 @@
+[package]
+name = "wave-emu"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE emulator - reference implementation of the WAVE ISA"
+license = "Apache-2.0"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+thiserror = "1"
+half = "2"
+byteorder = "1"
+wave-decode = { path = "../wave-decode" }
+
+[dev-dependencies]
+wave-asm = { path = "../wave-asm" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

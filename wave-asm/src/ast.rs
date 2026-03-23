@@ -147,7 +147,7 @@ impl Default for KernelMetadata {
             name: String::new(),
             register_count: 32,
             local_memory_size: 0,
-            workgroup_size: [1, 1, 1],
+            workgroup_size: [0, 0, 0], // 0 = use CLI value
             code_offset: 0,
             code_size: 0,
         }

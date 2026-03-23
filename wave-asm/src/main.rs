@@ -11,9 +11,9 @@ use clap::{Parser, ValueEnum};
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use waveas::diagnostics::DiagnosticEmitter;
-use waveas::lexer::Lexer;
-use waveas::parser::Parser as WaveParser;
+use wave_asm::diagnostics::DiagnosticEmitter;
+use wave_asm::lexer::Lexer;
+use wave_asm::parser::Parser as WaveParser;
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum WarnLevel {
@@ -23,7 +23,7 @@ enum WarnLevel {
 }
 
 #[derive(Parser)]
-#[command(name = "waveas")]
+#[command(name = "wave-asm")]
 #[command(about = "WAVE assembler - translates .wave assembly to .wbin binary")]
 #[command(version)]
 struct Args {
@@ -85,11 +85,11 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let options = waveas::AssemblerOptions {
+    let options = wave_asm::AssemblerOptions {
         strip_symbols: args.no_symbols,
     };
 
-    match waveas::assemble_with_options(&source, &source_name, &options) {
+    match wave_asm::assemble_with_options(&source, &source_name, &options) {
         Ok(result) => {
             let emitter = DiagnosticEmitter::new(&source_name, &source);
             let mut stderr = std::io::stderr();

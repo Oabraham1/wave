@@ -1,15 +1,18 @@
 [package]
-name = "waveas"
+name = "wave-dis"
 version = "0.1.0"
 edition = "2021"
 authors = ["Ojima Abraham"]
-description = "WAVE assembler - translates WAVE assembly to binary"
-license = "Apache 2.0"
+description = "WAVE disassembler - reads .wbin files and produces assembly text"
+license = "Apache-2.0"
 
 [dependencies]
+wave-decode = { path = "../wave-decode" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "1"
-ariadne = "0.4"
+
+[dev-dependencies]
+wave-asm = { path = "../wave-asm" }
 
 [lints.rust]
 unsafe_code = "forbid"

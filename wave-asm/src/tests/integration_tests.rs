@@ -342,3 +342,140 @@ my_function:
     let result = assemble_program(source);
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_integration_all_special_registers() {
+    let source = r#"
+.kernel test_all_sr
+.registers 16
+    mov r0, sr_thread_id_x
+    mov r1, sr_thread_id_y
+    mov r2, sr_thread_id_z
+    mov r3, sr_wave_id
+    mov r4, sr_lane_id
+    mov r5, sr_workgroup_id_x
+    mov r6, sr_workgroup_id_y
+    mov r7, sr_workgroup_id_z
+    mov r8, sr_workgroup_size_x
+    mov r9, sr_workgroup_size_y
+    mov r10, sr_workgroup_size_z
+    mov r11, sr_grid_size_x
+    mov r12, sr_grid_size_y
+    mov r13, sr_grid_size_z
+    mov r14, sr_wave_width
+    mov r15, sr_num_waves
+.end
+"#;
+
+    let result = assemble_program(source);
+    assert!(result.is_ok());
+
+    let binary = result.unwrap();
+    let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+
+    for i in 0..16 {
+        let inst_offset = code_offset + i * 4;
+        let word = u32::from_le_bytes([
+            binary[inst_offset],
+            binary[inst_offset + 1],
+            binary[inst_offset + 2],
+            binary[inst_offset + 3],
+        ]);
+
+        let opcode = (word >> 26) & 0x3F;
+        let rd = (word >> 21) & 0x1F;
+        let rs1 = (word >> 16) & 0x1F;
+        let modifier = (word >> 8) & 0x07;
+        let flags = word & 0x07;
+
+        assert_eq!(opcode, 0x3F, "instruction {i}: expected Control opcode (0x3F)");
+        assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
+        assert_eq!(rs1, i as u32, "instruction {i}: expected sr index {i}");
+        assert_eq!(modifier, 2, "instruction {i}: expected MovSr modifier (2), got {modifier}");
+        assert_eq!(flags, 2, "instruction {i}: expected MISC_OP_FLAG (2), got {flags}");
+    }
+}
+
+#[test]
+fn test_integration_mov_sr_explicit_syntax() {
+    let source = r#"
+.kernel test_mov_sr
+.registers 4
+    mov_sr r0, sr_thread_id_x
+    mov_sr r1, sr_lane_id
+    mov_sr r2, sr_wave_width
+    mov_sr r3, sr_num_waves
+.end
+"#;
+
+    let result = assemble_program(source);
+    assert!(result.is_ok());
+
+    let binary = result.unwrap();
+    let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+
+    for i in 0..4 {
+        let inst_offset = code_offset + i * 4;
+        let word = u32::from_le_bytes([
+            binary[inst_offset],
+            binary[inst_offset + 1],
+            binary[inst_offset + 2],
+            binary[inst_offset + 3],
+        ]);
+
+        let modifier = (word >> 8) & 0x07;
+        assert_eq!(modifier, 2, "instruction {i}: expected MovSr modifier (2), got {modifier}");
+    }
+}
+
+#[test]
+fn test_integration_special_register_encoding_correctness() {
+    let test_cases = [
+        ("sr_thread_id_x", 0),
+        ("sr_thread_id_y", 1),
+        ("sr_thread_id_z", 2),
+        ("sr_wave_id", 3),
+        ("sr_lane_id", 4),
+        ("sr_workgroup_id_x", 5),
+        ("sr_workgroup_id_y", 6),
+        ("sr_workgroup_id_z", 7),
+        ("sr_workgroup_size_x", 8),
+        ("sr_workgroup_size_y", 9),
+        ("sr_workgroup_size_z", 10),
+        ("sr_grid_size_x", 11),
+        ("sr_grid_size_y", 12),
+        ("sr_grid_size_z", 13),
+        ("sr_wave_width", 14),
+        ("sr_num_waves", 15),
+    ];
+
+    for (sr_name, expected_index) in test_cases {
+        let source = format!(
+            r#"
+.kernel test_sr
+.registers 4
+    mov r0, {sr_name}
+.end
+"#
+        );
+
+        let result = assemble_program(&source);
+        assert!(result.is_ok(), "Failed to assemble mov r0, {sr_name}");
+
+        let binary = result.unwrap();
+        let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+
+        let word = u32::from_le_bytes([
+            binary[code_offset],
+            binary[code_offset + 1],
+            binary[code_offset + 2],
+            binary[code_offset + 3],
+        ]);
+
+        let rs1 = (word >> 16) & 0x1F;
+        assert_eq!(
+            rs1, expected_index,
+            "{sr_name} should encode to index {expected_index}, got {rs1}"
+        );
+    }
+}

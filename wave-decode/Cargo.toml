@@ -1,0 +1,18 @@
+[package]
+name = "wave-decode"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE decoder - shared instruction decoder for WAVE ISA"
+license = "Apache-2.0"
+
+[dependencies]
+thiserror = "1"
+byteorder = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

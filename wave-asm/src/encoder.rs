@@ -389,7 +389,12 @@ impl<'a> Encoder<'a> {
         mut word0: u32,
         _span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
+        const WAVE_REDUCE_FLAG: u32 = 0x04;
         let modifier = sig.modifier.unwrap_or(0);
+
+        if sig.wave_reduce {
+            word0 |= WAVE_REDUCE_FLAG;
+        }
 
         if modifier == WaveOpType::Ballot as u8 {
             let rd = self.expect_register(&inst.operands[0])?;
@@ -428,9 +433,9 @@ impl<'a> Encoder<'a> {
         let rs2 = self.expect_register(&inst.operands[3])?;
 
         word0 |= u32::from(rd) << RD_SHIFT;
-        word0 |= u32::from(pd) << PRED_SHIFT;
-        word0 |= u32::from(rs1) << RS1_SHIFT;
-        word0 |= u32::from(rs2) << RS2_SHIFT;
+        word0 |= u32::from(pd) << RS1_SHIFT;
+        word0 |= u32::from(rs1) << RS2_SHIFT;
+        word0 |= u32::from(rs2) << MODIFIER_SHIFT;
 
         Ok(EncodedInstruction::single(word0))
     }
@@ -447,7 +452,20 @@ impl<'a> Encoder<'a> {
 
         let modifier = sig.modifier.unwrap_or(0);
 
-        match modifier {
+        let effective_modifier = if modifier == MiscOp::Mov as u8 && inst.operands.len() > 1 {
+            if let Operand::Register(Register { kind: RegisterKind::Special, .. }) = &inst.operands[1].node {
+                MiscOp::MovSr as u8
+            } else {
+                modifier
+            }
+        } else {
+            modifier
+        };
+
+        word0 &= !((MODIFIER_MASK) << MODIFIER_SHIFT);
+        word0 |= (u32::from(effective_modifier) & MODIFIER_MASK) << MODIFIER_SHIFT;
+
+        match effective_modifier {
             m if m == MiscOp::Mov as u8 => {
                 let rd = self.expect_register(&inst.operands[0])?;
                 let rs1 = self.expect_register(&inst.operands[1])?;

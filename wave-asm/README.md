@@ -1,4 +1,4 @@
-# waveas
+# wave-asm
 
 Assembler for the WAVE ISA.
 
@@ -15,9 +15,9 @@ cargo build --release
 ## Usage
 
 ```
-waveas input.wave -o output.wbin
-waveas input.wave --dump-hex
-waveas input.wave --dump-ast
+wave-asm input.wave -o output.wbin
+wave-asm input.wave --dump-hex
+wave-asm input.wave --dump-ast
 ```
 
 ## Options
