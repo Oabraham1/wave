@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 6: Instruction tests
-// Verifies arithmetic, bitwise, compare, convert, and memory instructions.
+//! Section 6: Instruction tests
+//!
+//! Verifies arithmetic, bitwise, compare, convert, and memory instructions.
 
 use crate::harness::*;
 
@@ -456,7 +457,6 @@ fn test_shl_shr_sar() -> TestResult {
             let shr_val = read_u32(&result.device_memory, 4);
             let sar_val = read_u32(&result.device_memory, 8);
 
-            // sar with 0x80000000 >> 4 should be 0xF8000000 (sign extended)
             let passed = shl_val == 16 && shr_val == 16 && sar_val == 0xF8000000;
 
             TestResult {

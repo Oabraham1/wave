@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 6: Wave Operations tests
-// Verifies shuffle, broadcast, ballot, reduce, and vote operations.
+//! Section 6: Wave Operations tests
+//!
+//! Verifies shuffle, broadcast, ballot, reduce, and vote operations.
 
 use crate::harness::*;
 
@@ -57,10 +58,6 @@ fn test_wave_shuffle() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            // Lane 0 reads from lane 1: 10
-            // Lane 1 reads from lane 2: 20
-            // Lane 2 reads from lane 3: 30
-            // Lane 3 reads from lane 0: 0
             let val0 = read_u32(&result.device_memory, 0);
             let val1 = read_u32(&result.device_memory, 4);
             let val2 = read_u32(&result.device_memory, 8);
@@ -123,10 +120,6 @@ fn test_wave_shuffle_xor() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            // Lane 0 reads from lane 1: 1
-            // Lane 1 reads from lane 0: 0
-            // Lane 2 reads from lane 3: 3
-            // Lane 3 reads from lane 2: 2
             let val0 = read_u32(&result.device_memory, 0);
             let val1 = read_u32(&result.device_memory, 4);
             let val2 = read_u32(&result.device_memory, 8);
@@ -191,7 +184,6 @@ fn test_wave_broadcast() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            // All lanes should have 42
             let mut passed = true;
             for lane in 0..4 {
                 let value = read_u32(&result.device_memory, lane * 4);
@@ -256,7 +248,6 @@ fn test_wave_ballot() -> TestResult {
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
             let ballot = read_u32(&result.device_memory, 0);
-            // Even lanes (0, 2) should be set: 0b0101 = 5
             let passed = ballot == 5;
 
             TestResult {

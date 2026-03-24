@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Real Programs tests
-// Implements and verifies actual GPU algorithms to prove the spec is viable.
+//! Real Programs tests
+//!
+//! Implements and verifies actual GPU algorithms to prove the spec is viable.
 
 use crate::harness::*;
 
@@ -63,7 +64,6 @@ fn test_vector_add() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize A = [0,1,2,3,...,15], B = [100,100,...,100]
     let mut init_mem = vec![0u8; 256];
     for i in 0..16u32 {
         let a_offset = (i * 4) as usize;
@@ -76,7 +76,6 @@ fn test_vector_add() -> TestResult {
         Ok(result) => {
             let mut passed = true;
 
-            // Verify C[i] = A[i] + B[i] = i + 100
             for i in 0..16u32 {
                 let c_offset = 128 + (i * 4) as usize;
                 let value = read_u32(&result.device_memory, c_offset);
@@ -152,7 +151,6 @@ fn test_vector_scale() -> TestResult {
         ..Default::default()
     };
 
-    // A = [1,2,3,4,5,6,7,8]
     let mut init_mem = vec![0u8; 128];
     for i in 0..8u32 {
         let offset = (i * 4) as usize;
@@ -163,7 +161,6 @@ fn test_vector_scale() -> TestResult {
         Ok(result) => {
             let mut passed = true;
 
-            // B[i] = A[i] * 3 = (i+1) * 3
             for i in 0..8u32 {
                 let b_offset = 64 + (i * 4) as usize;
                 let value = read_u32(&result.device_memory, b_offset);
@@ -243,8 +240,6 @@ fn test_dot_product() -> TestResult {
         ..Default::default()
     };
 
-    // A = [1,2,3,4], B = [5,6,7,8]
-    // dot = 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
     let mut init_mem = vec![0u8; 64];
     let a_vals = [1u32, 2, 3, 4];
     let b_vals = [5u32, 6, 7, 8];
@@ -312,7 +307,6 @@ fn test_parallel_reduction() -> TestResult {
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
             let sum = read_u32(&result.device_memory, 0);
-            // 1 + 2 + 3 + 4 = 10
             let passed = sum == 10;
 
             TestResult {
@@ -366,7 +360,6 @@ fn test_histogram() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize histogram bins to 0
     let init_mem = vec![0u8; 16];
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
@@ -374,7 +367,6 @@ fn test_histogram() -> TestResult {
             let bin0 = read_u32(&result.device_memory, 0);  // Even lanes (0, 2)
             let bin1 = read_u32(&result.device_memory, 4);  // Odd lanes (1, 3)
 
-            // With 4 threads: lanes 0,2 have value 0, lanes 1,3 have value 1
             let passed = bin0 == 2 && bin1 == 2;
 
             TestResult {
@@ -429,7 +421,6 @@ fn test_prefix_sum() -> TestResult {
         ..Default::default()
     };
 
-    // Input = [1, 2, 3, 4]
     let mut init_mem = vec![0u8; 128];
     for i in 0..4u32 {
         let offset = (i * 4) as usize;
@@ -438,7 +429,6 @@ fn test_prefix_sum() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
         Ok(result) => {
-            // Exclusive prefix sum of [1,2,3,4] = [0, 1, 3, 6]
             let out0 = read_u32(&result.device_memory, 64);
             let out1 = read_u32(&result.device_memory, 68);
             let out2 = read_u32(&result.device_memory, 72);

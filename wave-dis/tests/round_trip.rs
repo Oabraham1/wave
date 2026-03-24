@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Round-trip integration tests. Assemble source, disassemble binary, reassemble
-// disassembled output, and verify both binaries are byte-identical. This proves
-// both assembler and disassembler are correct inverses of each other.
+//! Round-trip integration tests. Assemble source, disassemble binary, reassemble
+//!
+//! disassembled output, and verify both binaries are byte-identical. This proves
+//! both assembler and disassembler are correct inverses of each other.
 
 use wave_asm::assemble;
 use wave_dis::{disassemble_wbin, DisassemblyOptions};

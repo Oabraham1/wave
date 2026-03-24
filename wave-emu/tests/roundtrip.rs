@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Round-trip integration tests. Assembles WAVE source code using wave-asm,
-// loads the binary into wave-emu, executes it, and verifies the results.
+//! Round-trip integration tests. Assembles WAVE source code using wave-asm,
+//!
+//! loads the binary into wave-emu, executes it, and verifies the results.
 
 use wave_emu::{Emulator, EmulatorConfig};
 use wave_asm::assemble;
@@ -39,7 +40,6 @@ fn test_roundtrip_special_register_lane_id() {
 
     let emulator = assemble_and_run(source, config);
 
-    // Each thread should have stored its lane_id at address (lane_id * 4)
     for i in 0u64..4 {
         let value = emulator.device_memory().read_u32(i * 4).unwrap();
         assert_eq!(value, i as u32, "Address {} should contain lane_id {}", i * 4, i);
@@ -84,7 +84,6 @@ fn test_roundtrip_special_register_thread_id() {
 
     let emulator = assemble_and_run(source, config);
 
-    // Verify thread IDs for all 8 threads
     for y in 0u32..2 {
         for x in 0u32..4 {
             let linear_index = y * 4 + x;
@@ -120,7 +119,6 @@ fn test_roundtrip_special_register_wave_width() {
 
     let emulator = assemble_and_run(source, config);
 
-    // wave_width should be 4
     let value = emulator.device_memory().read_u32(0).unwrap();
     assert_eq!(value, 4, "wave_width should be 4, got {value}");
 }
@@ -168,7 +166,6 @@ fn test_roundtrip_special_register_workgroup_id() {
 
     let emulator = assemble_and_run(source, config);
 
-    // Verify workgroup IDs for all 4 workgroups
     for wg_y in 0u32..2 {
         for wg_x in 0u32..2 {
             let linear_index = wg_y * 2 + wg_x;
@@ -185,7 +182,6 @@ fn test_roundtrip_special_register_workgroup_id() {
 
 #[test]
 fn test_roundtrip_all_special_registers() {
-    // Test reading all special registers and storing their values
     let source = r#"
 .kernel test_all_sr
 .registers 32

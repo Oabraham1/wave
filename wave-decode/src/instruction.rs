@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Decoded instruction types. Represents WAVE instructions in a structured
-// format suitable for disassembly and emulation.
+//! Decoded instruction types. Represents WAVE instructions in a structured
+//!
+//! format suitable for disassembly and emulation.
 
 use crate::opcodes::{
     AtomicOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
@@ -27,7 +28,6 @@ pub struct DecodedInstruction {
 /// All WAVE operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
-    // Integer arithmetic
     Iadd { rd: u8, rs1: u8, rs2: u8 },
     Isub { rd: u8, rs1: u8, rs2: u8 },
     Imul { rd: u8, rs1: u8, rs2: u8 },
@@ -41,7 +41,6 @@ pub enum Operation {
     Imax { rd: u8, rs1: u8, rs2: u8 },
     Iclamp { rd: u8, rs1: u8, rs2: u8, rs3: u8 },
 
-    // Float arithmetic
     Fadd { rd: u8, rs1: u8, rs2: u8 },
     Fsub { rd: u8, rs1: u8, rs2: u8 },
     Fmul { rd: u8, rs1: u8, rs2: u8 },
@@ -55,15 +54,12 @@ pub enum Operation {
     Fsqrt { rd: u8, rs1: u8 },
     FUnary { op: FUnaryOp, rd: u8, rs1: u8 },
 
-    // Float16 operations
     F16 { op: F16Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
     F16Packed { op: F16PackedOp, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
 
-    // Float64 operations
     F64 { op: F64Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
     F64DivSqrt { op: F64DivSqrtOp, rd: u8, rs1: u8, rs2: Option<u8> },
 
-    // Bitwise operations
     And { rd: u8, rs1: u8, rs2: u8 },
     Or { rd: u8, rs1: u8, rs2: u8 },
     Xor { rd: u8, rs1: u8, rs2: u8 },
@@ -73,38 +69,30 @@ pub enum Operation {
     Sar { rd: u8, rs1: u8, rs2: u8 },
     BitOp { op: BitOpType, rd: u8, rs1: u8, rs2: Option<u8>, rs3: Option<u8>, rs4: Option<u8> },
 
-    // Compare
     Icmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
     Ucmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
     Fcmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
 
-    // Select and convert
     Select { rd: u8, ps: u8, rs1: u8, rs2: u8 },
     Cvt { cvt_type: CvtType, rd: u8, rs1: u8 },
 
-    // Local memory
     LocalLoad { width: MemWidth, rd: u8, addr: u8 },
     LocalStore { width: MemWidth, addr: u8, value: u8 },
 
-    // Device memory
     DeviceLoad { width: MemWidth, rd: u8, addr: u8 },
     DeviceStore { width: MemWidth, addr: u8, value: u8 },
 
-    // Local atomics
     LocalAtomic { op: AtomicOp, rd: Option<u8>, addr: u8, value: u8 },
     LocalAtomicCas { rd: Option<u8>, addr: u8, expected: u8, desired: u8 },
 
-    // Device atomics
     DeviceAtomic { op: AtomicOp, rd: Option<u8>, addr: u8, value: u8, scope: Scope },
     DeviceAtomicCas { rd: Option<u8>, addr: u8, expected: u8, desired: u8, scope: Scope },
 
-    // Wave operations
     WaveOp { op: WaveOpType, rd: u8, rs1: u8, rs2: Option<u8> },
     WaveReduce { op: WaveReduceType, rd: u8, rs1: u8 },
     WaveBallot { rd: u8, ps: u8 },
     WaveVote { op: WaveOpType, pd: u8, ps: u8 },
 
-    // Control flow
     If { ps: u8 },
     Else,
     Endif,
@@ -114,7 +102,6 @@ pub enum Operation {
     Endloop,
     Call { target: u32 },
 
-    // Synchronization
     Return,
     Halt,
     Barrier,
@@ -124,12 +111,10 @@ pub enum Operation {
     Wait,
     Nop,
 
-    // Data movement
     Mov { rd: u8, rs1: u8 },
     MovImm { rd: u8, imm: u32 },
     MovSr { rd: u8, sr_index: u8 },
 
-    // Unknown/invalid instruction
     Unknown { opcode: u8, word0: u32, word1: Option<u32> },
 }
 

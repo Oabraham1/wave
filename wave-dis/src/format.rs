@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Instruction-to-text formatter. Converts DecodedInstruction from wave-decode
-// into human-readable WAVE assembly text. Handles all instruction variants,
-// predication, register naming, and immediate formatting.
+//! Instruction-to-text formatter. Converts DecodedInstruction from wave-decode
+//!
+//! into human-readable WAVE assembly text. Handles all instruction variants,
+//! predication, register naming, and immediate formatting.
 
 use wave_decode::{
     special_register_name, AtomicOp, BitOpType, CmpOp, CvtType, DecodedInstruction, F16Op,

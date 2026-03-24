@@ -1,8 +1,11 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
-// Opcode definitions and constants for WAVE ISA decoding.
-// Mirrors the exact opcode assignments from wave-asm to ensure
-// consistency between assembler, disassembler, and emulator.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
+
+//! Opcode definitions and constants for WAVE ISA decoding.
+//!
+//! Mirrors the exact opcode assignments from wave-asm to ensure
+//! consistency between assembler, disassembler, and emulator.
+
 pub const OPCODE_SHIFT: u32 = 26;
 pub const OPCODE_MASK: u32 = 0x3F;
 pub const RD_SHIFT: u32 = 21;
@@ -11,23 +14,22 @@ pub const RS1_SHIFT: u32 = 16;
 pub const RS1_MASK: u32 = 0x1F;
 pub const RS2_SHIFT: u32 = 11;
 pub const RS2_MASK: u32 = 0x1F;
-pub const MODIFIER_SHIFT: u32 = 8;
-pub const MODIFIER_MASK: u32 = 0x07;
-pub const SCOPE_SHIFT: u32 = 6;
+pub const MODIFIER_SHIFT: u32 = 7;
+pub const MODIFIER_MASK: u32 = 0x0F;
+pub const SCOPE_SHIFT: u32 = 5;
 pub const SCOPE_MASK: u32 = 0x03;
-pub const PRED_SHIFT: u32 = 4;
+pub const PRED_SHIFT: u32 = 3;
 pub const PRED_MASK: u32 = 0x03;
-pub const PRED_NEG_SHIFT: u32 = 3;
+pub const PRED_NEG_SHIFT: u32 = 2;
 pub const PRED_NEG_MASK: u32 = 0x01;
 pub const FLAGS_SHIFT: u32 = 0;
-pub const FLAGS_MASK: u32 = 0x07;
+pub const FLAGS_MASK: u32 = 0x03;
 pub const EXTENDED_RS3_SHIFT: u32 = 27;
 pub const EXTENDED_RS3_MASK: u32 = 0x1F;
 pub const EXTENDED_RS4_SHIFT: u32 = 22;
 pub const EXTENDED_RS4_MASK: u32 = 0x1F;
 pub const SYNC_OP_FLAG: u8 = 0x01;
 pub const MISC_OP_FLAG: u8 = 0x02;
-pub const WAVE_REDUCE_FLAG: u8 = 0x04;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Opcode {

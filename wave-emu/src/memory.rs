@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Memory subsystem implementation. DeviceMemory is global shared storage across
-// all workgroups. LocalMemory is per-workgroup scratch space. Both support byte,
-// half, word, and double-word loads/stores with bounds checking.
+//! Memory subsystem implementation. DeviceMemory is global shared storage across
+//!
+//! all workgroups. LocalMemory is per-workgroup scratch space. Both support byte,
+//! half, word, and double-word loads/stores with bounds checking.
 
 use crate::EmulatorError;
 

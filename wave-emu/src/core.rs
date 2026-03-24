@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Core simulation engine. Manages waves within a workgroup, coordinates barrier
-// synchronization, schedules wave execution, and drives the instruction executor.
-// A single Core instance handles one workgroup's complete execution.
+//! Core simulation engine. Manages waves within a workgroup, coordinates barrier
+//!
+//! synchronization, schedules wave execution, and drives the instruction executor.
+//! A single Core instance handles one workgroup's complete execution.
 
 use crate::barrier::BarrierManager;
 use crate::executor::{Executor, StepResult};
@@ -156,12 +157,12 @@ mod tests {
     use crate::decoder::SYNC_OP_FLAG;
 
     fn encode_halt() -> Vec<u8> {
-        let word = ((0x3Fu32) << 26) | ((1u32) << 8) | u32::from(SYNC_OP_FLAG);
+        let word = ((0x3Fu32) << 26) | ((1u32) << 7) | u32::from(SYNC_OP_FLAG);
         word.to_le_bytes().to_vec()
     }
 
     fn encode_mov_imm(rd: u8, imm: u32) -> Vec<u8> {
-        let word0 = ((0x3Fu32) << 26) | ((u32::from(rd) & 0x1F) << 21) | ((1u32) << 8) | 0x02;
+        let word0 = ((0x3Fu32) << 26) | ((u32::from(rd) & 0x1F) << 21) | ((1u32) << 7) | 0x02;
         let mut code = word0.to_le_bytes().to_vec();
         code.extend_from_slice(&imm.to_le_bytes());
         code
@@ -260,18 +261,16 @@ mod tests {
     }
 
     fn encode_mov_sr(rd: u8, sr_index: u8) -> Vec<u8> {
-        // Control opcode (0x3F), rd, rs1=sr_index, modifier=2 (MovSr), flags=0x02 (MISC_OP_FLAG)
         let word = ((0x3Fu32) << 26)
             | ((u32::from(rd) & 0x1F) << 21)
             | ((u32::from(sr_index) & 0x1F) << 16)
-            | ((2u32) << 8)  // modifier = MovSr = 2
-            | 0x02;          // flags = MISC_OP_FLAG
+            | ((2u32) << 7)
+            | 0x02;
         word.to_le_bytes().to_vec()
     }
 
     #[test]
     fn test_core_mov_sr_lane_id() {
-        // mov_sr r0, sr_4 (lane_id)
         let mut code = encode_mov_sr(0, 4);
         code.extend_from_slice(&encode_halt());
 
@@ -290,7 +289,6 @@ mod tests {
 
         core.run().unwrap();
 
-        // Each thread should have its lane_id in r0
         for (i, thread) in core.waves[0].threads.iter().enumerate() {
             assert_eq!(
                 thread.read_register(0),
@@ -303,17 +301,14 @@ mod tests {
     }
 
     fn encode_device_store_u32(addr_reg: u8, value_reg: u8) -> Vec<u8> {
-        // DeviceStore opcode (0x39), modifier=2 (u32)
-        // rs1 = addr_reg, rs2 = value_reg
         let word = ((0x39u32) << 26)
             | ((u32::from(addr_reg) & 0x1F) << 16)
             | ((u32::from(value_reg) & 0x1F) << 11)
-            | ((2u32) << 8);  // modifier = U32 = 2
+            | ((2u32) << 7);
         word.to_le_bytes().to_vec()
     }
 
     fn encode_shl(rd: u8, rs1: u8, rs2: u8) -> Vec<u8> {
-        // Shl opcode (0x24)
         let word = ((0x24u32) << 26)
             | ((u32::from(rd) & 0x1F) << 21)
             | ((u32::from(rs1) & 0x1F) << 16)
@@ -323,11 +318,6 @@ mod tests {
 
     #[test]
     fn test_core_mov_sr_and_device_store() {
-        // mov_sr r0, sr_4 (lane_id)
-        // mov_imm r1, 2
-        // shl r2, r0, r1  (r2 = lane_id * 4)
-        // device_store_u32 r2, r0  (store lane_id at address lane_id*4)
-        // halt
         let mut code = encode_mov_sr(0, 4);        // r0 = lane_id
         code.extend_from_slice(&encode_mov_imm(1, 2)); // r1 = 2
         code.extend_from_slice(&encode_shl(2, 0, 1));  // r2 = r0 << r1 = lane_id * 4
@@ -349,7 +339,6 @@ mod tests {
 
         core.run().unwrap();
 
-        // Verify each thread stored its lane_id at address lane_id*4
         for i in 0..4 {
             let addr = i * 4;
             let value = device_memory.read_u32(addr).unwrap();

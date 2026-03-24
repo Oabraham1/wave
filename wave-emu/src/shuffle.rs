@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Wave shuffle and collective operations. Implements cross-lane communication
-// (shuffle, broadcast), vote operations (ballot, any, all), and reductions
-// (prefix sum, reduce add/min/max). Operates only on active threads.
+//! Wave shuffle and collective operations. Implements cross-lane communication
+//!
+//! (shuffle, broadcast), vote operations (ballot, any, all), and reductions
+//! (prefix sum, reduce add/min/max). Operates only on active threads.
 
 use crate::wave::Wave;
 

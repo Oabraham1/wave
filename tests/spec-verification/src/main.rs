@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// WAVE Specification Verification Test Suite
-// Runs comprehensive tests against the WAVE spec to verify correctness,
-// completeness, and consistency of the specification.
+//! WAVE Specification Verification Test Suite
+//!
+//! Runs comprehensive tests against the WAVE spec to verify correctness,
+//! completeness, and consistency of the specification.
 
 mod harness;
 mod section2_execution_model;
@@ -33,7 +34,6 @@ fn main() {
     let mut all_results: Vec<TestResult> = Vec::new();
     let mut section_results: HashMap<String, Vec<TestResult>> = HashMap::new();
 
-    // Run all test sections
     let sections: Vec<(&str, fn() -> Vec<TestResult>)> = vec![
         ("Section 2: Execution Model", section2_execution_model::run_tests),
         ("Section 3: Register Model", section3_register_model::run_tests),
@@ -66,7 +66,6 @@ fn main() {
         all_results.extend(results);
     }
 
-    // Summary
     let passed = all_results.iter().filter(|r| r.passed).count();
     let failed = all_results.iter().filter(|r| !r.passed).count();
     let total = all_results.len();
@@ -90,7 +89,6 @@ mod chrono_lite {
     pub struct Utc;
     impl Utc {
         pub fn now() -> String {
-            // Use system date command for simplicity
             std::process::Command::new("date")
                 .arg("+%Y-%m-%d")
                 .output()

@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Public API for the WAVE emulator. Provides Emulator struct for running WAVE
-// binaries, configuration options for grid/workgroup dimensions, and execution
-// results with statistics. Entry point for programmatic use of the emulator.
+//! Public API for the WAVE emulator. Provides Emulator struct for running WAVE
+//!
+//! binaries, configuration options for grid/workgroup dimensions, and execution
+//! results with statistics. Entry point for programmatic use of the emulator.
 
 #![allow(
     clippy::cast_lossless,

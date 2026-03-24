@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Stress Tests
-// Real GPU-style workloads to stress-test the emulator.
+//! Stress Tests
+//!
+//! Real GPU-style workloads to stress-test the emulator.
 
 use crate::harness::*;
 
@@ -57,17 +58,14 @@ fn test_vector_add() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize A and B arrays
     let mut initial_mem = vec![0u8; 1024];
 
-    // A[0..16] = 1, 2, 3, ..., 16
     for i in 0..16u32 {
         let bytes = (i + 1).to_le_bytes();
         let offset = (i * 4) as usize;
         initial_mem[offset..offset + 4].copy_from_slice(&bytes);
     }
 
-    // B[0..16] = 100, 100, 100, ...
     for i in 0..16u32 {
         let bytes = 100u32.to_le_bytes();
         let offset = (256 + i * 4) as usize;
@@ -138,13 +136,11 @@ fn test_reduction_sum() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize counter to 0
     let initial_mem = vec![0u8; 64];
 
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, Some(&initial_mem)) {
         Ok(result) => {
             let sum = read_u32(&result.device_memory, 0);
-            // Sum of 1+2+3+...+8 = 36
             let expected = 36u32;
             let passed = sum == expected;
 
@@ -213,9 +209,6 @@ fn test_matrix_transpose_tile() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize 2x2 matrix:
-    // [ 1, 2 ]
-    // [ 3, 4 ]
     let mut initial_mem = vec![0u8; 128];
     initial_mem[0..4].copy_from_slice(&1u32.to_le_bytes());
     initial_mem[4..8].copy_from_slice(&2u32.to_le_bytes());
@@ -224,9 +217,6 @@ fn test_matrix_transpose_tile() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [2, 2, 1], &config, Some(&initial_mem)) {
         Ok(result) => {
-            // Transposed should be:
-            // [ 1, 3 ]
-            // [ 2, 4 ]
             let t00 = read_u32(&result.device_memory, 64);
             let t01 = read_u32(&result.device_memory, 68);
             let t10 = read_u32(&result.device_memory, 72);
@@ -287,10 +277,8 @@ fn test_histogram() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize histogram bins to 0
     let initial_mem = vec![0u8; 64];
 
-    // 16 threads, 4 bins -> each bin should have count 4
     match run_test(SOURCE, [1, 1, 1], [16, 1, 1], &config, Some(&initial_mem)) {
         Ok(result) => {
             let bin0 = read_u32(&result.device_memory, 0);
@@ -414,7 +402,6 @@ fn test_many_waves() -> TestResult {
         ..Default::default()
     };
 
-    // 4 workgroups of 8 threads each = 32 threads total
     match run_test(SOURCE, [4, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let mut passed = true;

@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 4: Memory Model tests
-// Verifies local memory, device memory, memory widths, and atomics.
+//! Section 4: Memory Model tests
+//!
+//! Verifies local memory, device memory, memory widths, and atomics.
 
 use crate::harness::*;
 
@@ -328,7 +329,6 @@ fn test_atomic_add_i32() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize device memory to 0
     let init_mem = vec![0u8; 4];
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
@@ -380,7 +380,6 @@ fn test_atomic_sub() -> TestResult {
         ..Default::default()
     };
 
-    // Initialize to 100
     let mut init_mem = vec![0u8; 4];
     init_mem[0..4].copy_from_slice(&100u32.to_le_bytes());
 
@@ -440,7 +439,6 @@ fn test_atomic_min_max() -> TestResult {
         ..Default::default()
     };
 
-    // Init: min = 100, max = 0
     let mut init_mem = vec![0u8; 8];
     init_mem[0..4].copy_from_slice(&100u32.to_le_bytes());
     init_mem[4..8].copy_from_slice(&0u32.to_le_bytes());
@@ -450,7 +448,6 @@ fn test_atomic_min_max() -> TestResult {
             let min_val = read_u32(&result.device_memory, 0);
             let max_val = read_u32(&result.device_memory, 4);
 
-            // Min should be 0 (lane 0's value), max should be 3 (lane 3's value)
             let passed = min_val == 0 && max_val == 3;
 
             TestResult {
@@ -505,7 +502,6 @@ fn test_atomic_and_or_xor() -> TestResult {
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
         Ok(result) => {
             let value = read_u32(&result.device_memory, 0);
-            // Should be 0b1111 = 0xF (bits 0,1,2,3 all set)
             let passed = value == 0xF;
 
             TestResult {
@@ -560,14 +556,11 @@ fn test_atomic_exchange() -> TestResult {
         ..Default::default()
     };
 
-    // Init device[0] = 42
     let mut init_mem = vec![0u8; 64];
     init_mem[0..4].copy_from_slice(&42u32.to_le_bytes());
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
         Ok(result) => {
-            // One thread got 42, others got the value from the previous thread
-            // Final value should be one of 100, 101, 102, 103
             let final_val = read_u32(&result.device_memory, 0);
             let passed = final_val >= 100 && final_val <= 103;
 
@@ -623,7 +616,6 @@ fn test_atomic_cas() -> TestResult {
         ..Default::default()
     };
 
-    // Init device[0] = 5
     let mut init_mem = vec![0u8; 128];
     init_mem[0..4].copy_from_slice(&5u32.to_le_bytes());
 
@@ -632,7 +624,6 @@ fn test_atomic_cas() -> TestResult {
             let final_val = read_u32(&result.device_memory, 0);
             let old_val = read_u32(&result.device_memory, 100);
 
-            // CAS should succeed: final = 10, old = 5
             let passed = final_val == 10 && old_val == 5;
 
             TestResult {
@@ -781,7 +772,6 @@ fn test_barrier_memory_visibility() -> TestResult {
         ..Default::default()
     };
 
-    // 2 waves = 8 threads
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let val0 = read_u32(&result.device_memory, 0);

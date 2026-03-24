@@ -1,0 +1,19 @@
+[package]
+name = "wave-metal"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE Metal backend - translates WAVE binary to Apple Metal Shading Language"
+license = "Apache-2.0"
+
+[dependencies]
+wave-decode = { path = "../wave-decode" }
+clap = { version = "4", features = ["derive"] }
+thiserror = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

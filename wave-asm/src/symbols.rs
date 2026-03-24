@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Two-pass symbol table. Pass 1 collects label definitions and their byte
-// offsets. Pass 2 patches forward references in call instructions. Duplicate
-// labels and unresolved references are reported as errors.
+//! Two-pass symbol table. Pass 1 collects label definitions and their byte
+//!
+//! offsets. Pass 2 patches forward references in call instructions. Duplicate
+//! labels and unresolved references are reported as errors.
 
 use crate::ast::{Program, Span, Statement};
 use crate::diagnostics::AssemblerError;

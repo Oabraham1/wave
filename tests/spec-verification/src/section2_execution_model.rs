@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 2: Execution Model tests
-// Verifies thread identity, wave structure, workgroup dimensions, and scheduling.
+//! Section 2: Execution Model tests
+//!
+//! Verifies thread identity, wave structure, workgroup dimensions, and scheduling.
 
 use crate::harness::*;
 
@@ -130,7 +131,6 @@ fn test_lane_id_unique() -> TestResult {
                 }
             }
 
-            // Verify all lane IDs were unique
             let all_unique = seen.iter().all(|&x| x);
 
             TestResult {
@@ -236,12 +236,10 @@ fn test_workgroup_dims_1d() -> TestResult {
         ..Default::default()
     };
 
-    // Launch 8 threads (2 waves)
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let mut passed = true;
 
-            // Verify thread IDs 0-7 are written
             for tid in 0..8u32 {
                 let offset = (tid * 4) as usize;
                 let value = read_u32(&result.device_memory, offset);
@@ -315,7 +313,6 @@ fn test_workgroup_dims_3d() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [2, 2, 1], &config, None) {
         Ok(result) => {
-            // Expected: 4 threads with (x,y) = (0,0), (1,0), (0,1), (1,1)
             let expected = [(0u32, 0u32), (1, 0), (0, 1), (1, 1)];
             let mut passed = true;
             let mut details = String::new();
@@ -390,13 +387,11 @@ fn test_grid_dims() -> TestResult {
         ..Default::default()
     };
 
-    // 2 workgroups of 4 threads each = 8 threads total
     match run_test(SOURCE, [2, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
             let mut passed = true;
             let mut details = String::new();
 
-            // First 4 threads (workgroup 0) should write 0
             for i in 0..4 {
                 let value = read_u32(&result.device_memory, i * 4);
                 if value != 0 {
@@ -406,7 +401,6 @@ fn test_grid_dims() -> TestResult {
                 }
             }
 
-            // Next 4 threads (workgroup 1) should write 1
             if passed {
                 for i in 4..8 {
                     let value = read_u32(&result.device_memory, i * 4);
@@ -468,7 +462,6 @@ fn test_forward_progress() -> TestResult {
         ..Default::default()
     };
 
-    // 2 waves = 8 threads
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let wave0_flag = read_u32(&result.device_memory, 0);
@@ -542,12 +535,10 @@ fn test_multiple_waves_in_workgroup() -> TestResult {
         ..Default::default()
     };
 
-    // 2 waves = 8 threads
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let mut passed = true;
 
-            // Wave 1 should have read wave 0's lane_ids from local memory
             for lane in 0..4u32 {
                 let offset = (lane * 4) as usize;
                 let value = read_u32(&result.device_memory, offset);

@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 5: Control Flow tests
-// Verifies divergence, reconvergence, loops, and inactive thread semantics.
+//! Section 5: Control Flow tests
+//!
+//! Verifies divergence, reconvergence, loops, and inactive thread semantics.
 
 use crate::harness::*;
 
@@ -271,8 +272,6 @@ fn test_if_divergent() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            // Even lanes (0, 2) should have 100, 102
-            // Odd lanes (1, 3) should have 0 (not written)
             let val0 = read_u32(&result.device_memory, 0);
             let val1 = read_u32(&result.device_memory, 4);
             let val2 = read_u32(&result.device_memory, 8);

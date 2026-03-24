@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Wave state management. A wave contains W threads sharing a program counter.
-// Active mask (u64 bitmask) tracks which threads execute each instruction.
-// Supports wave widths up to 64. Status tracks ready/suspended/halted state.
+//! Wave state management. A wave contains W threads sharing a program counter.
+//!
+//! Active mask (u64 bitmask) tracks which threads execute each instruction.
+//! Supports wave widths up to 64. Status tracks ready/suspended/halted state.
 
 use crate::control_flow::ControlFlowManager;
 use crate::thread::{SpecialRegisters, Thread};
@@ -187,13 +188,11 @@ mod tests {
     fn test_wave_lane_ids() {
         let wave = Wave::new(4, 32, 0, [0, 0, 0], [4, 1, 1], [1, 1, 1], 0, 4, 1);
 
-        // Each thread should have its lane_id set correctly
         assert_eq!(wave.threads[0].special_registers.lane_id, 0);
         assert_eq!(wave.threads[1].special_registers.lane_id, 1);
         assert_eq!(wave.threads[2].special_registers.lane_id, 2);
         assert_eq!(wave.threads[3].special_registers.lane_id, 3);
 
-        // read_special should return correct lane_id
         assert_eq!(wave.threads[0].read_special(4), 0);
         assert_eq!(wave.threads[1].read_special(4), 1);
         assert_eq!(wave.threads[2].read_special(4), 2);

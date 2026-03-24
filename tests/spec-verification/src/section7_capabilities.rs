@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 7: Capabilities tests
-// Verifies capability queries and optional feature detection.
+//! Section 7: Capabilities tests
+//!
+//! Verifies capability queries and optional feature detection.
 
 use crate::harness::*;
 

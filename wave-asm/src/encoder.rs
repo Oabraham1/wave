@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Instruction encoder. Converts AST instructions to 32-bit or 64-bit machine words.
-// Handles operand encoding, predication bits, and resolves label references via
-// the symbol table. Returns EncodedInstruction (single or extended format).
+//! Instruction encoder. Converts AST instructions to 32-bit or 64-bit machine words.
+//!
+//! Handles operand encoding, predication bits, and resolves label references via
+//! the symbol table. Returns EncodedInstruction (single or extended format).
 
 use crate::ast::{Immediate, Instruction, Operand, Predicate, Register, RegisterKind, Span, Spanned};
 use crate::diagnostics::AssemblerError;
@@ -14,7 +15,6 @@ use crate::opcodes::{
 };
 use crate::symbols::SymbolTable;
 
-const NON_RETURNING_ATOMIC_FLAG: u32 = 0x04;
 const SYNC_OP_FLAG: u32 = 0x01;
 
 #[derive(Debug, Clone)]
@@ -269,10 +269,6 @@ impl<'a> Encoder<'a> {
         let expected_with_rd = sig.operands.len();
         let is_non_returning = has_optional && inst.operands.len() < expected_with_rd;
 
-        if is_non_returning {
-            word0 |= NON_RETURNING_ATOMIC_FLAG;
-        }
-
         let mut operand_idx = 0;
         let is_cas = sig.extended && sig.operands.iter().any(|o| matches!(o, OperandKind::Rs3));
 
@@ -389,12 +385,7 @@ impl<'a> Encoder<'a> {
         mut word0: u32,
         _span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
-        const WAVE_REDUCE_FLAG: u32 = 0x04;
         let modifier = sig.modifier.unwrap_or(0);
-
-        if sig.wave_reduce {
-            word0 |= WAVE_REDUCE_FLAG;
-        }
 
         if modifier == WaveOpType::Ballot as u8 {
             let rd = self.expect_register(&inst.operands[0])?;
@@ -651,7 +642,7 @@ mod tests {
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
         assert_eq!(opcode, Opcode::LocalLoad as u32);
 
-        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x07;
+        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;
         assert_eq!(modifier, 2);
     }
 
@@ -670,7 +661,7 @@ mod tests {
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
         assert_eq!(opcode, Opcode::Control as u32);
 
-        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x07;
+        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;
         assert_eq!(modifier, SyncOp::Barrier as u32);
 
         let flags = (encoded.word0 >> FLAGS_SHIFT) & FLAGS_MASK;
@@ -703,7 +694,7 @@ mod tests {
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
         assert_eq!(opcode, Opcode::WaveOp as u32);
 
-        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x07;
+        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;
         assert_eq!(modifier, WaveOpType::Shuffle as u32);
     }
 

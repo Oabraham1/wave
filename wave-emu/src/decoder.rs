@@ -1,23 +1,20 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Binary instruction decoder for WBIN format. Wraps wave-decode and provides
-// a flat DecodedInstruction structure for the executor to dispatch on.
+//! Binary instruction decoder for WBIN format. Wraps wave-decode and provides
+//!
+//! a flat DecodedInstruction structure for the executor to dispatch on.
 
 use crate::EmulatorError;
 
-// Re-export types from wave_decode that are used directly
 pub use wave_decode::{
     AtomicOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
     FUnaryOp, MemWidth, MiscOp, Opcode, Scope, SyncOp, WaveOpType, WaveReduceType,
 };
 
-// Re-export constants
 pub use wave_decode::opcodes::{
-    MISC_OP_FLAG, SYNC_OP_FLAG, WAVE_REDUCE_FLAG,
+    MISC_OP_FLAG, SYNC_OP_FLAG,
 };
-
-pub const NON_RETURNING_ATOMIC_FLAG: u8 = 0x04;
 
 /// Flat decoded instruction for executor dispatch
 #[derive(Debug, Clone)]
@@ -52,11 +49,11 @@ impl DecodedInstruction {
 
     pub fn is_non_returning_atomic(&self) -> bool {
         (self.opcode == Opcode::LocalAtomic || self.opcode == Opcode::DeviceAtomic)
-            && (self.flags & NON_RETURNING_ATOMIC_FLAG) != 0
+            && self.rd == 0
     }
 
     pub fn is_wave_reduce(&self) -> bool {
-        self.opcode == Opcode::WaveOp && (self.flags & WAVE_REDUCE_FLAG) != 0
+        self.opcode == Opcode::WaveOp && self.modifier >= 8
     }
 }
 
@@ -234,7 +231,7 @@ impl<'a> Decoder<'a> {
             }
             Opcode::WaveOp => {
                 if inst.is_wave_reduce() {
-                    WaveReduceType::from_u8(inst.modifier).map_or("wave_reduce_unknown", |op| op.mnemonic())
+                    WaveReduceType::from_u8(inst.modifier - 8).map_or("wave_reduce_unknown", |op| op.mnemonic())
                 } else {
                     WaveOpType::from_u8(inst.modifier).map_or("wave_unknown", |op| op.mnemonic())
                 }
@@ -270,7 +267,6 @@ impl<'a> Decoder<'a> {
                 format!("p{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2)
             }
             Opcode::Select => {
-                // Selector predicate is stored in modifier field
                 format!("r{}, p{}, r{}, r{}", inst.rd, inst.modifier, inst.rs1, inst.rs2)
             }
             Opcode::Cvt => format!("r{}, r{}", inst.rd, inst.rs1),
@@ -322,7 +318,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
     use wave_decode::Operation;
 
     let (opcode, rd, rs1, rs2, rs3, rs4, modifier, scope, flags, immediate) = match &decoded.operation {
-        // Integer arithmetic
         Operation::Iadd { rd, rs1, rs2 } => (Opcode::Iadd, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Isub { rd, rs1, rs2 } => (Opcode::Isub, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Imul { rd, rs1, rs2 } => (Opcode::Imul, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
@@ -336,7 +331,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
         Operation::Imax { rd, rs1, rs2 } => (Opcode::Imax, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Iclamp { rd, rs1, rs2, rs3 } => (Opcode::Iclamp, *rd, *rs1, *rs2, *rs3, 0, 0, 0, 0, 0),
 
-        // Float arithmetic
         Operation::Fadd { rd, rs1, rs2 } => (Opcode::Fadd, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Fsub { rd, rs1, rs2 } => (Opcode::Fsub, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Fmul { rd, rs1, rs2 } => (Opcode::Fmul, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
@@ -350,7 +344,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
         Operation::Fsqrt { rd, rs1 } => (Opcode::Fsqrt, *rd, *rs1, 0, 0, 0, 0, 0, 0, 0),
         Operation::FUnary { op, rd, rs1 } => (Opcode::FUnaryOps, *rd, *rs1, 0, 0, 0, *op as u8, 0, 0, 0),
 
-        // F16 operations
         Operation::F16 { op, rd, rs1, rs2, rs3 } => {
             (Opcode::F16Ops, *rd, *rs1, *rs2, rs3.unwrap_or(0), 0, *op as u8, 0, 0, 0)
         }
@@ -358,7 +351,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
             (Opcode::F16PackedOps, *rd, *rs1, *rs2, rs3.unwrap_or(0), 0, *op as u8, 0, 0, 0)
         }
 
-        // F64 operations
         Operation::F64 { op, rd, rs1, rs2, rs3 } => {
             (Opcode::F64Ops, *rd, *rs1, *rs2, rs3.unwrap_or(0), 0, *op as u8, 0, 0, 0)
         }
@@ -366,7 +358,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
             (Opcode::F64DivSqrt, *rd, *rs1, rs2.unwrap_or(0), 0, 0, *op as u8, 0, 0, 0)
         }
 
-        // Bitwise
         Operation::And { rd, rs1, rs2 } => (Opcode::And, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Or { rd, rs1, rs2 } => (Opcode::Or, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
         Operation::Xor { rd, rs1, rs2 } => (Opcode::Xor, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
@@ -378,56 +369,45 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
             (Opcode::BitOps, *rd, *rs1, rs2.unwrap_or(0), rs3.unwrap_or(0), rs4.unwrap_or(0), *op as u8, 0, 0, 0)
         }
 
-        // Compare
         Operation::Icmp { op, pd, rs1, rs2 } => (Opcode::Icmp, *pd, *rs1, *rs2, 0, 0, *op as u8, 0, 0, 0),
         Operation::Ucmp { op, pd, rs1, rs2 } => (Opcode::Ucmp, *pd, *rs1, *rs2, 0, 0, *op as u8, 0, 0, 0),
         Operation::Fcmp { op, pd, rs1, rs2 } => (Opcode::Fcmp, *pd, *rs1, *rs2, 0, 0, *op as u8, 0, 0, 0),
 
-        // Select and convert
         Operation::Select { rd, ps, rs1, rs2 } => (Opcode::Select, *rd, *rs1, *rs2, 0, 0, *ps, 0, 0, 0),
         Operation::Cvt { cvt_type, rd, rs1 } => (Opcode::Cvt, *rd, *rs1, 0, 0, 0, *cvt_type as u8, 0, 0, 0),
 
-        // Local memory
         Operation::LocalLoad { width, rd, addr } => (Opcode::LocalLoad, *rd, *addr, 0, 0, 0, *width as u8, 0, 0, 0),
         Operation::LocalStore { width, addr, value } => (Opcode::LocalStore, 0, *addr, *value, 0, 0, *width as u8, 0, 0, 0),
 
-        // Device memory
         Operation::DeviceLoad { width, rd, addr } => (Opcode::DeviceLoad, *rd, *addr, 0, 0, 0, *width as u8, 0, 0, 0),
         Operation::DeviceStore { width, addr, value } => (Opcode::DeviceStore, 0, *addr, *value, 0, 0, *width as u8, 0, 0, 0),
 
-        // Atomics
         Operation::LocalAtomic { op, rd, addr, value } => {
             let rd_val = rd.unwrap_or(0);
-            let flags = if rd.is_none() { NON_RETURNING_ATOMIC_FLAG } else { 0 };
-            (Opcode::LocalAtomic, rd_val, *addr, *value, 0, 0, *op as u8, 0, flags, 0)
+            (Opcode::LocalAtomic, rd_val, *addr, *value, 0, 0, *op as u8, 0, 0, 0)
         }
         Operation::LocalAtomicCas { rd, addr, expected, desired } => {
             let rd_val = rd.unwrap_or(0);
-            let flags = if rd.is_none() { NON_RETURNING_ATOMIC_FLAG } else { 0 };
-            (Opcode::LocalAtomic, rd_val, *addr, *expected, *desired, 0, 8, 0, flags, 0)
+            (Opcode::LocalAtomic, rd_val, *addr, *expected, *desired, 0, 8, 0, 0, 0)
         }
         Operation::DeviceAtomic { op, rd, addr, value, scope } => {
             let rd_val = rd.unwrap_or(0);
-            let flags = if rd.is_none() { NON_RETURNING_ATOMIC_FLAG } else { 0 };
-            (Opcode::DeviceAtomic, rd_val, *addr, *value, 0, 0, *op as u8, *scope as u8, flags, 0)
+            (Opcode::DeviceAtomic, rd_val, *addr, *value, 0, 0, *op as u8, *scope as u8, 0, 0)
         }
         Operation::DeviceAtomicCas { rd, addr, expected, desired, scope } => {
             let rd_val = rd.unwrap_or(0);
-            let flags = if rd.is_none() { NON_RETURNING_ATOMIC_FLAG } else { 0 };
-            (Opcode::DeviceAtomic, rd_val, *addr, *expected, *desired, 0, 8, *scope as u8, flags, 0)
+            (Opcode::DeviceAtomic, rd_val, *addr, *expected, *desired, 0, 8, *scope as u8, 0, 0)
         }
 
-        // Wave operations
         Operation::WaveOp { op, rd, rs1, rs2 } => {
             (Opcode::WaveOp, *rd, *rs1, rs2.unwrap_or(0), 0, 0, *op as u8, 0, 0, 0)
         }
         Operation::WaveReduce { op, rd, rs1 } => {
-            (Opcode::WaveOp, *rd, *rs1, 0, 0, 0, *op as u8, 0, WAVE_REDUCE_FLAG, 0)
+            (Opcode::WaveOp, *rd, *rs1, 0, 0, 0, *op as u8 + 8, 0, 0, 0)
         }
         Operation::WaveBallot { rd, ps } => (Opcode::WaveOp, *rd, *ps, 0, 0, 0, WaveOpType::Ballot as u8, 0, 0, 0),
         Operation::WaveVote { op, pd, ps } => (Opcode::WaveOp, *pd, *ps, 0, 0, 0, *op as u8, 0, 0, 0),
 
-        // Control flow
         Operation::If { ps } => (Opcode::Control, 0, *ps, 0, 0, 0, ControlOp::If as u8, 0, 0, 0),
         Operation::Else => (Opcode::Control, 0, 0, 0, 0, 0, ControlOp::Else as u8, 0, 0, 0),
         Operation::Endif => (Opcode::Control, 0, 0, 0, 0, 0, ControlOp::Endif as u8, 0, 0, 0),
@@ -437,7 +417,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
         Operation::Endloop => (Opcode::Control, 0, 0, 0, 0, 0, ControlOp::Endloop as u8, 0, 0, 0),
         Operation::Call { target } => (Opcode::Control, 0, 0, 0, 0, 0, ControlOp::Call as u8, 0, 0, *target),
 
-        // Sync
         Operation::Return => (Opcode::Control, 0, 0, 0, 0, 0, SyncOp::Return as u8, 0, SYNC_OP_FLAG, 0),
         Operation::Halt => (Opcode::Control, 0, 0, 0, 0, 0, SyncOp::Halt as u8, 0, SYNC_OP_FLAG, 0),
         Operation::Barrier => (Opcode::Control, 0, 0, 0, 0, 0, SyncOp::Barrier as u8, 0, SYNC_OP_FLAG, 0),
@@ -447,12 +426,10 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
         Operation::Wait => (Opcode::Control, 0, 0, 0, 0, 0, SyncOp::Wait as u8, 0, SYNC_OP_FLAG, 0),
         Operation::Nop => (Opcode::Control, 0, 0, 0, 0, 0, SyncOp::Nop as u8, 0, SYNC_OP_FLAG, 0),
 
-        // Misc
         Operation::Mov { rd, rs1 } => (Opcode::Control, *rd, *rs1, 0, 0, 0, MiscOp::Mov as u8, 0, MISC_OP_FLAG, 0),
         Operation::MovImm { rd, imm } => (Opcode::Control, *rd, 0, 0, 0, 0, MiscOp::MovImm as u8, 0, MISC_OP_FLAG, *imm),
         Operation::MovSr { rd, sr_index } => (Opcode::Control, *rd, *sr_index, 0, 0, 0, MiscOp::MovSr as u8, 0, MISC_OP_FLAG, 0),
 
-        // Unknown
         Operation::Unknown { opcode, word0, word1: _ } => {
             let opc = Opcode::from_u8(*opcode).unwrap_or(Opcode::Control);
             (opc, 0, 0, 0, 0, 0, 0, 0, 0, *word0)
@@ -485,8 +462,8 @@ mod tests {
             | ((u32::from(rd) & 0x1F) << 21)
             | ((u32::from(rs1) & 0x1F) << 16)
             | ((u32::from(rs2) & 0x1F) << 11)
-            | ((u32::from(modifier) & 0x07) << 8)
-            | (u32::from(flags) & 0x07);
+            | ((u32::from(modifier) & 0x0F) << 7)
+            | ((u32::from(flags) & 0x03));
         word.to_le_bytes().to_vec()
     }
 

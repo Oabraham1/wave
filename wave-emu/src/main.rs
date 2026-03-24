@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// CLI entry point for the WAVE emulator. Parses command-line arguments for grid
-// and workgroup dimensions, memory sizes, input data, and output options. Loads
-// the WBIN binary, executes it, and reports results or statistics.
+//! CLI entry point for the WAVE emulator. Parses command-line arguments for grid
+//!
+//! and workgroup dimensions, memory sizes, input data, and output options. Loads
+//! the WBIN binary, executes it, and reports results or statistics.
 
 #![allow(clippy::cast_possible_truncation)]
 

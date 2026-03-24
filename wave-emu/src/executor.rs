@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Instruction executor. Decodes instructions from binary, dispatches to appropriate
-// handlers, and executes operations across active threads in a wave. Handles ALU
-// operations, memory access, control flow, wave operations, and atomics.
+//! Instruction executor. Decodes instructions from binary, dispatches to appropriate
+//!
+//! handlers, and executes operations across active threads in a wave. Handles ALU
+//! operations, memory access, control flow, wave operations, and atomics.
 
 // ControlFlowManager is now in Wave, not Executor
 use crate::decoder::{
@@ -44,7 +45,6 @@ impl<'a> Executor<'a> {
             return Ok(StepResult::Halted);
         }
 
-        // Don't halt early if there are control flow frames on the stack.
         if wave.active_mask == 0 && wave.control_flow.is_empty() {
             wave.halt();
             return Ok(StepResult::Halted);
@@ -86,10 +86,6 @@ impl<'a> Executor<'a> {
         device_memory: &mut DeviceMemory,
         stats: &mut ExecutionStats,
     ) -> Result<ExecuteResult, EmulatorError> {
-        // For predicated instructions, handle predication differently based on instruction type:
-        // - Halt: per-lane semantics - remove halted threads from active_mask
-        // - Other sync ops (barrier): uniform predication - skip if NO thread has predicate true
-        // - Other instructions: per-lane predication - modify active_mask
         let original_mask = wave.active_mask;
         let is_control_sync = inst.opcode == Opcode::Control && inst.is_sync_op();
         let is_halt = is_control_sync && inst.modifier == SyncOp::Halt as u8;
@@ -98,21 +94,16 @@ impl<'a> Executor<'a> {
             let pred_mask = self.compute_predicate_mask(wave, inst.pred_reg, inst.pred_neg);
 
             if is_halt {
-                // For predicated halt, remove halting threads from active_mask
                 wave.active_mask &= !pred_mask;
-                // If no threads remain active, halt the wave
                 if wave.active_mask == 0 {
                     return Ok(ExecuteResult::Halt);
                 }
-                // Otherwise, continue with remaining threads
                 return Ok(ExecuteResult::Continue);
             } else if is_control_sync {
-                // For other control sync ops (barrier), skip entirely if no thread has predicate true
                 if pred_mask == 0 {
                     return Ok(ExecuteResult::Continue);
                 }
             } else {
-                // For data operations, use per-lane predication
                 wave.active_mask &= pred_mask;
             }
         }
@@ -215,7 +206,6 @@ impl<'a> Executor<'a> {
             }
         };
 
-        // Restore original active mask after predicated instruction (only for non-sync ops)
         if inst.is_predicated() && !is_control_sync {
             wave.active_mask = original_mask;
         }
@@ -595,7 +585,6 @@ impl<'a> Executor<'a> {
             }
 
             let thread = &mut wave.threads[lane as usize];
-            // The selector predicate is stored in modifier field (not pred_reg)
             let pred = thread.read_predicate(inst.modifier);
             let rs1 = thread.read_register(inst.rs1);
             let rs2 = thread.read_register(inst.rs2);
@@ -614,30 +603,23 @@ impl<'a> Executor<'a> {
             let thread = &mut wave.threads[lane as usize];
             let rs1 = thread.read_register(inst.rs1);
 
-            // Convention: cvt_<dest>_<src> - destination type first, source type second
-            // F32I32 means "to F32 from I32" (i32 → f32)
-            // I32F32 means "to I32 from F32" (f32 → i32)
             let result = match inst.modifier {
                 m if m == CvtType::F32I32 as u8 => ((rs1 as i32) as f32).to_bits(),  // i32 → f32
                 m if m == CvtType::F32U32 as u8 => (rs1 as f32).to_bits(),           // u32 → f32
                 m if m == CvtType::I32F32 as u8 => f32::from_bits(rs1) as i32 as u32, // f32 → i32
                 m if m == CvtType::U32F32 as u8 => f32::from_bits(rs1) as u32,        // f32 → u32
                 m if m == CvtType::F32F16 as u8 => {
-                    // to F32 from F16: f16 → f32
                     f16::from_bits(rs1 as u16).to_f32().to_bits()
                 }
                 m if m == CvtType::F16F32 as u8 => {
-                    // to F16 from F32: f32 → f16
                     u32::from(f16::from_f32(f32::from_bits(rs1)).to_bits())
                 }
                 m if m == CvtType::F32F64 as u8 => {
-                    // to F32 from F64: f64 → f32
                     let rs1_hi = thread.read_register(inst.rs1 + 1);
                     let d = f64::from_bits((u64::from(rs1_hi) << 32) | u64::from(rs1));
                     (d as f32).to_bits()
                 }
                 m if m == CvtType::F64F32 as u8 => {
-                    // to F64 from F32: f32 → f64
                     let f = f32::from_bits(rs1);
                     let d = f64::from(f);
                     let bits = d.to_bits();
@@ -941,7 +923,8 @@ impl<'a> Executor<'a> {
 
     fn execute_wave_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
         if inst.is_wave_reduce() {
-            match inst.modifier {
+            let reduce_mod = inst.modifier - 8;
+            match reduce_mod {
                 m if m == WaveReduceType::PrefixSum as u8 => {
                     shuffle::wave_prefix_sum(wave, inst.rd, inst.rs1);
                 }
@@ -1103,8 +1086,6 @@ impl<'a> Executor<'a> {
                 Ok(ExecuteResult::Continue)
             }
             m if m == ControlOp::Loop as u8 => {
-                // Store the PC of the first instruction IN the loop body, not the loop
-                // instruction itself. This way endloop jumps past the loop instruction.
                 let body_start = wave.pc + inst.size;
                 let new_mask = wave.control_flow.handle_loop(wave.active_mask, body_start)?;
                 wave.active_mask = new_mask;
@@ -1207,8 +1188,8 @@ mod tests {
             | ((u32::from(rd) & 0x1F) << 21)
             | ((u32::from(rs1) & 0x1F) << 16)
             | ((u32::from(rs2) & 0x1F) << 11)
-            | ((u32::from(modifier) & 0x07) << 8)
-            | (u32::from(flags) & 0x07);
+            | ((u32::from(modifier) & 0x0F) << 7)
+            | (u32::from(flags) & 0x03);
         word.to_le_bytes().to_vec()
     }
 
@@ -1217,8 +1198,8 @@ mod tests {
             | ((u32::from(rd) & 0x1F) << 21)
             | ((u32::from(rs1) & 0x1F) << 16)
             | ((u32::from(rs2) & 0x1F) << 11)
-            | ((u32::from(modifier) & 0x07) << 8)
-            | (u32::from(flags) & 0x07);
+            | ((u32::from(modifier) & 0x0F) << 7)
+            | (u32::from(flags) & 0x03);
         let mut code = word0.to_le_bytes().to_vec();
         code.extend_from_slice(&imm.to_le_bytes());
         code

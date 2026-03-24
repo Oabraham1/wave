@@ -1,0 +1,36 @@
+; Copyright 2026 Ojima Abraham
+; SPDX-License-Identifier: Apache-2.0
+
+.kernel reduction
+.registers 16
+.local_memory 4096
+.workgroup_size 256, 1, 1
+
+    mov_sr r0, sr_thread_id_x
+    mov_sr r1, sr_workgroup_id_x
+    mov_sr r2, sr_workgroup_size_x
+    imul r3, r1, r2
+    iadd r4, r3, r0
+
+    mov_imm r5, 4
+    imul r6, r4, r5
+
+    device_load_u32 r7, r6
+
+    imul r8, r0, r5
+    local_store_u32 r8, r7
+
+    barrier
+
+    mov_imm r9, 0
+    ucmp_lt p1, r0, r5
+    if p1
+        local_load_u32 r10, r9
+        mov_imm r11, 4
+        local_load_u32 r12, r11
+        iadd r10, r10, r12
+        local_store_u32 r9, r10
+    endif
+
+    halt
+.end

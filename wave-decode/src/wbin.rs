@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// WBIN container reader. Parses the .wbin binary format produced by wave-asm,
-// extracting header information, code sections, symbols, and kernel metadata.
+//! WBIN container reader. Parses the .wbin binary format produced by wave-asm,
+//!
+//! extracting header information, code sections, symbols, and kernel metadata.
 
 use thiserror::Error;
 

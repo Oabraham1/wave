@@ -1,10 +1,11 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Workgroup barrier synchronization. Tracks which waves have reached the barrier,
-// releases all waves when the full workgroup is synchronized, and advances their
-// PCs past the barrier instruction. Single-threaded emulation makes memory
-// visibility automatic.
+//! Workgroup barrier synchronization. Tracks which waves have reached the barrier,
+//!
+//! releases all waves when the full workgroup is synchronized, and advances their
+//! PCs past the barrier instruction. Single-threaded emulation makes memory
+//! visibility automatic.
 
 use crate::wave::{Wave, WaveStatus};
 

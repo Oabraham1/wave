@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 6: Synchronization tests
-// Verifies barrier, fence, and wait operations.
+//! Section 6: Synchronization tests
+//!
+//! Verifies barrier, fence, and wait operations.
 
 use crate::harness::*;
 
@@ -121,7 +122,6 @@ fn test_barrier_two_waves() -> TestResult {
         ..Default::default()
     };
 
-    // 8 threads = 2 waves
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let value = read_u32(&result.device_memory, 0);

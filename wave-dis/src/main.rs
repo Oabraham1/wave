@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// CLI entry point for wave-dis. Parses command-line arguments, reads WBIN
-// files, invokes the disassembler, and writes output to stdout or file.
+//! CLI entry point for wave-dis. Parses command-line arguments, reads WBIN
+//!
+//! files, invokes the disassembler, and writes output to stdout or file.
 
 use clap::Parser;
 use std::fs;

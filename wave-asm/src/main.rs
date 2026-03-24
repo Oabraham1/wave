@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// CLI entry point. Parses arguments via clap, reads source file, invokes the
-// assembler library, handles diagnostics output, and writes the binary result.
-// Supports verbose mode, AST dumping, hex output, and symbol stripping.
+//! CLI entry point. Parses arguments via clap, reads source file, invokes the
+//!
+//! assembler library, handles diagnostics output, and writes the binary result.
+//! Supports verbose mode, AST dumping, hex output, and symbol stripping.
 
 #![allow(clippy::struct_excessive_bools)]
 

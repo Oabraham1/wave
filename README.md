@@ -12,6 +12,10 @@ Spec: https://ojima.me/spec.html
 | `wave-decode` | Shared decoder library. `.wbin` binary → structured types. |
 | `wave-dis` | Disassembler. `.wbin` binary → `.wave` text. |
 | `wave-emu` | Reference emulator. Executes `.wbin` on the CPU. |
+| `wave-metal` | Apple Metal backend. `.wbin` → `.metal` MSL source. |
+| `wave-ptx` | NVIDIA PTX backend. `.wbin` → `.ptx` assembly. |
+| `wave-hip` | AMD HIP backend. `.wbin` → `.hip` C++ source. |
+| `wave-sycl` | Intel SYCL backend. `.wbin` → `.cpp` SYCL source. |
 
 ## Build
 
@@ -20,6 +24,10 @@ cd wave-asm && cargo build --release
 cd wave-decode && cargo build --release
 cd wave-dis && cargo build --release
 cd wave-emu && cargo build --release
+cd wave-metal && cargo build --release
+cd wave-ptx && cargo build --release
+cd wave-hip && cargo build --release
+cd wave-sycl && cargo build --release
 ```
 
 ## Example
@@ -65,6 +73,17 @@ wave-dis add.wbin
 wave-emu add.wbin --grid 4,1,1 --workgroup 256,1,1 --stats
 ```
 
+## Backends
+
+The same WAVE binary runs on any GPU through vendor-specific backends:
+
+| Backend | Target | GPU | Verified |
+|---------|--------|-----|----------|
+| wave-metal | Apple Metal | M1, M2, M3, M4 | Yes |
+| wave-ptx | NVIDIA PTX | T4, A100, H100 | Yes |
+| wave-hip | AMD HIP/ROCm | MI250, MI300X, RX 7000 | Pending |
+| wave-sycl | Intel SYCL/oneAPI | Arc, Max, Flex | Pending |
+
 ## Verify
 
 ```
@@ -72,6 +91,21 @@ cd tests/spec-verification && ./run_all.sh
 ```
 
 102 tests verify every claim in the WAVE v0.1 spec against the reference toolchain.
+
+## Tests
+
+| Crate | Tests |
+|-------|-------|
+| wave-decode | 16 |
+| wave-asm | 78 |
+| wave-dis | 22 |
+| wave-emu | 75 |
+| wave-metal | 77 |
+| wave-ptx | 76 |
+| wave-hip | 53 |
+| wave-sycl | 50 |
+| spec-verification | 102 |
+| **Total** | **549** |
 
 ## License
 

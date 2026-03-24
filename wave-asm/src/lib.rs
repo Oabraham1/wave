@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Library root. Public API exposes assemble() and assemble_with_options() for
-// converting .wave source text to .wbin binary. Coordinates lexer, parser,
-// symbol resolution, instruction encoding, and output generation.
+//! Library root. Public API exposes assemble() and assemble_with_options() for
+//!
+//! converting .wave source text to .wbin binary. Coordinates lexer, parser,
+//! symbol resolution, instruction encoding, and output generation.
 
 #![allow(
     clippy::cast_possible_truncation,

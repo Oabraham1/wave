@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 3: Register Model tests
-// Verifies GPR read/write, predicate registers, special registers, and register typing.
+//! Section 3: Register Model tests
+//!
+//! Verifies GPR read/write, predicate registers, special registers, and register typing.
 
 use crate::harness::*;
 
@@ -304,7 +305,6 @@ fn test_special_registers_thread_id() -> TestResult {
 
     let config = EmulatorConfig::default();
 
-    // Single thread at position (0,0,0)
     match run_test(SOURCE, [1, 1, 1], [1, 1, 1], &config, None) {
         Ok(result) => {
             let tid_x = read_u32(&result.device_memory, 0);
@@ -381,14 +381,12 @@ fn test_special_registers_workgroup() -> TestResult {
         ..Default::default()
     };
 
-    // Grid (2,1,1), Workgroup (4,1,1) - run in workgroup 0
     match run_test(SOURCE, [2, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
             let wg_id = read_u32(&result.device_memory, 0);
             let wg_size = read_u32(&result.device_memory, 4);
             let grid_size = read_u32(&result.device_memory, 8);
 
-            // wg_size should be 4, grid_size should be 2
             let passed = wg_id == 0 && wg_size == 4 && grid_size == 2;
 
             TestResult {

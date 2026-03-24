@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Structured control flow with divergence support. Maintains a stack of active
-// masks for nested if/else/endif and loop/break/endloop constructs. Divergence
-// occurs when threads disagree on predicates, executing both paths sequentially.
+//! Structured control flow with divergence support. Maintains a stack of active
+//!
+//! masks for nested if/else/endif and loop/break/endloop constructs. Divergence
+//! occurs when threads disagree on predicates, executing both paths sequentially.
 
 use crate::EmulatorError;
 
@@ -122,8 +123,6 @@ impl ControlFlowManager {
         let frame = ControlFrame::new_if(active_mask, then_mask, else_mask);
         self.stack.push(frame)?;
 
-        // Always return then_mask - threads where predicate is true
-        // If then_mask is 0, no threads execute the if-body
         Ok((then_mask, None))
     }
 
@@ -215,9 +214,6 @@ impl ControlFlowManager {
             let loop_start = frame.loop_start_pc;
             Ok((remaining_mask, Some(loop_start)))
         } else {
-            // All threads have broken - exit the loop.
-            // Restore active_mask to entry_mask so broken threads can continue
-            // executing after the loop.
             let frame = self.stack.pop().ok_or_else(|| EmulatorError::ControlFlowError {
                 message: "endloop without matching loop".into(),
             })?;

@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Abstract syntax tree types. The parser produces a Program containing
-// Statement nodes (labels, instructions, directives). Each node carries a
-// Span for error reporting. Operands distinguish registers, immediates, labels.
+//! Abstract syntax tree types. The parser produces a Program containing
+//!
+//! Statement nodes (labels, instructions, directives). Each node carries a
+//! Span for error reporting. Operands distinguish registers, immediates, labels.
 
 use crate::opcodes::{CacheHint, Scope};
 

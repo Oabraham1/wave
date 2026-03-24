@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Per-thread execution state. Each thread has a register file (32 x u32), four
-// predicate registers (p0-p3), and read-only special registers populated at
-// dispatch time (thread/wave/workgroup IDs, dimensions, etc).
+//! Per-thread execution state. Each thread has a register file (32 x u32), four
+//!
+//! predicate registers (p0-p3), and read-only special registers populated at
+//! dispatch time (thread/wave/workgroup IDs, dimensions, etc).
 
 #[derive(Debug, Clone)]
 pub struct Thread {

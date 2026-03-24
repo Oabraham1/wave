@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// WAVE disassembler library. Provides public API for converting WAVE binary
-// files into human-readable assembly text. Delegates all decoding to wave-decode
-// and focuses on text formatting and output generation.
+//! WAVE disassembler library. Provides public API for converting WAVE binary
+//!
+//! files into human-readable assembly text. Delegates all decoding to wave-decode
+//! and focuses on text formatting and output generation.
 
 pub mod format;
 

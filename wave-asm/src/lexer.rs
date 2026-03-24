@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Hand-written lexer. Consumes UTF-8 source one character at a time, emits
-// typed tokens with byte spans. Newlines are significant (one instruction per
-// line). Comments start with ; or # and run to end of line.
+//! Hand-written lexer. Consumes UTF-8 source one character at a time, emits
+//!
+//! typed tokens with byte spans. Newlines are significant (one instruction per
+//! line). Comments start with ; or # and run to end of line.
 
 use crate::ast::Span;
 use crate::diagnostics::AssemblerError;

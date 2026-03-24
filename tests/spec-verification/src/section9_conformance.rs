@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 9: Conformance tests
-// Verifies implementation conformance requirements.
+//! Section 9: Conformance tests
+//!
+//! Verifies implementation conformance requirements.
 
 use crate::harness::*;
 
@@ -40,7 +41,6 @@ fn test_deterministic_execution() -> TestResult {
 
     let config = EmulatorConfig::default();
 
-    // Run the same test multiple times
     let mut results = Vec::new();
     for _ in 0..3 {
         match run_test(SOURCE, [1, 1, 1], [1, 1, 1], &config, None) {
@@ -155,7 +155,6 @@ fn test_undefined_behavior_detection() -> TestResult {
             }
         }
         Err(e) => {
-            // Some implementations may trap on div by zero, which is acceptable
             TestResult {
                 name: "test_undefined_behavior_detection".to_string(),
                 spec_section: "9.2".to_string(),

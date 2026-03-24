@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// WBIN binary writer. Produces the final output format: 32-byte header, code
-// section, symbol table (optional), and kernel metadata. Supports multiple
-// kernels and stripping symbols for release builds.
+//! WBIN binary writer. Produces the final output format: 32-byte header, code
+//!
+//! section, symbol table (optional), and kernel metadata. Supports multiple
+//! kernels and stripping symbols for release builds.
 
 use crate::ast::KernelMetadata;
 use crate::diagnostics::AssemblerError;

@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Opcode definitions and instruction signature tables. Maps mnemonic strings to
-// instruction encoding metadata (opcode, operand types, modifiers). Uses LazyLock
-// for static initialization of the lookup tables.
+//! Opcode definitions and instruction signature tables. Maps mnemonic strings to
+//!
+//! instruction encoding metadata (opcode, operand types, modifiers). Uses LazyLock
+//! for static initialization of the lookup tables.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -16,16 +17,16 @@ pub const RS1_SHIFT: u32 = 16;
 pub const RS1_MASK: u32 = 0x1F;
 pub const RS2_SHIFT: u32 = 11;
 pub const RS2_MASK: u32 = 0x1F;
-pub const MODIFIER_SHIFT: u32 = 8;
-pub const MODIFIER_MASK: u32 = 0x07;
-pub const SCOPE_SHIFT: u32 = 6;
+pub const MODIFIER_SHIFT: u32 = 7;
+pub const MODIFIER_MASK: u32 = 0x0F;
+pub const SCOPE_SHIFT: u32 = 5;
 pub const SCOPE_MASK: u32 = 0x03;
-pub const PRED_SHIFT: u32 = 4;
+pub const PRED_SHIFT: u32 = 3;
 pub const PRED_MASK: u32 = 0x03;
-pub const PRED_NEG_SHIFT: u32 = 3;
+pub const PRED_NEG_SHIFT: u32 = 2;
 pub const PRED_NEG_MASK: u32 = 0x01;
 pub const FLAGS_SHIFT: u32 = 0;
-pub const FLAGS_MASK: u32 = 0x07;
+pub const FLAGS_MASK: u32 = 0x03;
 
 pub const EXTENDED_RS3_SHIFT: u32 = 27;
 pub const EXTENDED_RS3_MASK: u32 = 0x1F;
@@ -689,38 +690,38 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     m.insert("wave_prefix_sum", InstructionSignature {
         opcode: Opcode::WaveOp,
         operands: rr,
-        modifier: Some(WaveReduceType::PrefixSum as u8),
+        modifier: Some(WaveReduceType::PrefixSum as u8 + 8),
         extended: false,
         is_sync: false,
         is_misc: false,
-        wave_reduce: true,
+        wave_reduce: false,
     });
     m.insert("wave_reduce_add", InstructionSignature {
         opcode: Opcode::WaveOp,
         operands: rr,
-        modifier: Some(WaveReduceType::ReduceAdd as u8),
+        modifier: Some(WaveReduceType::ReduceAdd as u8 + 8),
         extended: false,
         is_sync: false,
         is_misc: false,
-        wave_reduce: true,
+        wave_reduce: false,
     });
     m.insert("wave_reduce_min", InstructionSignature {
         opcode: Opcode::WaveOp,
         operands: rr,
-        modifier: Some(WaveReduceType::ReduceMin as u8),
+        modifier: Some(WaveReduceType::ReduceMin as u8 + 8),
         extended: false,
         is_sync: false,
         is_misc: false,
-        wave_reduce: true,
+        wave_reduce: false,
     });
     m.insert("wave_reduce_max", InstructionSignature {
         opcode: Opcode::WaveOp,
         operands: rr,
-        modifier: Some(WaveReduceType::ReduceMax as u8),
+        modifier: Some(WaveReduceType::ReduceMax as u8 + 8),
         extended: false,
         is_sync: false,
         is_misc: false,
-        wave_reduce: true,
+        wave_reduce: false,
     });
 
     m.insert("if", InstructionSignature {

@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Recursive descent parser. Converts token stream to AST (Program of Statements).
-// Each line is one statement: directive, label, or instruction with optional
-// predicate and operands. Errors carry byte spans for diagnostic reporting.
+//! Recursive descent parser. Converts token stream to AST (Program of Statements).
+//!
+//! Each line is one statement: directive, label, or instruction with optional
+//! predicate and operands. Errors carry byte spans for diagnostic reporting.
 
 use crate::ast::{
     Directive, Immediate, Instruction, Operand, Predicate, Program, Register, RegisterHalf,

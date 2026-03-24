@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Error and warning types with source spans. Uses ariadne for pretty-printed
-// diagnostics with color coding and source context. All assembler errors carry
-// byte offsets to enable precise error location reporting.
+//! Error and warning types with source spans. Uses ariadne for pretty-printed
+//!
+//! diagnostics with color coding and source context. All assembler errors carry
+//! byte offsets to enable precise error location reporting.
 
 use crate::ast::Span;
 use ariadne::{Color, Label, Report, ReportKind, Source};

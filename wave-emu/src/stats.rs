@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Execution statistics tracking. Counts instructions by category (integer, float,
-// memory, control, wave ops, atomics), memory accesses, barriers, and divergent
-// branches. Aggregated across waves and workgroups for final reporting.
+//! Execution statistics tracking. Counts instructions by category (integer, float,
+//!
+//! memory, control, wave ops, atomics), memory accesses, barriers, and divergent
+//! branches. Aggregated across waves and workgroups for final reporting.
 
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionStats {

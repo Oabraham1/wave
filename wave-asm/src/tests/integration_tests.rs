@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// End-to-end assembler tests. Each test feeds source text through the full
-// pipeline (lexer, parser, encoder, output) and verifies binary format, error
-// handling, or warning generation.
+//! End-to-end assembler tests. Each test feeds source text through the full
+//!
+//! pipeline (lexer, parser, encoder, output) and verifies binary format, error
+//! handling, or warning generation.
 
 use crate::{assemble, diagnostics::AssemblerError};
 
@@ -385,8 +386,8 @@ fn test_integration_all_special_registers() {
         let opcode = (word >> 26) & 0x3F;
         let rd = (word >> 21) & 0x1F;
         let rs1 = (word >> 16) & 0x1F;
-        let modifier = (word >> 8) & 0x07;
-        let flags = word & 0x07;
+        let modifier = (word >> 7) & 0x0F;
+        let flags = word & 0x03;
 
         assert_eq!(opcode, 0x3F, "instruction {i}: expected Control opcode (0x3F)");
         assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
@@ -423,7 +424,7 @@ fn test_integration_mov_sr_explicit_syntax() {
             binary[inst_offset + 3],
         ]);
 
-        let modifier = (word >> 8) & 0x07;
+        let modifier = (word >> 7) & 0x0F;
         assert_eq!(modifier, 2, "instruction {i}: expected MovSr modifier (2), got {modifier}");
     }
 }

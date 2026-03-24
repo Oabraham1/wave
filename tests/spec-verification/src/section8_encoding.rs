@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Section 8: Binary Encoding tests
-// Verifies WBIN format correctness and instruction encoding.
+//! Section 8: Binary Encoding tests
+//!
+//! Verifies WBIN format correctness and instruction encoding.
 
 use crate::harness::*;
 

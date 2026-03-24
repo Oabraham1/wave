@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Shared instruction decoder for the WAVE ISA. Provides opcode definitions,
-// instruction decoding from binary to structured types, and WBIN container
-// format parsing. Used by wave-dis and wave-emu.
+//! Shared instruction decoder for the WAVE ISA. Provides opcode definitions,
+//!
+//! instruction decoding from binary to structured types, and WBIN container
+//! format parsing. Used by wave-dis and wave-emu.
 
 pub mod decoder;
 pub mod instruction;

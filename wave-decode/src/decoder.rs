@@ -1,8 +1,9 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Core instruction decoder. Reads binary instruction words and produces
-// structured DecodedInstruction values.
+//! Core instruction decoder. Reads binary instruction words and produces
+//!
+//! structured DecodedInstruction values.
 
 use crate::instruction::{DecodedInstruction, Operation};
 use crate::opcodes::{
@@ -11,7 +12,7 @@ use crate::opcodes::{
     EXTENDED_RS3_MASK, EXTENDED_RS3_SHIFT, EXTENDED_RS4_MASK, EXTENDED_RS4_SHIFT, FLAGS_MASK,
     MISC_OP_FLAG, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_MASK, OPCODE_SHIFT, PRED_MASK,
     PRED_NEG_MASK, PRED_NEG_SHIFT, PRED_SHIFT, RD_MASK, RD_SHIFT, RS1_MASK, RS1_SHIFT, RS2_MASK,
-    RS2_SHIFT, SCOPE_MASK, SCOPE_SHIFT, SYNC_OP_FLAG, WAVE_REDUCE_FLAG,
+    RS2_SHIFT, SCOPE_MASK, SCOPE_SHIFT, SYNC_OP_FLAG,
 };
 use thiserror::Error;
 
@@ -151,7 +152,6 @@ impl<'a> Decoder<'a> {
                 Operation::Iclamp { rd, rs1, rs2, rs3 }
             }
 
-
             Opcode::Fadd => Operation::Fadd { rd, rs1, rs2 },
             Opcode::Fsub => Operation::Fsub { rd, rs1, rs2 },
             Opcode::Fmul => Operation::Fmul { rd, rs1, rs2 },
@@ -179,7 +179,6 @@ impl<'a> Decoder<'a> {
                 })?;
                 Operation::FUnary { op, rd, rs1 }
             }
-
 
             Opcode::F16Ops => {
                 let op = F16Op::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -211,7 +210,6 @@ impl<'a> Decoder<'a> {
                 Operation::F16Packed { op, rd, rs1, rs2, rs3 }
             }
 
-
             Opcode::F64Ops => {
                 let op = F64Op::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                     opcode,
@@ -240,7 +238,6 @@ impl<'a> Decoder<'a> {
                 };
                 Operation::F64DivSqrt { op, rd, rs1, rs2: rs2_opt }
             }
-
 
             Opcode::And => Operation::And { rd, rs1, rs2 },
             Opcode::Or => Operation::Or { rd, rs1, rs2 },
@@ -294,7 +291,6 @@ impl<'a> Decoder<'a> {
                 }
             }
 
-
             Opcode::Icmp => {
                 let op = CmpOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                     opcode,
@@ -320,7 +316,6 @@ impl<'a> Decoder<'a> {
                 Operation::Fcmp { op, pd: rd, rs1, rs2 }
             }
 
-
             Opcode::Select => Operation::Select {
                 rd,
                 ps: rs1,
@@ -335,7 +330,6 @@ impl<'a> Decoder<'a> {
                 })?;
                 Operation::Cvt { cvt_type, rd, rs1 }
             }
-
 
             Opcode::LocalLoad => {
                 let width = MemWidth::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -358,7 +352,6 @@ impl<'a> Decoder<'a> {
                 }
             }
 
-
             Opcode::DeviceLoad => {
                 let width = MemWidth::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                     opcode,
@@ -379,7 +372,6 @@ impl<'a> Decoder<'a> {
                     value: rs2,
                 }
             }
-
 
             Opcode::LocalAtomic => {
                 if modifier == 8 && self.peek_u32().is_some() {
@@ -407,7 +399,6 @@ impl<'a> Decoder<'a> {
                     }
                 }
             }
-
 
             Opcode::DeviceAtomic => {
                 let scope_val =
@@ -445,11 +436,10 @@ impl<'a> Decoder<'a> {
                 }
             }
 
-
             Opcode::WaveOp => {
-                if (flags & WAVE_REDUCE_FLAG) != 0 {
+                if modifier >= 8 {
                     let op =
-                        WaveReduceType::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
+                        WaveReduceType::from_u8(modifier - 8).ok_or(DecodeError::InvalidModifier {
                             opcode,
                             modifier,
                             offset,
@@ -476,7 +466,6 @@ impl<'a> Decoder<'a> {
                 }
             }
 
-
             Opcode::Control => self.decode_control(rd, rs1, rs2, modifier, scope, flags, offset)?,
         };
 
@@ -495,7 +484,6 @@ impl<'a> Decoder<'a> {
         offset: u32,
     ) -> Result<Operation, DecodeError> {
         if (flags & SYNC_OP_FLAG) != 0 {
-            // Sync operation
             let op = SyncOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                 opcode: Opcode::Control,
                 modifier,
@@ -521,7 +509,6 @@ impl<'a> Decoder<'a> {
                 SyncOp::Nop => Ok(Operation::Nop),
             }
         } else if (flags & MISC_OP_FLAG) != 0 {
-            // Misc operation (mov, mov_imm, mov_sr)
             let op = MiscOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                 opcode: Opcode::Control,
                 modifier,
@@ -536,7 +523,6 @@ impl<'a> Decoder<'a> {
                 MiscOp::MovSr => Ok(Operation::MovSr { rd, sr_index: rs1 }),
             }
         } else {
-            // Control flow operation
             let op = ControlOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
                 opcode: Opcode::Control,
                 modifier,
@@ -692,7 +678,6 @@ mod tests {
 
     #[test]
     fn test_decode_predicated() {
-        // iadd with predicate p1
         let word = ((0x00u32) << OPCODE_SHIFT)
             | ((5u32) << RD_SHIFT)
             | ((3u32) << RS1_SHIFT)

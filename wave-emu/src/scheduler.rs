@@ -1,9 +1,10 @@
-// Copyright (c) 2026 Ojima Abraham. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE file for details.
+// Copyright 2026 Ojima Abraham
+// SPDX-License-Identifier: Apache-2.0
 
-// Wave scheduler for multi-wave workgroups. Round-robin selection of ready waves,
-// skipping suspended (at barrier) and halted waves. Detects deadlock when no
-// wave is ready but not all waves are halted.
+//! Wave scheduler for multi-wave workgroups. Round-robin selection of ready waves,
+//!
+//! skipping suspended (at barrier) and halted waves. Detects deadlock when no
+//! wave is ready but not all waves are halted.
 
 use crate::wave::{Wave, WaveStatus};
 
