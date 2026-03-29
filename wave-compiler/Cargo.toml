@@ -1,0 +1,24 @@
+[package]
+name = "wave-compiler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE compiler - compiles high-level kernel code to WAVE ISA binaries"
+license = "Apache-2.0"
+
+[dependencies]
+wave-decode = { path = "../wave-decode" }
+clap = { version = "4", features = ["derive"] }
+thiserror = "1"
+ariadne = "0.4"
+syn = { version = "2", features = ["full", "parsing"] }
+
+[dev-dependencies]
+wave-asm = { path = "../wave-asm" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"
