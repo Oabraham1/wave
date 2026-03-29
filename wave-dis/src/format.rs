@@ -1,7 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Instruction-to-text formatter. Converts DecodedInstruction from wave-decode
+//! Instruction-to-text formatter. Converts `DecodedInstruction` from wave-decode
 //!
 //! into human-readable WAVE assembly text. Handles all instruction variants,
 //! predication, register naming, and immediate formatting.

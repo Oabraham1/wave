@@ -1,9 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE HIP backend. Provides compile() to translate a complete
+//! Public API for the WAVE HIP backend. Provides `compile()` to translate a complete
 //!
-//! WBIN binary file into HIP C++ source text, and compile_kernel() for translating
+//! WBIN binary file into HIP C++ source text, and `compile_kernel()` for translating
 //! a single kernel's code section. Targets AMD GPUs via ROCm/HIP with support for
 //! both RDNA (wavefront 32) and CDNA (wavefront 64) architectures.
 

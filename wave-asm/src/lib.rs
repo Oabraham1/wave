@@ -1,7 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Library root. Public API exposes assemble() and assemble_with_options() for
+//! Library root. Public API exposes `assemble()` and `assemble_with_options()` for
 //!
 //! converting .wave source text to .wbin binary. Coordinates lexer, parser,
 //! symbol resolution, instruction encoding, and output generation.

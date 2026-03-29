@@ -5,7 +5,7 @@
 //!
 //! and device memory operations including loads, stores, and atomics. Memory accesses
 //! use byte offsets from the base pointer with pointer casts to the appropriate width
-//! type. Atomics use Metal's atomic_fetch_*_explicit functions with memory_order_relaxed.
+//! type. Atomics use Metal's `atomic_fetch_*_explicit` functions with `memory_order_relaxed`.
 
 use crate::registers::reg;
 use wave_decode::opcodes::{AtomicOp, MemWidth};

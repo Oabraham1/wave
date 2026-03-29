@@ -4,9 +4,9 @@
 //! Interference graph construction.
 //!
 //! Two virtual registers interfere if their live ranges overlap.
-//! The interference graph has VRegs as nodes and edges between
+//! The interference graph has `VReg`s as nodes and edges between
 //! interfering registers. Move-related pairs are tracked for coalescing.
-//! Parameter VRegs have live ranges extended to start at instruction 0
+//! Parameter `VReg`s have live ranges extended to start at instruction 0
 //! since they are live from function entry.
 
 use std::collections::{HashMap, HashSet};
@@ -17,11 +17,11 @@ use crate::lir::operand::VReg;
 
 /// Interference graph for register allocation.
 pub struct InterferenceGraph {
-    /// Adjacency sets: for each VReg, the set of interfering VRegs.
+    /// Adjacency sets: for each `VReg`, the set of interfering `VReg`s.
     pub adj: HashMap<VReg, HashSet<VReg>>,
     /// Move pairs (dest, src) for coalescing.
     pub moves: Vec<(VReg, VReg)>,
-    /// Live ranges for each VReg.
+    /// Live ranges for each `VReg`.
     pub ranges: HashMap<VReg, LiveRange>,
 }
 
@@ -32,7 +32,7 @@ impl InterferenceGraph {
         Self::build_with_params(instructions, 0)
     }
 
-    /// Build the interference graph, extending param VReg live ranges to start at 0.
+    /// Build the interference graph, extending param `VReg` live ranges to start at 0.
     #[must_use]
     pub fn build_with_params(instructions: &[LirInst], num_params: u32) -> Self {
         let mut ranges = compute_live_ranges(instructions);
@@ -76,19 +76,19 @@ impl InterferenceGraph {
         Self { adj, moves, ranges }
     }
 
-    /// Returns the degree (number of neighbors) of a VReg.
+    /// Returns the degree (number of neighbors) of a `VReg`.
     #[must_use]
     pub fn degree(&self, vreg: VReg) -> usize {
         self.adj.get(&vreg).map_or(0, HashSet::len)
     }
 
-    /// Returns true if two VRegs interfere.
+    /// Returns true if two `VReg`s interfere.
     #[must_use]
     pub fn interferes(&self, a: VReg, b: VReg) -> bool {
         self.adj.get(&a).is_some_and(|s| s.contains(&b))
     }
 
-    /// Returns all VRegs in the graph.
+    /// Returns all `VReg`s in the graph.
     #[must_use]
     pub fn nodes(&self) -> Vec<VReg> {
         self.adj.keys().copied().collect()

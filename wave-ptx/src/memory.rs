@@ -5,8 +5,8 @@
 //!
 //! and shared (local/threadgroup) memory spaces. Global accesses compute 64-bit
 //! addresses by zero-extending the 32-bit WAVE byte offset and adding it to the base
-//! pointer in %rd0. Shared accesses offset from the _shared_mem symbol. Atomics map
-//! to PTX atom.global/atom.shared instructions; atomic_sub is implemented via negation
+//! pointer in %rd0. Shared accesses offset from the `_shared_mem` symbol. Atomics map
+//! to PTX atom.global/atom.shared instructions; `atomic_sub` is implemented via negation
 //! followed by atom.add since PTX has no atom.sub.
 
 use crate::registers::reg;

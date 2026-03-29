@@ -3,7 +3,7 @@
 
 //! CLI entry point for the WAVE Metal backend. Reads a WBIN binary file, translates
 //!
-//! it to Metal Shading Language using the wave_metal::compile API, and writes the
+//! it to Metal Shading Language using the `wave_metal::compile` API, and writes the
 //! resulting MSL source to an output file or stdout.
 
 use clap::Parser;

@@ -3,7 +3,7 @@
 
 //! Binary instruction decoder for WBIN format. Wraps wave-decode and provides
 //!
-//! a flat DecodedInstruction structure for the executor to dispatch on.
+//! a flat `DecodedInstruction` structure for the executor to dispatch on.
 
 use crate::EmulatorError;
 

@@ -3,7 +3,7 @@
 
 //! CLI entry point for the WAVE PTX backend. Reads a WBIN binary file, translates
 //!
-//! it to PTX assembly using the wave_ptx::compile API, and writes the resulting
+//! it to PTX assembly using the `wave_ptx::compile` API, and writes the resulting
 //! PTX text to an output file or stdout. Supports --sm flag for target SM version.
 
 use clap::Parser;

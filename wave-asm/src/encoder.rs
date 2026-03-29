@@ -4,7 +4,7 @@
 //! Instruction encoder. Converts AST instructions to 32-bit or 64-bit machine words.
 //!
 //! Handles operand encoding, predication bits, and resolves label references via
-//! the symbol table. Returns EncodedInstruction (single or extended format).
+//! the symbol table. Returns `EncodedInstruction` (single or extended format).
 
 use crate::ast::{
     Immediate, Instruction, Operand, Predicate, Register, RegisterKind, Span, Spanned,

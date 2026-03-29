@@ -3,7 +3,7 @@
 
 //! CLI entry point for the WAVE HIP backend. Reads a WBIN binary file, translates
 //!
-//! it to HIP C++ using the wave_hip::compile API, and writes the resulting source
+//! it to HIP C++ using the `wave_hip::compile` API, and writes the resulting source
 //! to an output file or stdout.
 
 use clap::Parser;

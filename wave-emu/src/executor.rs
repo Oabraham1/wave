@@ -1151,7 +1151,7 @@ impl<'a> Executor<'a> {
                 wave.active_mask = new_mask;
 
                 if self.trace.is_enabled() {
-                    eprintln!("  BREAK: new_active_mask=0x{:x}, jump={:?}", new_mask, jump);
+                    eprintln!("  BREAK: new_active_mask=0x{new_mask:x}, jump={jump:?}");
                 }
 
                 Ok(ExecuteResult::Continue)
@@ -1185,10 +1185,7 @@ impl<'a> Executor<'a> {
                 wave.active_mask = new_mask;
 
                 if self.trace.is_enabled() {
-                    eprintln!(
-                        "  ENDLOOP: new_active_mask=0x{:x}, jump={:?}",
-                        new_mask, jump
-                    );
+                    eprintln!("  ENDLOOP: new_active_mask=0x{new_mask:x}, jump={jump:?}");
                 }
 
                 if let Some(target) = jump {

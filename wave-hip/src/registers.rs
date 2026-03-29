@@ -3,9 +3,9 @@
 
 //! Register naming and special register mapping for HIP. WAVE general-purpose registers
 //!
-//! become uint32_t locals (r0, r1, ...) and predicates become bool locals (p0-p3).
+//! become `uint32_t` locals (r0, r1, ...) and predicates become bool locals (p0-p3).
 //! Special registers map to HIP built-in variables: threadIdx for thread IDs, blockIdx
-//! for workgroup IDs, blockDim for workgroup sizes, gridDim for grid sizes, __lane_id()
+//! for workgroup IDs, blockDim for workgroup sizes, gridDim for grid sizes, `__lane_id()`
 //! for lane ID, and warpSize for wavefront width (32 on RDNA, 64 on CDNA).
 
 use std::fmt::Write;

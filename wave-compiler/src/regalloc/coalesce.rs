@@ -14,7 +14,7 @@ use crate::lir::operand::VReg;
 
 /// Result of coalescing.
 pub struct CoalesceResult {
-    /// Mapping from coalesced VRegs to their representative VReg.
+    /// Mapping from coalesced `VReg`s to their representative `VReg`.
     pub mapping: HashMap<VReg, VReg>,
     /// Number of moves eliminated.
     pub eliminated: usize,

@@ -134,7 +134,7 @@ pub enum MirInst {
         /// Shuffle mode.
         mode: ShuffleMode,
     },
-    /// Read a special register (thread_id, workgroup_id, etc.).
+    /// Read a special register (`thread_id`, `workgroup_id`, etc.).
     ReadSpecialReg {
         /// Destination value.
         dest: ValueId,

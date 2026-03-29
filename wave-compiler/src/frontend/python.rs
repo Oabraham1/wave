@@ -4,8 +4,8 @@
 //! Python kernel parser producing HIR.
 //!
 //! Parses a subset of Python suitable for GPU kernels: function definitions
-//! with type annotations, arithmetic, comparisons, if/else, for range(),
-//! array indexing, and GPU intrinsics (thread_id, barrier, etc.).
+//! with type annotations, arithmetic, comparisons, if/else, for `range()`,
+//! array indexing, and GPU intrinsics (`thread_id`, barrier, etc.).
 //! Uses line-by-line parsing for the restricted kernel subset.
 
 use crate::diagnostics::CompileError;

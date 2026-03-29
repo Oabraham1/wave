@@ -3,10 +3,10 @@
 
 //! SYCL sub-group operation emission. Maps WAVE wave-level operations to standard
 //!
-//! SYCL 2020 sub-group functions: select_from_group for shuffle, shift_group_left/right
-//! for shuffle_down/up, permute_group_by_xor for shuffle_xor, group_broadcast for
-//! broadcast, reduce_over_group for reductions, exclusive_scan_over_group for prefix
-//! sum, and any_of_group/all_of_group for vote operations. Sub-group width adapts
+//! SYCL 2020 sub-group functions: `select_from_group` for shuffle, `shift_group_left`/right
+//! for `shuffle_down`/up, `permute_group_by_xor` for `shuffle_xor`, `group_broadcast` for
+//! broadcast, `reduce_over_group` for reductions, `exclusive_scan_over_group` for prefix
+//! sum, and `any_of_group`/`all_of_group` for vote operations. Sub-group width adapts
 //! automatically (8 or 16 on Intel, 32 on NVIDIA via SYCL adaptor).
 
 use crate::registers::{pred, reg};

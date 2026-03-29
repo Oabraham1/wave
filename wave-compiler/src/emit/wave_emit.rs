@@ -49,13 +49,13 @@ impl EncodedInst {
     }
 }
 
-/// Mapping from VReg to physical register index.
+/// Mapping from `VReg` to physical register index.
 pub type RegMap = std::collections::HashMap<VReg, PhysReg>;
 
 /// Emit a LIR instruction as encoded WAVE bytes using the register mapping.
 ///
-/// For instructions that still use VRegs (before register allocation),
-/// the VReg number is used directly as the physical register index.
+/// For instructions that still use `VReg`s (before register allocation),
+/// the `VReg` number is used directly as the physical register index.
 #[must_use]
 pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
     match inst {

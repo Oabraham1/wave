@@ -112,7 +112,7 @@ impl MemWidth {
         }
     }
 
-    /// Returns the wave-decode MemWidth encoding value.
+    /// Returns the wave-decode `MemWidth` encoding value.
     #[must_use]
     pub fn encoding(self) -> u8 {
         match self {

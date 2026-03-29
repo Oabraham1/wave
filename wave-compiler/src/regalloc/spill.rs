@@ -13,7 +13,7 @@ use crate::lir::operand::{MemWidth, VReg};
 /// Generate spill code for a set of spilled virtual registers.
 ///
 /// Inserts local stores after definitions and local loads before uses
-/// of spilled registers, using a fresh VReg for each reload.
+/// of spilled registers, using a fresh `VReg` for each reload.
 pub fn insert_spill_code(
     instructions: &mut Vec<LirInst>,
     spilled: &[VReg],

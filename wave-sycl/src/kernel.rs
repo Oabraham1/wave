@@ -3,10 +3,10 @@
 
 //! SYCL kernel wrapper generation. Emits the #include directives, using-namespace
 //!
-//! declaration, inline helper functions for bit_cast-based float conversion (rf/ri),
+//! declaration, inline helper functions for `bit_cast`-based float conversion (rf/ri),
 //! and the launch function skeleton that wraps the kernel body in SYCL's
-//! queue::submit / handler::parallel_for / nd_range / nd_item lambda structure.
-//! Local memory is allocated via sycl::local_accessor and exposed as a raw pointer.
+//! `queue::submit` / `handler::parallel_for` / `nd_range` / `nd_item` lambda structure.
+//! Local memory is allocated via `sycl::local_accessor` and exposed as a raw pointer.
 
 use std::fmt::Write;
 

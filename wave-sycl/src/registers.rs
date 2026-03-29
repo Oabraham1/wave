@@ -3,10 +3,10 @@
 
 //! Register naming and special register mapping for SYCL. WAVE general-purpose
 //!
-//! registers become uint32_t locals and predicates become bool locals. Special
-//! registers map to SYCL nd_item accessors (get_local_id, get_group, get_local_range,
-//! get_group_range) and sub_group accessors (get_local_id, get_group_id,
-//! get_max_local_range, get_group_range) for lane/wave queries.
+//! registers become `uint32_t` locals and predicates become bool locals. Special
+//! registers map to SYCL `nd_item` accessors (`get_local_id`, `get_group`, `get_local_range`,
+//! `get_group_range`) and `sub_group` accessors (`get_local_id`, `get_group_id`,
+//! `get_max_local_range`, `get_group_range`) for lane/wave queries.
 
 use std::fmt::Write;
 

@@ -6,7 +6,7 @@
 //! Translates MIR instructions to near-WAVE LIR instructions. Analyzes
 //! the CFG to emit structured control flow (If/Endif, Loop/Endloop)
 //! by detecting merge points and back edges. Comparison results are
-//! tracked as predicate registers so CondBranch can use them directly.
+//! tracked as predicate registers so `CondBranch` can use them directly.
 
 use std::collections::{HashMap, HashSet};
 
@@ -270,7 +270,7 @@ impl<'a> MirToLirLowerer<'a> {
     }
 
     /// Emit the negation of a comparison that defined `cond` in `block_id`.
-    /// Returns a fresh PReg that is true when the original comparison is false.
+    /// Returns a fresh `PReg` that is true when the original comparison is false.
     fn emit_negated_comparison(&mut self, block_id: BlockId, cond: ValueId) -> PReg {
         let exit_preg = self.alloc_preg();
         if let Some(bb) = self.func.block(block_id) {

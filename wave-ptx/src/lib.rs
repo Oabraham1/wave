@@ -1,9 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE PTX backend. Provides compile() to translate a complete
+//! Public API for the WAVE PTX backend. Provides `compile()` to translate a complete
 //!
-//! WBIN binary file into PTX assembly text, and compile_kernel() for translating a
+//! WBIN binary file into PTX assembly text, and `compile_kernel()` for translating a
 //! single kernel's code section. The SM version (compute capability) is configurable
 //! to target different NVIDIA GPU generations.
 

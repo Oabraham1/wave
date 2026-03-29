@@ -3,8 +3,8 @@
 
 //! LIR instruction definitions mapping 1:1 to WAVE ISA instructions.
 //!
-//! LIR uses virtual registers (VReg) and predicate registers (PReg).
-//! After register allocation, VRegs are replaced with physical registers.
+//! LIR uses virtual registers (`VReg`) and predicate registers (`PReg`).
+//! After register allocation, `VReg`s are replaced with physical registers.
 
 use super::operand::{MemWidth, PReg, SpecialReg, VReg};
 
@@ -145,7 +145,7 @@ pub enum LirInst {
 }
 
 impl LirInst {
-    /// Returns the destination VReg if this instruction defines one.
+    /// Returns the destination `VReg` if this instruction defines one.
     #[must_use]
     pub fn dest_vreg(&self) -> Option<VReg> {
         match self {
@@ -187,7 +187,7 @@ impl LirInst {
         }
     }
 
-    /// Returns all VRegs used as source operands.
+    /// Returns all `VReg`s used as source operands.
     #[must_use]
     pub fn src_vregs(&self) -> Vec<VReg> {
         match self {

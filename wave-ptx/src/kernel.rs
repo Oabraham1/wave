@@ -3,7 +3,7 @@
 
 //! PTX kernel wrapper generation. Emits the PTX module header (.version, .target,
 //!
-//! .address_size), the .visible .entry declaration with the device memory pointer
+//! `.address_size`), the .visible .entry declaration with the device memory pointer
 //! parameter, register declarations for all PTX register classes (.b32, .f32, .pred,
 //! .b64, temporaries), shared memory allocation, and the kernel footer (ret + close).
 

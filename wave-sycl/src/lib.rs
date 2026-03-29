@@ -1,9 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE SYCL backend. Provides compile() to translate a complete
+//! Public API for the WAVE SYCL backend. Provides `compile()` to translate a complete
 //!
-//! WBIN binary file into SYCL C++ source text, and compile_kernel() for translating
+//! WBIN binary file into SYCL C++ source text, and `compile_kernel()` for translating
 //! a single kernel's code section. Targets Intel GPUs via oneAPI/SYCL with support
 //! for both Intel Arc (consumer) and Intel Data Center GPU Max/Flex (datacenter).
 

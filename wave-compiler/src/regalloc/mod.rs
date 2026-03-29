@@ -6,7 +6,7 @@
 //! Assigns physical registers to virtual registers. Handles interference
 //! graph construction, move coalescing, graph coloring with pre-colored
 //! parameters, and spill code generation. After allocation, rewrites
-//! VRegs to PhysRegs in the instruction stream.
+//! `VReg`s to `PhysReg`s in the instruction stream.
 
 pub mod coalesce;
 pub mod coloring;
@@ -22,7 +22,7 @@ use crate::lir::operand::VReg;
 
 /// Perform register allocation on LIR instructions.
 ///
-/// Returns the register mapping from VRegs to PhysRegs.
+/// Returns the register mapping from `VReg`s to `PhysReg`s.
 /// Pre-colors parameter registers: VReg(0)→PhysReg(0), etc.
 #[must_use]
 pub fn allocate_registers(instructions: &[LirInst], num_params: u32, max_regs: u32) -> RegMap {

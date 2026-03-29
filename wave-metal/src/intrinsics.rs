@@ -5,7 +5,7 @@
 //!
 //! Metal's native simd_* intrinsic functions. Apple Silicon GPUs have 32-wide SIMD
 //! groups and Metal provides direct intrinsics for shuffle, broadcast, ballot,
-//! vote, prefix sum, and reductions through the metal_simdgroup header.
+//! vote, prefix sum, and reductions through the `metal_simdgroup` header.
 
 use crate::registers::{pred, reg};
 use wave_decode::opcodes::{WaveOpType, WaveReduceType};

@@ -14,9 +14,9 @@ use crate::lir::operand::{PhysReg, VReg};
 
 /// Result of graph coloring.
 pub struct ColoringResult {
-    /// Mapping from VReg to assigned PhysReg.
+    /// Mapping from `VReg` to assigned `PhysReg`.
     pub assignment: HashMap<VReg, PhysReg>,
-    /// VRegs that could not be colored and need spilling.
+    /// `VReg`s that could not be colored and need spilling.
     pub spilled: Vec<VReg>,
 }
 

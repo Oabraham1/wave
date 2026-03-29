@@ -5,7 +5,7 @@
 //!
 //! equivalent Metal Shading Language (MSL) text. Uses a String buffer with writeln! for
 //! emission. Control flow maps directly to MSL if/else/while. Float operations use
-//! rf()/ri() helper functions for bitcasting since WAVE registers are untyped 32-bit.
+//! `rf()`/`ri()` helper functions for bitcasting since WAVE registers are untyped 32-bit.
 //! Predicated instructions are wrapped in MSL if-guards. The generator delegates to
 //! sub-modules for memory operations, wave intrinsics, and control flow formatting.
 

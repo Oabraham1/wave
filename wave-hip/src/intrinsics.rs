@@ -3,10 +3,10 @@
 
 //! AMD wavefront intrinsic emission for HIP. Maps WAVE wave-level operations to HIP
 //!
-//! __shfl/__shfl_up/__shfl_down/__shfl_xor intrinsics. Reductions use a shfl-based
+//! `__shfl`/`__shfl_up`/`__shfl_down`/`__shfl_xor` intrinsics. Reductions use a shfl-based
 //! butterfly tree with log2(warpSize) iterations, handling both RDNA (wavefront 32)
 //! and CDNA (wavefront 64) via the warpSize runtime variable. Prefix sum uses
-//! shfl_up with predicated accumulation.
+//! `shfl_up` with predicated accumulation.
 
 use crate::registers::{pred, reg};
 use wave_decode::opcodes::{WaveOpType, WaveReduceType};

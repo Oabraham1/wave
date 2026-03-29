@@ -1,9 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE Metal backend. Provides compile() to translate a complete
+//! Public API for the WAVE Metal backend. Provides `compile()` to translate a complete
 //!
-//! WBIN binary file into MSL source text, and compile_kernel() for translating a
+//! WBIN binary file into MSL source text, and `compile_kernel()` for translating a
 //! single kernel's code section. Orchestrates WBIN parsing via wave-decode, instruction
 //! decoding, and MSL code generation through the codegen module.
 

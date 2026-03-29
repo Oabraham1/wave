@@ -97,7 +97,7 @@ pub struct EmulatorConfig {
     /// Maximum instructions to execute (0 = unlimited). Default: 10,000,000
     pub max_instructions: u64,
     /// Initial register values set for all threads before execution.
-    /// Vec of (register_index, value) pairs.
+    /// Vec of (`register_index`, value) pairs.
     pub initial_registers: Vec<(u8, u32)>,
 }
 

@@ -4,9 +4,9 @@
 //! Register naming and special register mapping. Converts WAVE register indices to
 //!
 //! MSL variable names and maps WAVE special registers to Metal kernel parameter
-//! expressions. General registers become uint32_t locals (r0, r1, ...) and predicate
+//! expressions. General registers become `uint32_t` locals (r0, r1, ...) and predicate
 //! registers become bool locals (p0-p3). Special registers map to Metal built-in
-//! kernel parameters like thread_position_in_threadgroup and simdgroup_index.
+//! kernel parameters like `thread_position_in_threadgroup` and `simdgroup_index`.
 
 use std::fmt::Write;
 

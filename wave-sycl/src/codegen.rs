@@ -4,11 +4,11 @@
 //! Main code generator for the SYCL backend. Iterates decoded WAVE instructions and
 //!
 //! emits equivalent SYCL C++ inside a kernel lambda. The kernel body lives at indent
-//! level 4 (function > submit > parallel_for > lambda). Integer and bitwise operations
-//! use standard C++ operators. Float operations use rf()/ri() helpers wrapping
-//! sycl::bit_cast. Sub-group operations use SYCL 2020 standard group functions.
-//! Atomics use sycl::atomic_ref. Local memory is accessed via the lm pointer
-//! obtained from a sycl::local_accessor.
+//! level 4 (function > submit > `parallel_for` > lambda). Integer and bitwise operations
+//! use standard C++ operators. Float operations use `rf()`/`ri()` helpers wrapping
+//! `sycl::bit_cast`. Sub-group operations use SYCL 2020 standard group functions.
+//! Atomics use `sycl::atomic_ref`. Local memory is accessed via the lm pointer
+//! obtained from a `sycl::local_accessor`.
 
 use std::fmt::Write;
 

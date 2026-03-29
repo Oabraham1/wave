@@ -3,7 +3,7 @@
 
 //! CLI entry point for the WAVE SYCL backend. Reads a WBIN binary file, translates
 //!
-//! it to SYCL C++ using the wave_sycl::compile API, and writes the resulting source
+//! it to SYCL C++ using the `wave_sycl::compile` API, and writes the resulting source
 //! to an output file or stdout.
 
 use clap::Parser;

@@ -3,7 +3,7 @@
 
 //! Opcode definitions and instruction signature tables. Maps mnemonic strings to
 //!
-//! instruction encoding metadata (opcode, operand types, modifiers). Uses LazyLock
+//! instruction encoding metadata (opcode, operand types, modifiers). Uses `LazyLock`
 //! for static initialization of the lookup tables.
 
 use std::collections::HashMap;

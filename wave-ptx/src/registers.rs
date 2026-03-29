@@ -5,7 +5,7 @@
 //!
 //! map to %r (b32) and %f (f32 shadow) PTX registers. Predicates map to %p (pred).
 //! Address computation uses %rd (b64) registers. Special registers map to PTX built-in
-//! registers like %tid.x, %ctaid.x, %laneid. Computed specials (wave_id, num_waves)
+//! registers like %tid.x, %ctaid.x, %laneid. Computed specials (`wave_id`, `num_waves`)
 //! emit multi-instruction sequences using temporary registers.
 
 use std::fmt::Write;

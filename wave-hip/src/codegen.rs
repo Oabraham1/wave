@@ -4,8 +4,8 @@
 //! Main code generator for the HIP backend. Iterates decoded WAVE instructions and
 //!
 //! emits equivalent HIP C++ kernel code. Integer and bitwise operations map to standard
-//! C++ operators. Float operations use rf()/ri() helpers for __uint_as_float /
-//! __float_as_uint bitcasting. Control flow maps directly to HIP C++ if/while.
+//! C++ operators. Float operations use `rf()`/`ri()` helpers for `__uint_as_float` /
+//! `__float_as_uint` bitcasting. Control flow maps directly to HIP C++ if/while.
 //! Predicated instructions are wrapped in if-guards. Memory uses pointer arithmetic
 //! with C-style casts. Wave operations use HIP __shfl intrinsics.
 
