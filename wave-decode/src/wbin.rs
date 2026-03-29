@@ -77,6 +77,9 @@ pub struct WbinFile<'a> {
 }
 
 impl<'a> WbinFile<'a> {
+    /// # Errors
+    ///
+    /// Returns `WbinError` if the binary is malformed or too small.
     #[allow(clippy::missing_panics_doc)]
     pub fn parse(data: &'a [u8]) -> Result<Self, WbinError> {
         if data.len() < WBIN_HEADER_SIZE {

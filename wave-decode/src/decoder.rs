@@ -3,7 +3,7 @@
 
 //! Core instruction decoder. Reads binary instruction words and produces
 //!
-//! structured DecodedInstruction values.
+//! structured `DecodedInstruction` values.
 
 use crate::instruction::{DecodedInstruction, Operation};
 use crate::opcodes::{
