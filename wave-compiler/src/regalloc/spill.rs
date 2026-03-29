@@ -26,7 +26,9 @@ pub fn insert_spill_code(
 
     let mut spill_offsets: std::collections::HashMap<VReg, u32> = std::collections::HashMap::new();
     for (i, &vreg) in spilled.iter().enumerate() {
-        spill_offsets.insert(vreg, spill_slot_base + (i as u32) * 4);
+        #[allow(clippy::cast_possible_truncation)]
+        let slot_index = i as u32;
+        spill_offsets.insert(vreg, spill_slot_base + slot_index * 4);
     }
 
     let mut new_insts: Vec<LirInst> = Vec::new();

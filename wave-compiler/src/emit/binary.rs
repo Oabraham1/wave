@@ -33,10 +33,12 @@ pub fn generate_wbin(
     }
 
     let code_offset = WBIN_HEADER_SIZE;
+    #[allow(clippy::cast_possible_truncation)]
     let code_size = code_bytes.len() as u32;
 
     let kernel_name_bytes = kernel_name.as_bytes();
     let symbol_offset = code_offset + code_size;
+    #[allow(clippy::cast_possible_truncation)]
     let symbol_size = (kernel_name_bytes.len() + 1) as u32;
 
     let metadata_offset = symbol_offset + symbol_size;

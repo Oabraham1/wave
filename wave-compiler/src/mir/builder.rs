@@ -126,6 +126,7 @@ impl MirBuilder {
     }
 
     /// Finalize and return the built function.
+    #[must_use]
     pub fn finish(mut self) -> MirFunction {
         if self.func.block(self.func.entry).is_none() {
             self.func.blocks.insert(0, BasicBlock::new(self.func.entry));

@@ -17,7 +17,7 @@ use crate::mir::value::ValueId;
 pub struct Dce;
 
 impl Pass for Dce {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "dce"
     }
 

@@ -33,16 +33,14 @@ impl EscapeInfo {
                         value,
                         space: AddressSpace::Device,
                         ..
-                    } => {
+                    }
+                    | MirInst::AtomicRmw { value, .. } => {
                         escaped.insert(*value);
                     }
                     MirInst::Call { args, .. } => {
                         for arg in args {
                             escaped.insert(*arg);
                         }
-                    }
-                    MirInst::AtomicRmw { value, .. } => {
-                        escaped.insert(*value);
                     }
                     _ => {}
                 }

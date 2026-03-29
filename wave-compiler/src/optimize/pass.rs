@@ -11,7 +11,7 @@ use crate::mir::function::MirFunction;
 /// Trait for MIR optimization passes.
 pub trait Pass {
     /// Returns the name of this pass.
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
 
     /// Run the pass on a MIR function. Returns true if any changes were made.
     fn run(&self, func: &mut MirFunction) -> bool;
@@ -24,7 +24,7 @@ mod tests {
 
     struct NoopPass;
     impl Pass for NoopPass {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "noop"
         }
         fn run(&self, func: &mut MirFunction) -> bool {

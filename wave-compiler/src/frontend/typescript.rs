@@ -77,7 +77,7 @@ impl<'a> TsParser<'a> {
             message: "expected ')'".into(),
         })?;
         let params_str = &line[line.find('(').unwrap() + 1..paren_end];
-        let params = self.parse_params(params_str)?;
+        let params = Self::parse_params(params_str);
 
         self.pos += 1;
 
@@ -91,7 +91,7 @@ impl<'a> TsParser<'a> {
         })
     }
 
-    fn parse_params(&self, s: &str) -> Result<Vec<KernelParam>, CompileError> {
+    fn parse_params(s: &str) -> Vec<KernelParam> {
         let mut params = Vec::new();
         for param in s.split(',') {
             let param = param.trim();
@@ -106,7 +106,6 @@ impl<'a> TsParser<'a> {
                     (Type::Ptr(AddressSpace::Device), AddressSpace::Device)
                 } else {
                     match type_str {
-                        "u32" | "number" => (Type::U32, AddressSpace::Private),
                         "i32" => (Type::I32, AddressSpace::Private),
                         "f32" => (Type::F32, AddressSpace::Private),
                         "f64" => (Type::F64, AddressSpace::Private),
@@ -123,7 +122,7 @@ impl<'a> TsParser<'a> {
                 address_space: space,
             });
         }
-        Ok(params)
+        params
     }
 
     fn parse_body(&mut self) -> Result<Vec<Stmt>, CompileError> {

@@ -81,7 +81,7 @@ impl<'a> PythonParser<'a> {
                 message: "expected ')' in function definition".into(),
             })?;
         let params_str = &after_def[paren_start + 1..paren_end];
-        let params = self.parse_params(params_str)?;
+        let params = Self::parse_params(params_str);
 
         self.pos += 1;
 
@@ -96,17 +96,17 @@ impl<'a> PythonParser<'a> {
         })
     }
 
-    fn parse_params(&self, params_str: &str) -> Result<Vec<KernelParam>, CompileError> {
+    fn parse_params(params_str: &str) -> Vec<KernelParam> {
         let mut params = Vec::new();
-        for param_str in params_str.split(',') {
-            let param_str = param_str.trim();
-            if param_str.is_empty() {
+        for param_token in params_str.split(',') {
+            let param_token = param_token.trim();
+            if param_token.is_empty() {
                 continue;
             }
-            let parts: Vec<&str> = param_str.splitn(2, ':').collect();
+            let parts: Vec<&str> = param_token.splitn(2, ':').collect();
             let param_name = parts[0].trim().to_string();
             let (ty, addr_space) = if parts.len() > 1 {
-                self.parse_type_annotation(parts[1].trim())
+                Self::parse_type_annotation(parts[1].trim())
             } else {
                 (Type::U32, AddressSpace::Private)
             };
@@ -116,10 +116,10 @@ impl<'a> PythonParser<'a> {
                 address_space: addr_space,
             });
         }
-        Ok(params)
+        params
     }
 
-    fn parse_type_annotation(&self, ann: &str) -> (Type, AddressSpace) {
+    fn parse_type_annotation(ann: &str) -> (Type, AddressSpace) {
         match ann {
             "u32" | "int" => (Type::U32, AddressSpace::Private),
             "i32" => (Type::I32, AddressSpace::Private),

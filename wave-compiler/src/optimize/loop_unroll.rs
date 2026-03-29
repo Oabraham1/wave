@@ -20,7 +20,7 @@ const MAX_UNROLLED_BODY_SIZE: usize = 128;
 pub struct LoopUnroll;
 
 impl Pass for LoopUnroll {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "loop_unroll"
     }
 

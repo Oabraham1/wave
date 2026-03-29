@@ -190,7 +190,6 @@ fn infer_type(expr: &Expr, env: &TypeEnv) -> Result<Type, CompileError> {
         Expr::Index { base, .. } => {
             let base_ty = infer_type(base, env)?;
             match base_ty {
-                Type::Ptr(_) => Ok(Type::F32),
                 Type::Array(elem, _) => Ok(*elem),
                 _ => Ok(Type::F32),
             }
@@ -200,9 +199,9 @@ fn infer_type(expr: &Expr, env: &TypeEnv) -> Result<Type, CompileError> {
         | Expr::WorkgroupId(_)
         | Expr::WorkgroupSize(_)
         | Expr::LaneId
-        | Expr::WaveWidth => Ok(Type::U32),
+        | Expr::WaveWidth
+        | Expr::Shuffle { .. } => Ok(Type::U32),
         Expr::Load { .. } => Ok(Type::F32),
-        Expr::Shuffle { .. } => Ok(Type::U32),
     }
 }
 

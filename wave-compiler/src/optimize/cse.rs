@@ -25,7 +25,7 @@ struct ExprKey {
 }
 
 impl Pass for Cse {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cse"
     }
 

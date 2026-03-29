@@ -19,7 +19,7 @@ use crate::mir::value::ValueId;
 pub struct Mem2Reg;
 
 impl Pass for Mem2Reg {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mem2reg"
     }
 

@@ -43,6 +43,7 @@ pub fn compile_kernel(kernel: &Kernel, config: &CompilerConfig) -> Result<Vec<u8
         eprintln!("=== LIR ===\n{}", display_lir(&lir));
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     let num_params = kernel.params.len() as u32;
     let reg_map = allocate_registers(&lir, num_params, config.max_registers);
     let reg_count = max_register_used(&reg_map);
@@ -59,7 +60,7 @@ pub fn compile_source(source: &str, config: &CompilerConfig) -> Result<Vec<u8>, 
     let kernel = crate::frontend::parse(source, config.language)?;
 
     if config.dump_hir {
-        eprintln!("HIR: {:#?}", kernel);
+        eprintln!("HIR: {kernel:#?}");
     }
 
     compile_kernel(&kernel, config)

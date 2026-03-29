@@ -41,6 +41,7 @@ impl ConstValue {
     #[must_use]
     pub fn to_bits(&self) -> u32 {
         match self {
+            #[allow(clippy::cast_sign_loss)]
             Self::I32(v) => *v as u32,
             Self::U32(v) => *v,
             Self::F32(v) => v.to_bits(),
@@ -188,13 +189,15 @@ impl MirInst {
             Self::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
             Self::UnaryOp { operand, .. } => vec![*operand],
             Self::Load { addr, .. } => vec![*addr],
-            Self::Store { addr, value, .. } => vec![*addr, *value],
+            Self::Store { addr, value, .. }
+            | Self::AtomicRmw { addr, value, .. } => vec![*addr, *value],
             Self::Call { args, .. } => args.clone(),
             Self::Cast { value, .. } => vec![*value],
-            Self::Const { .. } | Self::ReadSpecialReg { .. } => vec![],
+            Self::Const { .. }
+            | Self::ReadSpecialReg { .. }
+            | Self::Barrier
+            | Self::Fence { .. } => vec![],
             Self::Shuffle { value, lane, .. } => vec![*value, *lane],
-            Self::AtomicRmw { addr, value, .. } => vec![*addr, *value],
-            Self::Barrier | Self::Fence { .. } => vec![],
         }
     }
 

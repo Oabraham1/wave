@@ -189,6 +189,7 @@ fn parse_set_reg(spec: &str) -> Result<(u8, u32), String> {
     Ok((reg, value))
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn generate_iota_f32(count: usize, scale: f32) -> Vec<u8> {
     let mut data = Vec::with_capacity(count * 4);
     for i in 0..count {
@@ -230,9 +231,7 @@ fn hex_dump(data: &[u8], base_addr: u64) {
     }
 }
 
-fn run() -> Result<(), EmulatorError> {
-    let args = Args::parse();
-
+fn build_config(args: &Args) -> Result<EmulatorConfig, EmulatorError> {
     let grid_dim = parse_dimensions(&args.grid).map_err(|e| EmulatorError::InvalidBinary {
         message: format!("invalid --grid: {e}"),
     })?;
@@ -250,7 +249,7 @@ fn run() -> Result<(), EmulatorError> {
         initial_registers.push((reg, value));
     }
 
-    let config = EmulatorConfig {
+    Ok(EmulatorConfig {
         grid_dim,
         workgroup_dim,
         register_count: args.registers,
@@ -261,13 +260,10 @@ fn run() -> Result<(), EmulatorError> {
         f64_enabled: false,
         max_instructions: args.max_instructions,
         initial_registers,
-    };
+    })
+}
 
-    let binary = load_binary_file(&args.binary)?;
-    let mut emulator = Emulator::new(config);
-    emulator.load_binary(&binary)?;
-
-    // Process --fill-zero: fill memory with zeros
+fn load_memory_fills(emulator: &mut Emulator, args: &Args) -> Result<(), EmulatorError> {
     for spec in &args.fill_zero {
         let parts: Vec<&str> = spec.split(':').collect();
         if parts.len() != 3 {
@@ -278,7 +274,6 @@ fn run() -> Result<(), EmulatorError> {
         let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
             message: format!("--fill-zero offset: {e}"),
         })?;
-        // parts[1] is type (f32/u32) — both are 4 bytes
         let count = parts[2]
             .parse::<usize>()
             .map_err(|e| EmulatorError::InvalidBinary {
@@ -288,7 +283,6 @@ fn run() -> Result<(), EmulatorError> {
         emulator.load_device_memory(offset, &data)?;
     }
 
-    // Process --fill-iota: fill memory with scaled iota pattern
     for spec in &args.fill_iota {
         let parts: Vec<&str> = spec.split(':').collect();
         if parts.len() < 3 || parts.len() > 4 {
@@ -299,7 +293,6 @@ fn run() -> Result<(), EmulatorError> {
         let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
             message: format!("--fill-iota offset: {e}"),
         })?;
-        // parts[1] is type (f32/u32)
         let count = parts[2]
             .parse::<usize>()
             .map_err(|e| EmulatorError::InvalidBinary {
@@ -318,7 +311,6 @@ fn run() -> Result<(), EmulatorError> {
         emulator.load_device_memory(offset, &data)?;
     }
 
-    // Process --arg: load files into device memory
     for arg_spec in &args.arg {
         let (offset, path) =
             parse_arg_spec(arg_spec).map_err(|e| EmulatorError::InvalidBinary {
@@ -338,12 +330,10 @@ fn run() -> Result<(), EmulatorError> {
         emulator.load_device_memory(offset, &data)?;
     }
 
-    let result = emulator.run()?;
+    Ok(())
+}
 
-    if args.dump_regs {
-        eprintln!("Register dumps not implemented for multi-wave execution");
-    }
-
+fn dump_outputs(emulator: &Emulator, args: &Args) -> Result<(), EmulatorError> {
     if let Some(range_str) = &args.dump_memory {
         let (start, end) =
             parse_memory_range(range_str).map_err(|e| EmulatorError::InvalidBinary {
@@ -357,7 +347,6 @@ fn run() -> Result<(), EmulatorError> {
         hex_dump(&data, start);
     }
 
-    // Dump f32 values from device memory
     if let Some(spec) = &args.dump_f32 {
         let parts: Vec<&str> = spec.splitn(2, ':').collect();
         if parts.len() != 2 {
@@ -382,10 +371,30 @@ fn run() -> Result<(), EmulatorError> {
                 data[i * 4 + 3],
             ];
             let val = f32::from_le_bytes(bytes);
-            // Use Debug format to always include decimal point (e.g. "0.0" not "0")
             println!("{val:?}");
         }
     }
+
+    Ok(())
+}
+
+fn run() -> Result<(), EmulatorError> {
+    let args = Args::parse();
+    let config = build_config(&args)?;
+
+    let binary = load_binary_file(&args.binary)?;
+    let mut emulator = Emulator::new(config);
+    emulator.load_binary(&binary)?;
+
+    load_memory_fills(&mut emulator, &args)?;
+
+    let result = emulator.run()?;
+
+    if args.dump_regs {
+        eprintln!("Register dumps not implemented for multi-wave execution");
+    }
+
+    dump_outputs(&emulator, &args)?;
 
     if args.stats {
         print!("{}", result.stats);

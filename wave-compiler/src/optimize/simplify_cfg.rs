@@ -17,7 +17,7 @@ use crate::mir::function::MirFunction;
 pub struct SimplifyCfg;
 
 impl Pass for SimplifyCfg {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "simplify_cfg"
     }
 

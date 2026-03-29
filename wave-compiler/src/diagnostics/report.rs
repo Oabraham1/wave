@@ -6,6 +6,8 @@
 //! Formats compiler errors with the relevant source line and
 //! a caret pointing to the error location.
 
+use std::fmt::Write;
+
 use super::error::{CompileError, SourceLoc};
 use super::source_map::SourceMap;
 
@@ -19,7 +21,7 @@ pub fn format_error(
     let mut out = String::new();
 
     if let Some(loc) = loc {
-        out.push_str(&format!("error at {}:{}: ", loc.line, loc.col));
+        let _ = write!(out, "error at {}:{}: ", loc.line, loc.col);
     } else {
         out.push_str("error: ");
     }
@@ -29,9 +31,9 @@ pub fn format_error(
 
     if let (Some(map), Some(loc)) = (source_map, loc) {
         if let Some(line) = map.get_line(loc.line) {
-            out.push_str(&format!(" {} | {}\n", loc.line, line));
+            let _ = writeln!(out, " {} | {}", loc.line, line);
             let padding = format!("{}", loc.line).len() + 3 + (loc.col as usize - 1);
-            out.push_str(&format!("{}^\n", " ".repeat(padding)));
+            let _ = writeln!(out, "{}^", " ".repeat(padding));
         }
     }
 

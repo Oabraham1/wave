@@ -75,7 +75,6 @@ fn lower_type(ty: &syn::Type) -> (Type, AddressSpace) {
                 .map(|s| s.ident.to_string())
                 .unwrap_or_default();
             match ident.as_str() {
-                "u32" => (Type::U32, AddressSpace::Private),
                 "i32" => (Type::I32, AddressSpace::Private),
                 "f32" => (Type::F32, AddressSpace::Private),
                 "f64" => (Type::F64, AddressSpace::Private),
@@ -183,20 +182,7 @@ fn lower_stmt_expr(expr: &syn::Expr) -> Result<Option<Stmt>, CompileError> {
 
 fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
     match expr {
-        syn::Expr::Lit(lit) => match &lit.lit {
-            syn::Lit::Int(i) => {
-                let v: i64 = i.base10_parse().unwrap_or(0);
-                Ok(Expr::Literal(Literal::Int(v)))
-            }
-            syn::Lit::Float(f) => {
-                let v: f64 = f.base10_parse().unwrap_or(0.0);
-                Ok(Expr::Literal(Literal::Float(v)))
-            }
-            syn::Lit::Bool(b) => Ok(Expr::Literal(Literal::Bool(b.value))),
-            _ => Err(CompileError::ParseError {
-                message: "unsupported literal".into(),
-            }),
-        },
+        syn::Expr::Lit(lit) => lower_lit(lit),
         syn::Expr::Path(path) => {
             let name = path
                 .path
@@ -206,80 +192,8 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
                 .unwrap_or_default();
             Ok(Expr::Var(name))
         }
-        syn::Expr::Binary(bin) => {
-            let lhs = lower_expr(&bin.left)?;
-            let rhs = lower_expr(&bin.right)?;
-            let op = match bin.op {
-                syn::BinOp::Add(_) => BinOp::Add,
-                syn::BinOp::Sub(_) => BinOp::Sub,
-                syn::BinOp::Mul(_) => BinOp::Mul,
-                syn::BinOp::Div(_) => BinOp::Div,
-                syn::BinOp::Rem(_) => BinOp::Mod,
-                syn::BinOp::Lt(_) => BinOp::Lt,
-                syn::BinOp::Le(_) => BinOp::Le,
-                syn::BinOp::Gt(_) => BinOp::Gt,
-                syn::BinOp::Ge(_) => BinOp::Ge,
-                syn::BinOp::Eq(_) => BinOp::Eq,
-                syn::BinOp::Ne(_) => BinOp::Ne,
-                syn::BinOp::BitAnd(_) => BinOp::BitAnd,
-                syn::BinOp::BitOr(_) => BinOp::BitOr,
-                syn::BinOp::BitXor(_) => BinOp::BitXor,
-                syn::BinOp::Shl(_) => BinOp::Shl,
-                syn::BinOp::Shr(_) => BinOp::Shr,
-                _ => {
-                    return Err(CompileError::ParseError {
-                        message: "unsupported binary op".into(),
-                    })
-                }
-            };
-            Ok(Expr::BinOp {
-                op,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-            })
-        }
-        syn::Expr::Call(call) => {
-            if let syn::Expr::Path(path) = &*call.func {
-                let func_name = path
-                    .path
-                    .segments
-                    .last()
-                    .map(|s| s.ident.to_string())
-                    .unwrap_or_default();
-                match func_name.as_str() {
-                    "thread_id" => Ok(Expr::ThreadId(Dimension::X)),
-                    "workgroup_id" => Ok(Expr::WorkgroupId(Dimension::X)),
-                    "workgroup_size" => Ok(Expr::WorkgroupSize(Dimension::X)),
-                    "lane_id" => Ok(Expr::LaneId),
-                    "wave_width" => Ok(Expr::WaveWidth),
-                    "barrier" => Ok(Expr::Literal(Literal::Int(0))),
-                    _ => {
-                        let args: Vec<Expr> =
-                            call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
-                        Ok(Expr::Call {
-                            func: match func_name.as_str() {
-                                "sqrt" => crate::hir::expr::BuiltinFunc::Sqrt,
-                                "sin" => crate::hir::expr::BuiltinFunc::Sin,
-                                "cos" => crate::hir::expr::BuiltinFunc::Cos,
-                                "abs" => crate::hir::expr::BuiltinFunc::Abs,
-                                "min" => crate::hir::expr::BuiltinFunc::Min,
-                                "max" => crate::hir::expr::BuiltinFunc::Max,
-                                _ => {
-                                    return Err(CompileError::ParseError {
-                                        message: format!("unknown function: {func_name}"),
-                                    })
-                                }
-                            },
-                            args,
-                        })
-                    }
-                }
-            } else {
-                Err(CompileError::ParseError {
-                    message: "unsupported call".into(),
-                })
-            }
-        }
+        syn::Expr::Binary(bin) => lower_binary(bin),
+        syn::Expr::Call(call) => lower_call(call),
         syn::Expr::Index(idx) => {
             let base = lower_expr(&idx.expr)?;
             let index = lower_expr(&idx.index)?;
@@ -308,6 +222,99 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
         _ => Err(CompileError::ParseError {
             message: "unsupported expression".into(),
         }),
+    }
+}
+
+fn lower_lit(lit: &syn::ExprLit) -> Result<Expr, CompileError> {
+    match &lit.lit {
+        syn::Lit::Int(i) => {
+            let v: i64 = i.base10_parse().unwrap_or(0);
+            Ok(Expr::Literal(Literal::Int(v)))
+        }
+        syn::Lit::Float(f) => {
+            let v: f64 = f.base10_parse().unwrap_or(0.0);
+            Ok(Expr::Literal(Literal::Float(v)))
+        }
+        syn::Lit::Bool(b) => Ok(Expr::Literal(Literal::Bool(b.value))),
+        _ => Err(CompileError::ParseError {
+            message: "unsupported literal".into(),
+        }),
+    }
+}
+
+fn lower_binary(bin: &syn::ExprBinary) -> Result<Expr, CompileError> {
+    let lhs = lower_expr(&bin.left)?;
+    let rhs = lower_expr(&bin.right)?;
+    let op = match bin.op {
+        syn::BinOp::Add(_) => BinOp::Add,
+        syn::BinOp::Sub(_) => BinOp::Sub,
+        syn::BinOp::Mul(_) => BinOp::Mul,
+        syn::BinOp::Div(_) => BinOp::Div,
+        syn::BinOp::Rem(_) => BinOp::Mod,
+        syn::BinOp::Lt(_) => BinOp::Lt,
+        syn::BinOp::Le(_) => BinOp::Le,
+        syn::BinOp::Gt(_) => BinOp::Gt,
+        syn::BinOp::Ge(_) => BinOp::Ge,
+        syn::BinOp::Eq(_) => BinOp::Eq,
+        syn::BinOp::Ne(_) => BinOp::Ne,
+        syn::BinOp::BitAnd(_) => BinOp::BitAnd,
+        syn::BinOp::BitOr(_) => BinOp::BitOr,
+        syn::BinOp::BitXor(_) => BinOp::BitXor,
+        syn::BinOp::Shl(_) => BinOp::Shl,
+        syn::BinOp::Shr(_) => BinOp::Shr,
+        _ => {
+            return Err(CompileError::ParseError {
+                message: "unsupported binary op".into(),
+            })
+        }
+    };
+    Ok(Expr::BinOp {
+        op,
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+    })
+}
+
+fn lower_call(call: &syn::ExprCall) -> Result<Expr, CompileError> {
+    if let syn::Expr::Path(path) = &*call.func {
+        let func_name = path
+            .path
+            .segments
+            .last()
+            .map(|s| s.ident.to_string())
+            .unwrap_or_default();
+        match func_name.as_str() {
+            "thread_id" => Ok(Expr::ThreadId(Dimension::X)),
+            "workgroup_id" => Ok(Expr::WorkgroupId(Dimension::X)),
+            "workgroup_size" => Ok(Expr::WorkgroupSize(Dimension::X)),
+            "lane_id" => Ok(Expr::LaneId),
+            "wave_width" => Ok(Expr::WaveWidth),
+            "barrier" => Ok(Expr::Literal(Literal::Int(0))),
+            _ => {
+                let args: Vec<Expr> =
+                    call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
+                Ok(Expr::Call {
+                    func: match func_name.as_str() {
+                        "sqrt" => crate::hir::expr::BuiltinFunc::Sqrt,
+                        "sin" => crate::hir::expr::BuiltinFunc::Sin,
+                        "cos" => crate::hir::expr::BuiltinFunc::Cos,
+                        "abs" => crate::hir::expr::BuiltinFunc::Abs,
+                        "min" => crate::hir::expr::BuiltinFunc::Min,
+                        "max" => crate::hir::expr::BuiltinFunc::Max,
+                        _ => {
+                            return Err(CompileError::ParseError {
+                                message: format!("unknown function: {func_name}"),
+                            })
+                        }
+                    },
+                    args,
+                })
+            }
+        }
+    } else {
+        Err(CompileError::ParseError {
+            message: "unsupported call".into(),
+        })
     }
 }
 

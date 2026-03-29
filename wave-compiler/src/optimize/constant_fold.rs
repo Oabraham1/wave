@@ -19,7 +19,7 @@ use crate::mir::value::ValueId;
 pub struct ConstantFold;
 
 impl Pass for ConstantFold {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "constant_fold"
     }
 
@@ -35,7 +35,7 @@ impl Pass for ConstantFold {
                             constants.insert(*dest, *v);
                         }
                         if let ConstValue::U32(v) = value {
-                            constants.insert(*dest, *v as i32);
+                            constants.insert(*dest, i32::from_ne_bytes(v.to_ne_bytes()));
                         }
                     }
                     MirInst::BinOp {
@@ -83,15 +83,19 @@ fn fold_binop(op: BinOp, lhs: i32, rhs: i32) -> Option<i32> {
         BinOp::BitAnd => Some(lhs & rhs),
         BinOp::BitOr => Some(lhs | rhs),
         BinOp::BitXor => Some(lhs ^ rhs),
-        BinOp::Shl => Some(lhs.wrapping_shl(rhs as u32)),
-        BinOp::Shr => Some((lhs as u32).wrapping_shr(rhs as u32) as i32),
+        BinOp::Shl => Some(lhs.wrapping_shl(u32::from_ne_bytes(rhs.to_ne_bytes()))),
+        BinOp::Shr => Some(i32::from_ne_bytes(
+            u32::from_ne_bytes(lhs.to_ne_bytes())
+                .wrapping_shr(u32::from_ne_bytes(rhs.to_ne_bytes()))
+                .to_ne_bytes(),
+        )),
         BinOp::Eq => Some(i32::from(lhs == rhs)),
         BinOp::Ne => Some(i32::from(lhs != rhs)),
         BinOp::Lt => Some(i32::from(lhs < rhs)),
         BinOp::Le => Some(i32::from(lhs <= rhs)),
         BinOp::Gt => Some(i32::from(lhs > rhs)),
         BinOp::Ge => Some(i32::from(lhs >= rhs)),
-        _ => None,
+        BinOp::Pow => None,
     }
 }
 

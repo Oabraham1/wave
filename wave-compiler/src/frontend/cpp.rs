@@ -64,7 +64,7 @@ impl<'a> CppParser<'a> {
             .to_string();
 
         let params_str = &line[paren_start + 1..paren_end];
-        let params = self.parse_params(params_str)?;
+        let params = Self::parse_params(params_str);
 
         self.pos += 1;
         while self.pos < self.lines.len() && self.lines[self.pos].trim() == "{" {
@@ -81,7 +81,7 @@ impl<'a> CppParser<'a> {
         })
     }
 
-    fn parse_params(&self, s: &str) -> Result<Vec<KernelParam>, CompileError> {
+    fn parse_params(s: &str) -> Vec<KernelParam> {
         let mut params = Vec::new();
         for param in s.split(',') {
             let param = param.trim();
@@ -102,7 +102,6 @@ impl<'a> CppParser<'a> {
                 match type_str {
                     "float" | "f32" => (Type::F32, AddressSpace::Private),
                     "int" | "i32" => (Type::I32, AddressSpace::Private),
-                    "uint32_t" | "unsigned" | "u32" => (Type::U32, AddressSpace::Private),
                     "double" | "f64" => (Type::F64, AddressSpace::Private),
                     "bool" => (Type::Bool, AddressSpace::Private),
                     _ => (Type::U32, AddressSpace::Private),
@@ -115,7 +114,7 @@ impl<'a> CppParser<'a> {
                 address_space: space,
             });
         }
-        Ok(params)
+        params
     }
 
     fn parse_body(&mut self) -> Result<Vec<Stmt>, CompileError> {

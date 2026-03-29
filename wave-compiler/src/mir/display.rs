@@ -6,40 +6,34 @@
 //! Provides human-readable output of the MIR for debugging and
 //! compiler development purposes.
 
-use std::fmt;
+use std::fmt::{self, Write};
 
 use super::basic_block::Terminator;
 use super::function::MirFunction;
 use super::instruction::MirInst;
 
 /// Format a MIR function for display.
+#[must_use]
 pub fn display_function(func: &MirFunction) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "function {} ({} params):\n",
-        func.name,
-        func.params.len()
-    ));
+    let _ = writeln!(out, "function {} ({} params):", func.name, func.params.len());
     for param in &func.params {
-        out.push_str(&format!(
-            "  param {} : {} ({})\n",
-            param.value, param.ty, param.name
-        ));
+        let _ = writeln!(out, "  param {} : {} ({})", param.value, param.ty, param.name);
     }
     out.push('\n');
     for block in &func.blocks {
-        out.push_str(&format!("{}:\n", block.id));
+        let _ = writeln!(out, "{}:", block.id);
         for phi in &block.phis {
-            out.push_str(&format!("  {} = phi {}", phi.dest, phi.ty));
+            let _ = write!(out, "  {} = phi {}", phi.dest, phi.ty);
             for (bid, val) in &phi.incoming {
-                out.push_str(&format!(" [{}: {}]", bid, val));
+                let _ = write!(out, " [{bid}: {val}]");
             }
             out.push('\n');
         }
         for inst in &block.instructions {
-            out.push_str(&format!("  {}\n", format_inst(inst)));
+            let _ = writeln!(out, "  {}", format_inst(inst));
         }
-        out.push_str(&format!("  {}\n", format_terminator(&block.terminator)));
+        let _ = writeln!(out, "  {}", format_terminator(&block.terminator));
     }
     out
 }

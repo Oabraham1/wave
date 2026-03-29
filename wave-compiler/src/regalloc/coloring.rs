@@ -32,6 +32,7 @@ pub fn color(ig: &InterferenceGraph, max_regs: u32, num_params: u32) -> Coloring
     for i in 0..num_params {
         let vreg = VReg(i);
         if ig.adj.contains_key(&vreg) {
+            #[allow(clippy::cast_possible_truncation)]
             assignment.insert(vreg, PhysReg(i as u8));
         }
     }

@@ -6,6 +6,8 @@
 //! Formats LIR instructions in a readable assembly-like syntax
 //! for debugging and compiler development.
 
+use std::fmt::Write;
+
 use super::instruction::LirInst;
 
 /// Format a single LIR instruction as a string.
@@ -99,7 +101,7 @@ fn width_suffix(w: super::operand::MemWidth) -> &'static str {
 pub fn display_lir(instructions: &[LirInst]) -> String {
     let mut out = String::new();
     for inst in instructions {
-        out.push_str(&format!("  {}\n", format_lir_inst(inst)));
+        let _ = writeln!(out, "  {}", format_lir_inst(inst));
     }
     out
 }

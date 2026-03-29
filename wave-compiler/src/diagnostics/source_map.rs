@@ -39,7 +39,9 @@ impl SourceMap {
             .saturating_sub(1);
         let col = offset - self.line_starts[line];
         SourceLoc {
+            #[allow(clippy::cast_possible_truncation)]
             line: (line + 1) as u32,
+            #[allow(clippy::cast_possible_truncation)]
             col: (col + 1) as u32,
         }
     }

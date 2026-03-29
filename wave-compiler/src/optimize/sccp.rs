@@ -28,7 +28,7 @@ enum Lattice {
 pub struct Sccp;
 
 impl Pass for Sccp {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "sccp"
     }
 
@@ -122,7 +122,7 @@ fn evaluate_instruction(inst: &MirInst, lattice: &mut HashMap<ValueId, Lattice>)
         MirInst::Const { dest, value } => {
             let v = match value {
                 ConstValue::I32(v) => *v,
-                ConstValue::U32(v) => *v as i32,
+                ConstValue::U32(v) => i32::from_ne_bytes(v.to_ne_bytes()),
                 ConstValue::Bool(v) => i32::from(*v),
                 ConstValue::F32(_) => return,
             };

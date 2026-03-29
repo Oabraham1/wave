@@ -20,7 +20,7 @@ use crate::mir::value::ValueId;
 pub struct Licm;
 
 impl Pass for Licm {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "licm"
     }
 

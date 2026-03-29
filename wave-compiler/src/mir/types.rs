@@ -66,14 +66,12 @@ impl std::fmt::Display for MirType {
 #[must_use]
 pub fn lower_type(ty: &hir::Type) -> MirType {
     match ty {
-        hir::Type::U32 | hir::Type::I32 => MirType::I32,
+        hir::Type::U32 | hir::Type::I32 | hir::Type::Void => MirType::I32,
         hir::Type::F32 => MirType::F32,
         hir::Type::F16 => MirType::F16,
         hir::Type::F64 => MirType::F64,
         hir::Type::Bool => MirType::Bool,
-        hir::Type::Ptr(_) => MirType::Ptr,
-        hir::Type::Array(_, _) => MirType::Ptr,
-        hir::Type::Void => MirType::I32,
+        hir::Type::Ptr(_) | hir::Type::Array(_, _) => MirType::Ptr,
     }
 }
 

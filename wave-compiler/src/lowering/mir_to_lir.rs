@@ -190,7 +190,7 @@ impl<'a> MirToLirLowerer<'a> {
         }
 
         for inst in &bb.instructions {
-            self.lower_instruction(inst)?;
+            self.lower_instruction(inst);
         }
 
         let terminator = bb.terminator.clone();
@@ -229,7 +229,7 @@ impl<'a> MirToLirLowerer<'a> {
                     self.emit_block_structured(*false_target, preds, back_edges)?;
                 } else {
                     let true_merges_to_false =
-                        self.func.block(*true_target).map_or(false, |bb| {
+                        self.func.block(*true_target).is_some_and(|bb| {
                             matches!(&bb.terminator, Terminator::Branch { target } if *target == *false_target)
                         });
 
@@ -288,13 +288,6 @@ impl<'a> MirToLirLowerer<'a> {
                         let rhs_v = self.get_vreg(*rhs);
                         let is_float = ty.is_float();
                         match (op, is_float) {
-                            (BinOp::Lt, false) => {
-                                self.instructions.push(LirInst::IcmpGe {
-                                    dest: exit_preg,
-                                    src1: lhs_v,
-                                    src2: rhs_v,
-                                });
-                            }
                             (BinOp::Le, false) => {
                                 self.instructions.push(LirInst::IcmpGt {
                                     dest: exit_preg,
@@ -389,7 +382,7 @@ impl<'a> MirToLirLowerer<'a> {
         false
     }
 
-    fn lower_instruction(&mut self, inst: &MirInst) -> Result<(), CompileError> {
+    fn lower_instruction(&mut self, inst: &MirInst) {
         match inst {
             MirInst::BinOp {
                 dest,
@@ -397,153 +390,52 @@ impl<'a> MirToLirLowerer<'a> {
                 lhs,
                 rhs,
                 ty,
-            } => self.lower_binop(*dest, *op, *lhs, *rhs, *ty),
+            } => {
+                self.lower_binop(*dest, *op, *lhs, *rhs, *ty);
+            }
             MirInst::UnaryOp {
                 dest,
                 op,
                 operand,
                 ty,
-            } => self.lower_unaryop(*dest, *op, *operand, *ty),
+            } => {
+                self.lower_unaryop(*dest, *op, *operand, *ty);
+            }
             MirInst::Load {
                 dest,
                 addr,
                 space,
                 ty,
-            } => {
-                let dest_vreg = self.get_vreg(*dest);
-                let addr_vreg = self.get_vreg(*addr);
-                let width = type_to_mem_width(*ty);
-                match space {
-                    AddressSpace::Local => {
-                        self.instructions.push(LirInst::LocalLoad {
-                            dest: dest_vreg,
-                            addr: addr_vreg,
-                            width,
-                        });
-                    }
-                    AddressSpace::Device | AddressSpace::Private => {
-                        self.instructions.push(LirInst::DeviceLoad {
-                            dest: dest_vreg,
-                            addr: addr_vreg,
-                            width,
-                        });
-                    }
-                }
-                Ok(())
-            }
-            MirInst::Store { addr, value, space } => {
-                let addr_vreg = self.get_vreg(*addr);
-                let val_vreg = self.get_vreg(*value);
-                match space {
-                    AddressSpace::Local => {
-                        self.instructions.push(LirInst::LocalStore {
-                            addr: addr_vreg,
-                            value: val_vreg,
-                            width: MemWidth::W32,
-                        });
-                    }
-                    AddressSpace::Device | AddressSpace::Private => {
-                        self.instructions.push(LirInst::DeviceStore {
-                            addr: addr_vreg,
-                            value: val_vreg,
-                            width: MemWidth::W32,
-                        });
-                    }
-                }
-                Ok(())
-            }
+            } => self.lower_load(*dest, *addr, *space, *ty),
+            MirInst::Store { addr, value, space } => self.lower_store(*addr, *value, *space),
             MirInst::Const { dest, value } => {
                 let dest_vreg = self.get_vreg(*dest);
                 self.instructions.push(LirInst::MovImm {
                     dest: dest_vreg,
                     value: value.to_bits(),
                 });
-                Ok(())
             }
-            MirInst::Call { dest, func, args } => self.lower_call(*dest, *func, args),
+            MirInst::Call { dest, func, args } => {
+                self.lower_call(*dest, *func, args);
+            }
             MirInst::Cast {
                 dest,
                 value,
                 from,
                 to,
-            } => {
-                let dest_vreg = self.get_vreg(*dest);
-                let src_vreg = self.get_vreg(*value);
-                match (from, to) {
-                    (MirType::F32, MirType::I32) => {
-                        self.instructions.push(LirInst::CvtF32I32 {
-                            dest: dest_vreg,
-                            src: src_vreg,
-                        });
-                    }
-                    (MirType::I32, MirType::F32) => {
-                        self.instructions.push(LirInst::CvtI32F32 {
-                            dest: dest_vreg,
-                            src: src_vreg,
-                        });
-                    }
-                    _ => {
-                        self.instructions.push(LirInst::MovReg {
-                            dest: dest_vreg,
-                            src: src_vreg,
-                        });
-                    }
-                }
-                Ok(())
-            }
+            } => self.lower_cast(*dest, *value, *from, *to),
             MirInst::Barrier => {
                 self.instructions.push(LirInst::Barrier);
-                Ok(())
             }
-            MirInst::Fence { .. } => Ok(()),
+            MirInst::Fence { .. } => {}
             MirInst::Shuffle {
                 dest,
                 value,
                 lane,
                 mode,
-            } => {
-                let dest_vreg = self.get_vreg(*dest);
-                let val_vreg = self.get_vreg(*value);
-                let lane_vreg = self.get_vreg(*lane);
-                match mode {
-                    ShuffleMode::Direct => {
-                        self.instructions.push(LirInst::MovReg {
-                            dest: dest_vreg,
-                            src: val_vreg,
-                        });
-                    }
-                    ShuffleMode::Up | ShuffleMode::Down | ShuffleMode::Xor => {
-                        self.instructions.push(LirInst::Iadd {
-                            dest: dest_vreg,
-                            src1: val_vreg,
-                            src2: lane_vreg,
-                        });
-                    }
-                }
-                Ok(())
-            }
+            } => self.lower_shuffle(*dest, *value, *lane, *mode),
             MirInst::ReadSpecialReg { dest, sr_index } => {
-                let dest_vreg = self.get_vreg(*dest);
-                let sr = match sr_index {
-                    0 => SpecialReg::ThreadIdX,
-                    1 => SpecialReg::ThreadIdY,
-                    2 => SpecialReg::ThreadIdZ,
-                    3 => SpecialReg::WaveId,
-                    4 => SpecialReg::LaneId,
-                    5 => SpecialReg::WorkgroupIdX,
-                    6 => SpecialReg::WorkgroupIdY,
-                    7 => SpecialReg::WorkgroupIdZ,
-                    8 => SpecialReg::WorkgroupSizeX,
-                    9 => SpecialReg::WorkgroupSizeY,
-                    10 => SpecialReg::WorkgroupSizeZ,
-                    14 => SpecialReg::WaveWidth,
-                    _ => SpecialReg::ThreadIdX,
-                };
-                self.instructions.push(LirInst::MovSr {
-                    dest: dest_vreg,
-                    sr,
-                });
-                Ok(())
+                self.lower_read_special_reg(*dest, *sr_index);
             }
             MirInst::AtomicRmw {
                 dest, addr, value, ..
@@ -556,9 +448,131 @@ impl<'a> MirToLirLowerer<'a> {
                     src1: addr_vreg,
                     src2: val_vreg,
                 });
-                Ok(())
             }
         }
+    }
+
+    fn lower_load(
+        &mut self,
+        dest: ValueId,
+        addr: ValueId,
+        space: AddressSpace,
+        ty: MirType,
+    ) {
+        let dest_vreg = self.get_vreg(dest);
+        let addr_vreg = self.get_vreg(addr);
+        let width = type_to_mem_width(ty);
+        match space {
+            AddressSpace::Local => {
+                self.instructions.push(LirInst::LocalLoad {
+                    dest: dest_vreg,
+                    addr: addr_vreg,
+                    width,
+                });
+            }
+            AddressSpace::Device | AddressSpace::Private => {
+                self.instructions.push(LirInst::DeviceLoad {
+                    dest: dest_vreg,
+                    addr: addr_vreg,
+                    width,
+                });
+            }
+        }
+    }
+
+    fn lower_store(&mut self, addr: ValueId, value: ValueId, space: AddressSpace) {
+        let addr_vreg = self.get_vreg(addr);
+        let val_vreg = self.get_vreg(value);
+        match space {
+            AddressSpace::Local => {
+                self.instructions.push(LirInst::LocalStore {
+                    addr: addr_vreg,
+                    value: val_vreg,
+                    width: MemWidth::W32,
+                });
+            }
+            AddressSpace::Device | AddressSpace::Private => {
+                self.instructions.push(LirInst::DeviceStore {
+                    addr: addr_vreg,
+                    value: val_vreg,
+                    width: MemWidth::W32,
+                });
+            }
+        }
+    }
+
+    fn lower_cast(&mut self, dest: ValueId, value: ValueId, from: MirType, to: MirType) {
+        let dest_vreg = self.get_vreg(dest);
+        let src_vreg = self.get_vreg(value);
+        match (from, to) {
+            (MirType::F32, MirType::I32) => {
+                self.instructions.push(LirInst::CvtF32I32 {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
+            }
+            (MirType::I32, MirType::F32) => {
+                self.instructions.push(LirInst::CvtI32F32 {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
+            }
+            _ => {
+                self.instructions.push(LirInst::MovReg {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
+            }
+        }
+    }
+
+    fn lower_shuffle(
+        &mut self,
+        dest: ValueId,
+        value: ValueId,
+        lane: ValueId,
+        mode: ShuffleMode,
+    ) {
+        let dest_vreg = self.get_vreg(dest);
+        let val_vreg = self.get_vreg(value);
+        let lane_vreg = self.get_vreg(lane);
+        match mode {
+            ShuffleMode::Direct => {
+                self.instructions.push(LirInst::MovReg {
+                    dest: dest_vreg,
+                    src: val_vreg,
+                });
+            }
+            ShuffleMode::Up | ShuffleMode::Down | ShuffleMode::Xor => {
+                self.instructions.push(LirInst::Iadd {
+                    dest: dest_vreg,
+                    src1: val_vreg,
+                    src2: lane_vreg,
+                });
+            }
+        }
+    }
+
+    fn lower_read_special_reg(&mut self, dest: ValueId, sr_index: u8) {
+        let dest_vreg = self.get_vreg(dest);
+        let sr = match sr_index {
+            1 => SpecialReg::ThreadIdY,
+            2 => SpecialReg::ThreadIdZ,
+            3 => SpecialReg::WaveId,
+            4 => SpecialReg::LaneId,
+            5 => SpecialReg::WorkgroupIdX,
+            6 => SpecialReg::WorkgroupIdY,
+            7 => SpecialReg::WorkgroupIdZ,
+            8 => SpecialReg::WorkgroupSizeX,
+            9 => SpecialReg::WorkgroupSizeY,
+            10 => SpecialReg::WorkgroupSizeZ,
+            14 => SpecialReg::WaveWidth,
+            _ => SpecialReg::ThreadIdX,
+        };
+        self.instructions.push(LirInst::MovSr {
+            dest: dest_vreg,
+            sr,
+        });
     }
 
     fn lower_binop(
@@ -568,199 +582,204 @@ impl<'a> MirToLirLowerer<'a> {
         lhs: ValueId,
         rhs: ValueId,
         ty: MirType,
-    ) -> Result<(), CompileError> {
+    ) {
         let lhs_vreg = self.get_vreg(lhs);
         let rhs_vreg = self.get_vreg(rhs);
 
         if op.is_comparison() {
-            let preg = self.alloc_preg();
-            self.value_to_preg.insert(dest, preg);
-
-            match (op, ty.is_float()) {
-                (BinOp::Lt, false) => {
-                    self.instructions.push(LirInst::UcmpLt {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Le, false) => {
-                    self.instructions.push(LirInst::IcmpLe {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Gt, false) => {
-                    self.instructions.push(LirInst::IcmpGt {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Ge, false) => {
-                    self.instructions.push(LirInst::IcmpGe {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Eq, false) => {
-                    self.instructions.push(LirInst::IcmpEq {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Ne, false) => {
-                    self.instructions.push(LirInst::IcmpNe {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Lt, true) => {
-                    self.instructions.push(LirInst::FcmpLt {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Gt, true) => {
-                    self.instructions.push(LirInst::FcmpGt {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                (BinOp::Eq, true) => {
-                    self.instructions.push(LirInst::FcmpEq {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-                _ => {
-                    self.instructions.push(LirInst::IcmpEq {
-                        dest: preg,
-                        src1: lhs_vreg,
-                        src2: rhs_vreg,
-                    });
-                }
-            }
-
-            return Ok(());
+            self.lower_comparison(dest, op, lhs_vreg, rhs_vreg, ty);
+            return;
         }
 
         let dest_vreg = self.get_vreg(dest);
+        self.lower_arithmetic(dest_vreg, op, lhs_vreg, rhs_vreg, ty);
+    }
+
+    fn lower_comparison(
+        &mut self,
+        dest: ValueId,
+        op: BinOp,
+        lhs_vreg: VReg,
+        rhs_vreg: VReg,
+        ty: MirType,
+    ) {
+        let preg = self.alloc_preg();
+        self.value_to_preg.insert(dest, preg);
+
         match (op, ty.is_float()) {
-            (BinOp::Add, false) => {
-                self.instructions.push(LirInst::Iadd {
-                    dest: dest_vreg,
+            (BinOp::Lt, false) => {
+                self.instructions.push(LirInst::UcmpLt {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Sub, false) => {
-                self.instructions.push(LirInst::Isub {
-                    dest: dest_vreg,
+            (BinOp::Le, false) => {
+                self.instructions.push(LirInst::IcmpLe {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Mul, false) => {
-                self.instructions.push(LirInst::Imul {
-                    dest: dest_vreg,
+            (BinOp::Gt, false) => {
+                self.instructions.push(LirInst::IcmpGt {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Div | BinOp::FloorDiv, false) => {
-                self.instructions.push(LirInst::Idiv {
-                    dest: dest_vreg,
+            (BinOp::Ge, false) => {
+                self.instructions.push(LirInst::IcmpGe {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Mod, false) => {
-                self.instructions.push(LirInst::Imod {
-                    dest: dest_vreg,
+            (BinOp::Ne, false) => {
+                self.instructions.push(LirInst::IcmpNe {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Add, true) => {
-                self.instructions.push(LirInst::Fadd {
-                    dest: dest_vreg,
+            (BinOp::Lt, true) => {
+                self.instructions.push(LirInst::FcmpLt {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Sub, true) => {
-                self.instructions.push(LirInst::Fsub {
-                    dest: dest_vreg,
+            (BinOp::Gt, true) => {
+                self.instructions.push(LirInst::FcmpGt {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
-            (BinOp::Mul, true) => {
-                self.instructions.push(LirInst::Fmul {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::Div, true) => {
-                self.instructions.push(LirInst::Fdiv {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::BitAnd, _) => {
-                self.instructions.push(LirInst::And {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::BitOr, _) => {
-                self.instructions.push(LirInst::Or {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::BitXor, _) => {
-                self.instructions.push(LirInst::Xor {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::Shl, _) => {
-                self.instructions.push(LirInst::Shl {
-                    dest: dest_vreg,
-                    src1: lhs_vreg,
-                    src2: rhs_vreg,
-                });
-            }
-            (BinOp::Shr, _) => {
-                self.instructions.push(LirInst::Shr {
-                    dest: dest_vreg,
+            (BinOp::Eq, true) => {
+                self.instructions.push(LirInst::FcmpEq {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
             _ => {
-                self.instructions.push(LirInst::Iadd {
-                    dest: dest_vreg,
+                self.instructions.push(LirInst::IcmpEq {
+                    dest: preg,
                     src1: lhs_vreg,
                     src2: rhs_vreg,
                 });
             }
         }
-        Ok(())
+    }
+
+    fn lower_arithmetic(
+        &mut self,
+        dest_vreg: VReg,
+        op: BinOp,
+        lhs_vreg: VReg,
+        rhs_vreg: VReg,
+        ty: MirType,
+    ) {
+        if ty.is_float() {
+            self.lower_float_arithmetic(dest_vreg, op, lhs_vreg, rhs_vreg);
+        } else {
+            self.lower_int_arithmetic(dest_vreg, op, lhs_vreg, rhs_vreg);
+        }
+    }
+
+    fn lower_float_arithmetic(
+        &mut self,
+        dest_vreg: VReg,
+        op: BinOp,
+        lhs_vreg: VReg,
+        rhs_vreg: VReg,
+    ) {
+        let inst = match op {
+            BinOp::Sub => LirInst::Fsub {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Mul => LirInst::Fmul {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Div => LirInst::Fdiv {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            _ => LirInst::Fadd {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+        };
+        self.instructions.push(inst);
+    }
+
+    fn lower_int_arithmetic(
+        &mut self,
+        dest_vreg: VReg,
+        op: BinOp,
+        lhs_vreg: VReg,
+        rhs_vreg: VReg,
+    ) {
+        let inst = match op {
+            BinOp::Sub => LirInst::Isub {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Mul => LirInst::Imul {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Div | BinOp::FloorDiv => LirInst::Idiv {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Mod => LirInst::Imod {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::BitAnd => LirInst::And {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::BitOr => LirInst::Or {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::BitXor => LirInst::Xor {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Shl => LirInst::Shl {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            BinOp::Shr => LirInst::Shr {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+            _ => LirInst::Iadd {
+                dest: dest_vreg,
+                src1: lhs_vreg,
+                src2: rhs_vreg,
+            },
+        };
+        self.instructions.push(inst);
     }
 
     fn lower_unaryop(
@@ -769,7 +788,7 @@ impl<'a> MirToLirLowerer<'a> {
         op: UnaryOp,
         operand: ValueId,
         ty: MirType,
-    ) -> Result<(), CompileError> {
+    ) {
         let dest_vreg = self.get_vreg(dest);
         let src_vreg = self.get_vreg(operand);
         match (op, ty.is_float()) {
@@ -792,7 +811,6 @@ impl<'a> MirToLirLowerer<'a> {
                 });
             }
         }
-        Ok(())
     }
 
     fn lower_call(
@@ -800,7 +818,7 @@ impl<'a> MirToLirLowerer<'a> {
         dest: Option<ValueId>,
         func: BuiltinFunc,
         args: &[ValueId],
-    ) -> Result<(), CompileError> {
+    ) {
         let dest_vreg = dest.map(|d| self.get_vreg(d));
         match func {
             BuiltinFunc::Sqrt => {
@@ -868,7 +886,6 @@ impl<'a> MirToLirLowerer<'a> {
                 }
             }
         }
-        Ok(())
     }
 }
 

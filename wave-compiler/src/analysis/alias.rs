@@ -52,14 +52,8 @@ impl AliasInfo {
         for block in &func.blocks {
             for inst in &block.instructions {
                 match inst {
-                    MirInst::Load { addr, space, .. } => {
-                        addr_spaces.insert(*addr, *space);
-                        mem_ops.push(MemOp {
-                            addr: *addr,
-                            space: *space,
-                        });
-                    }
-                    MirInst::Store { addr, space, .. } => {
+                    MirInst::Load { addr, space, .. }
+                    | MirInst::Store { addr, space, .. } => {
                         addr_spaces.insert(*addr, *space);
                         mem_ops.push(MemOp {
                             addr: *addr,

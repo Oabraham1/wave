@@ -19,7 +19,7 @@ use crate::mir::value::ValueId;
 pub struct StrengthReduce;
 
 impl Pass for StrengthReduce {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "strength_reduce"
     }
 
@@ -32,7 +32,7 @@ impl Pass for StrengthReduce {
                 if let MirInst::Const { dest, value } = inst {
                     match value {
                         ConstValue::I32(v) => {
-                            constants.insert(*dest, *v as u32);
+                            constants.insert(*dest, u32::from_ne_bytes(v.to_ne_bytes()));
                         }
                         ConstValue::U32(v) => {
                             constants.insert(*dest, *v);

@@ -207,7 +207,17 @@ impl LirInst {
             | Self::Xor { src1, src2, .. }
             | Self::Shl { src1, src2, .. }
             | Self::Shr { src1, src2, .. }
-            | Self::Sar { src1, src2, .. } => vec![*src1, *src2],
+            | Self::Sar { src1, src2, .. }
+            | Self::IcmpEq { src1, src2, .. }
+            | Self::IcmpNe { src1, src2, .. }
+            | Self::IcmpLt { src1, src2, .. }
+            | Self::IcmpLe { src1, src2, .. }
+            | Self::IcmpGt { src1, src2, .. }
+            | Self::IcmpGe { src1, src2, .. }
+            | Self::UcmpLt { src1, src2, .. }
+            | Self::FcmpEq { src1, src2, .. }
+            | Self::FcmpLt { src1, src2, .. }
+            | Self::FcmpGt { src1, src2, .. } => vec![*src1, *src2],
             Self::Fma {
                 src1, src2, src3, ..
             } => vec![*src1, *src2, *src3],
@@ -227,16 +237,6 @@ impl LirInst {
             Self::LocalStore { addr, value, .. } | Self::DeviceStore { addr, value, .. } => {
                 vec![*addr, *value]
             }
-            Self::IcmpEq { src1, src2, .. }
-            | Self::IcmpNe { src1, src2, .. }
-            | Self::IcmpLt { src1, src2, .. }
-            | Self::IcmpLe { src1, src2, .. }
-            | Self::IcmpGt { src1, src2, .. }
-            | Self::IcmpGe { src1, src2, .. }
-            | Self::UcmpLt { src1, src2, .. }
-            | Self::FcmpEq { src1, src2, .. }
-            | Self::FcmpLt { src1, src2, .. }
-            | Self::FcmpGt { src1, src2, .. } => vec![*src1, *src2],
             Self::MovImm { .. }
             | Self::MovSr { .. }
             | Self::If { .. }
