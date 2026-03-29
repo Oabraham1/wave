@@ -26,8 +26,13 @@ impl DeviceMemory {
 
     fn check_bounds(&self, addr: u64, size: usize) -> Result<usize, EmulatorError> {
         let addr = addr as usize;
-        if addr.checked_add(size).is_none_or(|end| end > self.data.len()) {
-            return Err(EmulatorError::MemoryOutOfBounds { address: addr as u64 });
+        if addr
+            .checked_add(size)
+            .is_none_or(|end| end > self.data.len())
+        {
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: addr as u64,
+            });
         }
         Ok(addr)
     }
@@ -161,7 +166,12 @@ impl DeviceMemory {
         Ok(old)
     }
 
-    pub fn atomic_cas(&mut self, addr: u64, expected: u32, desired: u32) -> Result<u32, EmulatorError> {
+    pub fn atomic_cas(
+        &mut self,
+        addr: u64,
+        expected: u32,
+        desired: u32,
+    ) -> Result<u32, EmulatorError> {
         let old = self.read_u32(addr)?;
         if old == expected {
             self.write_u32(addr, desired)?;
@@ -214,8 +224,13 @@ impl LocalMemory {
 
     fn check_bounds(&self, addr: u32, size: usize) -> Result<usize, EmulatorError> {
         let addr = addr as usize;
-        if addr.checked_add(size).is_none_or(|end| end > self.data.len()) {
-            return Err(EmulatorError::MemoryOutOfBounds { address: addr as u64 });
+        if addr
+            .checked_add(size)
+            .is_none_or(|end| end > self.data.len())
+        {
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: addr as u64,
+            });
         }
         Ok(addr)
     }
@@ -329,7 +344,12 @@ impl LocalMemory {
         Ok(old)
     }
 
-    pub fn atomic_cas(&mut self, addr: u32, expected: u32, desired: u32) -> Result<u32, EmulatorError> {
+    pub fn atomic_cas(
+        &mut self,
+        addr: u32,
+        expected: u32,
+        desired: u32,
+    ) -> Result<u32, EmulatorError> {
         let old = self.read_u32(addr)?;
         if old == expected {
             self.write_u32(addr, desired)?;

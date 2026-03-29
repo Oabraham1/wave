@@ -11,7 +11,11 @@ use super::source_map::SourceMap;
 
 /// Format a compile error with source context for display to the user.
 #[must_use]
-pub fn format_error(error: &CompileError, source_map: Option<&SourceMap>, loc: Option<SourceLoc>) -> String {
+pub fn format_error(
+    error: &CompileError,
+    source_map: Option<&SourceMap>,
+    loc: Option<SourceLoc>,
+) -> String {
     let mut out = String::new();
 
     if let Some(loc) = loc {
@@ -40,9 +44,7 @@ mod tests {
 
     #[test]
     fn test_format_error_with_location() {
-        let err = CompileError::UndefinedVariable {
-            name: "x".into(),
-        };
+        let err = CompileError::UndefinedVariable { name: "x".into() };
         let src = "let y = x + 1".to_string();
         let map = SourceMap::new(src);
         let loc = SourceLoc { line: 1, col: 9 };

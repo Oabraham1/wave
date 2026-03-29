@@ -152,11 +152,10 @@ fn validate_stmt(stmt: &Stmt, env: &mut TypeEnv) -> Result<(), CompileError> {
 /// Returns `CompileError` if a variable is undefined or types are incompatible.
 fn infer_type(expr: &Expr, env: &TypeEnv) -> Result<Type, CompileError> {
     match expr {
-        Expr::Var(name) => env.lookup(name).cloned().ok_or_else(|| {
-            CompileError::UndefinedVariable {
-                name: name.clone(),
-            }
-        }),
+        Expr::Var(name) => env
+            .lookup(name)
+            .cloned()
+            .ok_or_else(|| CompileError::UndefinedVariable { name: name.clone() }),
         Expr::Literal(lit) => Ok(match lit {
             Literal::Int(_) => Type::I32,
             Literal::UInt(_) => Type::U32,

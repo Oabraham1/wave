@@ -116,7 +116,12 @@ impl<'a> MirToLirLowerer<'a> {
         let mut back_edges = HashSet::new();
         let mut visited = HashSet::new();
         let mut in_stack = HashSet::new();
-        self.dfs_back_edges(self.func.entry, &mut visited, &mut in_stack, &mut back_edges);
+        self.dfs_back_edges(
+            self.func.entry,
+            &mut visited,
+            &mut in_stack,
+            &mut back_edges,
+        );
         back_edges
     }
 
@@ -148,12 +153,10 @@ impl<'a> MirToLirLowerer<'a> {
                     if *pred_id == from_block {
                         let dest_vreg = self.get_vreg(phi.dest);
                         let src_vreg = self.get_vreg(*val);
-                        if dest_vreg != src_vreg {
-                            self.instructions.push(LirInst::MovReg {
-                                dest: dest_vreg,
-                                src: src_vreg,
-                            });
-                        }
+                        self.instructions.push(LirInst::MovReg {
+                            dest: dest_vreg,
+                            src: src_vreg,
+                        });
                     }
                 }
             }
@@ -171,15 +174,16 @@ impl<'a> MirToLirLowerer<'a> {
         }
         self.visited.insert(block_id);
 
-        let bb = self.func.block(block_id).ok_or_else(|| CompileError::InternalError {
-            message: format!("block {block_id} not found"),
-        })?;
+        let bb = self
+            .func
+            .block(block_id)
+            .ok_or_else(|| CompileError::InternalError {
+                message: format!("block {block_id} not found"),
+            })?;
 
         let is_loop_header = preds
             .get(&block_id)
-            .is_some_and(|p| {
-                p.iter().any(|pred| back_edges.contains(&(*pred, block_id)))
-            });
+            .is_some_and(|p| p.iter().any(|pred| back_edges.contains(&(*pred, block_id))));
 
         if is_loop_header {
             self.instructions.push(LirInst::Loop);
@@ -212,24 +216,37 @@ impl<'a> MirToLirLowerer<'a> {
                 let true_is_loop_body = back_edges.iter().any(|(src, tgt)| {
                     *tgt == block_id && self.is_reachable_from(*true_target, *src, back_edges)
                 });
-                let false_is_loop_exit = is_loop_header && !back_edges.iter().any(|(_, tgt)| *tgt == *false_target);
+                let false_is_loop_exit =
+                    is_loop_header && !back_edges.iter().any(|(_, tgt)| *tgt == *false_target);
 
                 if is_loop_header && true_is_loop_body && false_is_loop_exit {
-                    self.instructions.push(LirInst::If { pred: preg });
+                    let exit_preg = self.emit_negated_comparison(block_id, *cond);
+                    self.instructions.push(LirInst::Break { pred: exit_preg });
                     self.emit_phi_moves(block_id, *true_target);
                     self.emit_block_structured(*true_target, preds, back_edges)?;
-                    self.instructions.push(LirInst::Endif);
                     self.instructions.push(LirInst::Endloop);
                     self.emit_phi_moves(block_id, *false_target);
                     self.emit_block_structured(*false_target, preds, back_edges)?;
                 } else {
+                    let true_merges_to_false =
+                        self.func.block(*true_target).map_or(false, |bb| {
+                            matches!(&bb.terminator, Terminator::Branch { target } if *target == *false_target)
+                        });
+
                     self.instructions.push(LirInst::If { pred: preg });
                     self.emit_phi_moves(block_id, *true_target);
+                    let false_guarded = self.visited.insert(*false_target);
                     self.emit_block_structured(*true_target, preds, back_edges)?;
+                    if false_guarded {
+                        self.visited.remove(false_target);
+                    }
+
                     if !self.visited.contains(false_target) {
                         self.instructions.push(LirInst::Else);
                         self.emit_phi_moves(block_id, *false_target);
-                        self.emit_block_structured(*false_target, preds, back_edges)?;
+                        if !true_merges_to_false {
+                            self.emit_block_structured(*false_target, preds, back_edges)?;
+                        }
                     }
                     self.instructions.push(LirInst::Endif);
 
@@ -240,15 +257,118 @@ impl<'a> MirToLirLowerer<'a> {
             }
         }
 
-        let already_emitted_endloop = matches!(&terminator, Terminator::CondBranch { .. }) && is_loop_header;
-        if is_loop_header && !already_emitted_endloop && !matches!(terminator, Terminator::Branch { target } if back_edges.contains(&(block_id, target))) {
+        let already_emitted_endloop =
+            matches!(&terminator, Terminator::CondBranch { .. }) && is_loop_header;
+        if is_loop_header
+            && !already_emitted_endloop
+            && !matches!(terminator, Terminator::Branch { target } if back_edges.contains(&(block_id, target)))
+        {
             self.instructions.push(LirInst::Endloop);
         }
 
         Ok(())
     }
 
-    fn is_reachable_from(&self, start: BlockId, target: BlockId, back_edges: &HashSet<(BlockId, BlockId)>) -> bool {
+    /// Emit the negation of a comparison that defined `cond` in `block_id`.
+    /// Returns a fresh PReg that is true when the original comparison is false.
+    fn emit_negated_comparison(&mut self, block_id: BlockId, cond: ValueId) -> PReg {
+        let exit_preg = self.alloc_preg();
+        if let Some(bb) = self.func.block(block_id) {
+            for inst in &bb.instructions {
+                if let MirInst::BinOp {
+                    dest,
+                    op,
+                    lhs,
+                    rhs,
+                    ty,
+                } = inst
+                {
+                    if *dest == cond && op.is_comparison() {
+                        let lhs_v = self.get_vreg(*lhs);
+                        let rhs_v = self.get_vreg(*rhs);
+                        let is_float = ty.is_float();
+                        match (op, is_float) {
+                            (BinOp::Lt, false) => {
+                                self.instructions.push(LirInst::IcmpGe {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                            (BinOp::Le, false) => {
+                                self.instructions.push(LirInst::IcmpGt {
+                                    dest: exit_preg,
+                                    src1: rhs_v,
+                                    src2: lhs_v,
+                                });
+                            }
+                            (BinOp::Gt, false) => {
+                                self.instructions.push(LirInst::IcmpLe {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                            (BinOp::Ge, false) => {
+                                self.instructions.push(LirInst::IcmpLt {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                            (BinOp::Eq, false) => {
+                                self.instructions.push(LirInst::IcmpNe {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                            (BinOp::Ne, false) => {
+                                self.instructions.push(LirInst::IcmpEq {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                            (BinOp::Lt, true) => {
+                                self.instructions.push(LirInst::FcmpGt {
+                                    dest: exit_preg,
+                                    src1: rhs_v,
+                                    src2: lhs_v,
+                                });
+                            }
+                            _ => {
+                                self.instructions.push(LirInst::IcmpGe {
+                                    dest: exit_preg,
+                                    src1: lhs_v,
+                                    src2: rhs_v,
+                                });
+                            }
+                        }
+                        return exit_preg;
+                    }
+                }
+            }
+        }
+        let zero = self.alloc_vreg();
+        self.instructions.push(LirInst::MovImm {
+            dest: zero,
+            value: 0,
+        });
+        self.instructions.push(LirInst::IcmpEq {
+            dest: exit_preg,
+            src1: zero,
+            src2: zero,
+        });
+        exit_preg
+    }
+
+    fn is_reachable_from(
+        &self,
+        start: BlockId,
+        target: BlockId,
+        back_edges: &HashSet<(BlockId, BlockId)>,
+    ) -> bool {
         let mut visited = HashSet::new();
         let mut stack = vec![start];
         while let Some(bid) = stack.pop() {
@@ -311,11 +431,7 @@ impl<'a> MirToLirLowerer<'a> {
                 }
                 Ok(())
             }
-            MirInst::Store {
-                addr,
-                value,
-                space,
-            } => {
+            MirInst::Store { addr, value, space } => {
                 let addr_vreg = self.get_vreg(*addr);
                 let val_vreg = self.get_vreg(*value);
                 match space {
@@ -344,9 +460,7 @@ impl<'a> MirToLirLowerer<'a> {
                 });
                 Ok(())
             }
-            MirInst::Call { dest, func, args } => {
-                self.lower_call(*dest, *func, args)
-            }
+            MirInst::Call { dest, func, args } => self.lower_call(*dest, *func, args),
             MirInst::Cast {
                 dest,
                 value,
@@ -357,16 +471,22 @@ impl<'a> MirToLirLowerer<'a> {
                 let src_vreg = self.get_vreg(*value);
                 match (from, to) {
                     (MirType::F32, MirType::I32) => {
-                        self.instructions
-                            .push(LirInst::CvtF32I32 { dest: dest_vreg, src: src_vreg });
+                        self.instructions.push(LirInst::CvtF32I32 {
+                            dest: dest_vreg,
+                            src: src_vreg,
+                        });
                     }
                     (MirType::I32, MirType::F32) => {
-                        self.instructions
-                            .push(LirInst::CvtI32F32 { dest: dest_vreg, src: src_vreg });
+                        self.instructions.push(LirInst::CvtI32F32 {
+                            dest: dest_vreg,
+                            src: src_vreg,
+                        });
                     }
                     _ => {
-                        self.instructions
-                            .push(LirInst::MovReg { dest: dest_vreg, src: src_vreg });
+                        self.instructions.push(LirInst::MovReg {
+                            dest: dest_vreg,
+                            src: src_vreg,
+                        });
                     }
                 }
                 Ok(())
@@ -376,7 +496,12 @@ impl<'a> MirToLirLowerer<'a> {
                 Ok(())
             }
             MirInst::Fence { .. } => Ok(()),
-            MirInst::Shuffle { dest, value, lane, mode } => {
+            MirInst::Shuffle {
+                dest,
+                value,
+                lane,
+                mode,
+            } => {
                 let dest_vreg = self.get_vreg(*dest);
                 let val_vreg = self.get_vreg(*value);
                 let lane_vreg = self.get_vreg(*lane);
@@ -420,7 +545,9 @@ impl<'a> MirToLirLowerer<'a> {
                 });
                 Ok(())
             }
-            MirInst::AtomicRmw { dest, addr, value, .. } => {
+            MirInst::AtomicRmw {
+                dest, addr, value, ..
+            } => {
                 let dest_vreg = self.get_vreg(*dest);
                 let addr_vreg = self.get_vreg(*addr);
                 let val_vreg = self.get_vreg(*value);
@@ -452,52 +579,72 @@ impl<'a> MirToLirLowerer<'a> {
             match (op, ty.is_float()) {
                 (BinOp::Lt, false) => {
                     self.instructions.push(LirInst::UcmpLt {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Le, false) => {
                     self.instructions.push(LirInst::IcmpLe {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Gt, false) => {
                     self.instructions.push(LirInst::IcmpGt {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Ge, false) => {
                     self.instructions.push(LirInst::IcmpGe {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Eq, false) => {
                     self.instructions.push(LirInst::IcmpEq {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Ne, false) => {
                     self.instructions.push(LirInst::IcmpNe {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Lt, true) => {
                     self.instructions.push(LirInst::FcmpLt {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Gt, true) => {
                     self.instructions.push(LirInst::FcmpGt {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 (BinOp::Eq, true) => {
                     self.instructions.push(LirInst::FcmpEq {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
                 _ => {
                     self.instructions.push(LirInst::IcmpEq {
-                        dest: preg, src1: lhs_vreg, src2: rhs_vreg,
+                        dest: preg,
+                        src1: lhs_vreg,
+                        src2: rhs_vreg,
                     });
                 }
             }
@@ -509,77 +656,107 @@ impl<'a> MirToLirLowerer<'a> {
         match (op, ty.is_float()) {
             (BinOp::Add, false) => {
                 self.instructions.push(LirInst::Iadd {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Sub, false) => {
                 self.instructions.push(LirInst::Isub {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Mul, false) => {
                 self.instructions.push(LirInst::Imul {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Div | BinOp::FloorDiv, false) => {
                 self.instructions.push(LirInst::Idiv {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Mod, false) => {
                 self.instructions.push(LirInst::Imod {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Add, true) => {
                 self.instructions.push(LirInst::Fadd {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Sub, true) => {
                 self.instructions.push(LirInst::Fsub {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Mul, true) => {
                 self.instructions.push(LirInst::Fmul {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Div, true) => {
                 self.instructions.push(LirInst::Fdiv {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::BitAnd, _) => {
                 self.instructions.push(LirInst::And {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::BitOr, _) => {
                 self.instructions.push(LirInst::Or {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::BitXor, _) => {
                 self.instructions.push(LirInst::Xor {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Shl, _) => {
                 self.instructions.push(LirInst::Shl {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             (BinOp::Shr, _) => {
                 self.instructions.push(LirInst::Shr {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
             _ => {
                 self.instructions.push(LirInst::Iadd {
-                    dest: dest_vreg, src1: lhs_vreg, src2: rhs_vreg,
+                    dest: dest_vreg,
+                    src1: lhs_vreg,
+                    src2: rhs_vreg,
                 });
             }
         }
@@ -597,13 +774,22 @@ impl<'a> MirToLirLowerer<'a> {
         let src_vreg = self.get_vreg(operand);
         match (op, ty.is_float()) {
             (UnaryOp::Neg, true) => {
-                self.instructions.push(LirInst::Fneg { dest: dest_vreg, src: src_vreg });
+                self.instructions.push(LirInst::Fneg {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
             }
             (UnaryOp::Neg, false) => {
-                self.instructions.push(LirInst::Ineg { dest: dest_vreg, src: src_vreg });
+                self.instructions.push(LirInst::Ineg {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
             }
             (UnaryOp::BitNot | UnaryOp::Not, _) => {
-                self.instructions.push(LirInst::Not { dest: dest_vreg, src: src_vreg });
+                self.instructions.push(LirInst::Not {
+                    dest: dest_vreg,
+                    src: src_vreg,
+                });
             }
         }
         Ok(())
@@ -657,19 +843,28 @@ impl<'a> MirToLirLowerer<'a> {
                 if let (Some(d), Some(a), Some(b)) = (dest_vreg, args.first(), args.get(1)) {
                     let s1 = self.get_vreg(*a);
                     let s2 = self.get_vreg(*b);
-                    self.instructions.push(LirInst::Fmin { dest: d, src1: s1, src2: s2 });
+                    self.instructions.push(LirInst::Fmin {
+                        dest: d,
+                        src1: s1,
+                        src2: s2,
+                    });
                 }
             }
             BuiltinFunc::Max => {
                 if let (Some(d), Some(a), Some(b)) = (dest_vreg, args.first(), args.get(1)) {
                     let s1 = self.get_vreg(*a);
                     let s2 = self.get_vreg(*b);
-                    self.instructions.push(LirInst::Fmax { dest: d, src1: s1, src2: s2 });
+                    self.instructions.push(LirInst::Fmax {
+                        dest: d,
+                        src1: s1,
+                        src2: s2,
+                    });
                 }
             }
             BuiltinFunc::AtomicAdd => {
                 if let Some(d) = dest_vreg {
-                    self.instructions.push(LirInst::MovImm { dest: d, value: 0 });
+                    self.instructions
+                        .push(LirInst::MovImm { dest: d, value: 0 });
                 }
             }
         }
@@ -762,24 +957,44 @@ mod tests {
         let lir = lower_function(&func).unwrap();
         assert!(lir.iter().any(|i| matches!(i, LirInst::If { .. })));
         assert!(lir.iter().any(|i| matches!(i, LirInst::Endif)));
-        let ucmp_count = lir.iter().filter(|i| matches!(i, LirInst::UcmpLt { .. })).count();
+        let ucmp_count = lir
+            .iter()
+            .filter(|i| matches!(i, LirInst::UcmpLt { .. }))
+            .count();
         assert_eq!(ucmp_count, 1);
-        let icmp_ne_count = lir.iter().filter(|i| matches!(i, LirInst::IcmpNe { .. })).count();
+        let icmp_ne_count = lir
+            .iter()
+            .filter(|i| matches!(i, LirInst::IcmpNe { .. }))
+            .count();
         assert_eq!(icmp_ne_count, 0);
     }
 
     #[test]
     fn test_comparison_uses_preg_directly() {
         let mut func = MirFunction::new("test".into(), BlockId(0));
-        func.params.push(MirParam { value: ValueId(0), ty: MirType::I32, name: "a".into() });
-        func.params.push(MirParam { value: ValueId(1), ty: MirType::I32, name: "b".into() });
+        func.params.push(MirParam {
+            value: ValueId(0),
+            ty: MirType::I32,
+            name: "a".into(),
+        });
+        func.params.push(MirParam {
+            value: ValueId(1),
+            ty: MirType::I32,
+            name: "b".into(),
+        });
 
         let mut bb0 = BasicBlock::new(BlockId(0));
         bb0.instructions.push(MirInst::BinOp {
-            dest: ValueId(2), op: BinOp::Lt, lhs: ValueId(0), rhs: ValueId(1), ty: MirType::I32,
+            dest: ValueId(2),
+            op: BinOp::Lt,
+            lhs: ValueId(0),
+            rhs: ValueId(1),
+            ty: MirType::I32,
         });
         bb0.terminator = Terminator::CondBranch {
-            cond: ValueId(2), true_target: BlockId(1), false_target: BlockId(2),
+            cond: ValueId(2),
+            true_target: BlockId(1),
+            false_target: BlockId(2),
         };
 
         let mut bb1 = BasicBlock::new(BlockId(1));

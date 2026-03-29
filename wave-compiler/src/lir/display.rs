@@ -22,7 +22,12 @@ pub fn format_lir_inst(inst: &LirInst) -> String {
         LirInst::Fsub { dest, src1, src2 } => format!("fsub {dest}, {src1}, {src2}"),
         LirInst::Fmul { dest, src1, src2 } => format!("fmul {dest}, {src1}, {src2}"),
         LirInst::Fdiv { dest, src1, src2 } => format!("fdiv {dest}, {src1}, {src2}"),
-        LirInst::Fma { dest, src1, src2, src3 } => {
+        LirInst::Fma {
+            dest,
+            src1,
+            src2,
+            src3,
+        } => {
             format!("fma {dest}, {src1}, {src2}, {src3}")
         }
         LirInst::Fneg { dest, src } => format!("fneg {dest}, {src}"),
@@ -133,10 +138,7 @@ mod tests {
 
     #[test]
     fn test_format_control_flow() {
-        assert_eq!(
-            format_lir_inst(&LirInst::If { pred: PReg(0) }),
-            "if p0"
-        );
+        assert_eq!(format_lir_inst(&LirInst::If { pred: PReg(0) }), "if p0");
         assert_eq!(format_lir_inst(&LirInst::Endif), "endif");
         assert_eq!(format_lir_inst(&LirInst::Halt), "halt");
     }

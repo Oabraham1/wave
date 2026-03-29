@@ -39,7 +39,10 @@ impl InterferenceGraph {
 
         for i in 0..num_params {
             let vreg = VReg(i);
-            ranges.entry(vreg).and_modify(|r| r.start = 0).or_insert(LiveRange { start: 0, end: 0 });
+            ranges
+                .entry(vreg)
+                .and_modify(|r| r.start = 0)
+                .or_insert(LiveRange { start: 0, end: 0 });
         }
 
         let mut adj: HashMap<VReg, HashSet<VReg>> = HashMap::new();
@@ -99,8 +102,14 @@ mod tests {
     #[test]
     fn test_interference_graph_simple() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovImm { dest: VReg(1), value: 2 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovImm {
+                dest: VReg(1),
+                value: 2,
+            },
             LirInst::Iadd {
                 dest: VReg(2),
                 src1: VReg(0),
@@ -117,8 +126,14 @@ mod tests {
     #[test]
     fn test_non_overlapping_no_interference() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovImm { dest: VReg(1), value: 2 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovImm {
+                dest: VReg(1),
+                value: 2,
+            },
         ];
 
         let ig = InterferenceGraph::build(&insts);
@@ -128,8 +143,14 @@ mod tests {
     #[test]
     fn test_move_between_interfering_not_coalescable() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovReg { dest: VReg(1), src: VReg(0) },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovReg {
+                dest: VReg(1),
+                src: VReg(0),
+            },
             LirInst::Halt,
         ];
 
@@ -140,9 +161,20 @@ mod tests {
     #[test]
     fn test_params_interfere_with_later_temps() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(2), value: 4 },
-            LirInst::Iadd { dest: VReg(3), src1: VReg(0), src2: VReg(2) },
-            LirInst::Iadd { dest: VReg(4), src1: VReg(1), src2: VReg(2) },
+            LirInst::MovImm {
+                dest: VReg(2),
+                value: 4,
+            },
+            LirInst::Iadd {
+                dest: VReg(3),
+                src1: VReg(0),
+                src2: VReg(2),
+            },
+            LirInst::Iadd {
+                dest: VReg(4),
+                src1: VReg(1),
+                src2: VReg(2),
+            },
             LirInst::Halt,
         ];
 

@@ -102,8 +102,14 @@ mod tests {
     #[test]
     fn test_coalesce_non_interfering_move() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovReg { dest: VReg(1), src: VReg(0) },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovReg {
+                dest: VReg(1),
+                src: VReg(0),
+            },
             LirInst::Halt,
         ];
 
@@ -115,8 +121,14 @@ mod tests {
     #[test]
     fn test_coalesce_no_moves() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovImm { dest: VReg(1), value: 2 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovImm {
+                dest: VReg(1),
+                value: 2,
+            },
             LirInst::Halt,
         ];
 

@@ -151,7 +151,10 @@ mod tests {
     #[test]
     fn test_type_display() {
         assert_eq!(format!("{}", Type::U32), "u32");
-        assert_eq!(format!("{}", Type::Ptr(AddressSpace::Device)), "ptr<Device>");
+        assert_eq!(
+            format!("{}", Type::Ptr(AddressSpace::Device)),
+            "ptr<Device>"
+        );
         assert_eq!(
             format!("{}", Type::Array(Box::new(Type::F32), 4)),
             "[f32; 4]"

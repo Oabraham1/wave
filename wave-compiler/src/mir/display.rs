@@ -15,9 +15,16 @@ use super::instruction::MirInst;
 /// Format a MIR function for display.
 pub fn display_function(func: &MirFunction) -> String {
     let mut out = String::new();
-    out.push_str(&format!("function {} ({} params):\n", func.name, func.params.len()));
+    out.push_str(&format!(
+        "function {} ({} params):\n",
+        func.name,
+        func.params.len()
+    ));
     for param in &func.params {
-        out.push_str(&format!("  param {} : {} ({})\n", param.value, param.ty, param.name));
+        out.push_str(&format!(
+            "  param {} : {} ({})\n",
+            param.value, param.ty, param.name
+        ));
     }
     out.push('\n');
     for block in &func.blocks {
@@ -58,11 +65,7 @@ fn format_inst(inst: &MirInst) -> String {
             space,
             ty,
         } => format!("{dest} = load {ty} {space} [{addr}]"),
-        MirInst::Store {
-            addr,
-            value,
-            space,
-        } => format!("store {space} [{addr}], {value}"),
+        MirInst::Store { addr, value, space } => format!("store {space} [{addr}], {value}"),
         MirInst::Call { dest, func, args } => {
             let args_str: Vec<String> = args.iter().map(ToString::to_string).collect();
             match dest {

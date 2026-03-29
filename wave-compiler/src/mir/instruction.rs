@@ -7,10 +7,10 @@
 //! produces at most one result value. Instructions include arithmetic,
 //! memory operations, comparisons, conversions, and GPU intrinsics.
 
-use crate::hir::expr::{BinOp, BuiltinFunc, MemoryScope, ShuffleMode};
-use crate::hir::types::AddressSpace;
 use super::types::MirType;
 use super::value::ValueId;
+use crate::hir::expr::{BinOp, BuiltinFunc, MemoryScope, ShuffleMode};
+use crate::hir::types::AddressSpace;
 
 /// Atomic memory operation kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -193,9 +193,7 @@ impl MirInst {
             Self::Cast { value, .. } => vec![*value],
             Self::Const { .. } | Self::ReadSpecialReg { .. } => vec![],
             Self::Shuffle { value, lane, .. } => vec![*value, *lane],
-            Self::AtomicRmw {
-                addr, value, ..
-            } => vec![*addr, *value],
+            Self::AtomicRmw { addr, value, .. } => vec![*addr, *value],
             Self::Barrier | Self::Fence { .. } => vec![],
         }
     }

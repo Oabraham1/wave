@@ -5,13 +5,15 @@
 //!
 //! loads the binary into wave-emu, executes it, and verifies the results.
 
-use wave_emu::{Emulator, EmulatorConfig};
 use wave_asm::assemble;
+use wave_emu::{Emulator, EmulatorConfig};
 
 fn assemble_and_run(source: &str, config: EmulatorConfig) -> Emulator {
     let result = assemble(source, "test.wave").expect("assembly failed");
     let mut emulator = Emulator::new(config);
-    emulator.load_binary(&result.binary).expect("failed to load binary");
+    emulator
+        .load_binary(&result.binary)
+        .expect("failed to load binary");
     emulator.run().expect("execution failed");
     emulator
 }
@@ -42,7 +44,13 @@ fn test_roundtrip_special_register_lane_id() {
 
     for i in 0u64..4 {
         let value = emulator.device_memory().read_u32(i * 4).unwrap();
-        assert_eq!(value, i as u32, "Address {} should contain lane_id {}", i * 4, i);
+        assert_eq!(
+            value,
+            i as u32,
+            "Address {} should contain lane_id {}",
+            i * 4,
+            i
+        );
     }
 }
 
@@ -76,7 +84,7 @@ fn test_roundtrip_special_register_thread_id() {
 
     let config = EmulatorConfig {
         grid_dim: [1, 1, 1],
-        workgroup_dim: [4, 2, 1],  // 8 threads total
+        workgroup_dim: [4, 2, 1], // 8 threads total
         wave_width: 8,
         device_memory_size: 1024,
         ..Default::default()
@@ -90,8 +98,14 @@ fn test_roundtrip_special_register_thread_id() {
             let base_addr = u64::from(linear_index * 8);
             let stored_x = emulator.device_memory().read_u32(base_addr).unwrap();
             let stored_y = emulator.device_memory().read_u32(base_addr + 4).unwrap();
-            assert_eq!(stored_x, x, "Thread ({x},{y}): expected thread_id_x={x}, got {stored_x}");
-            assert_eq!(stored_y, y, "Thread ({x},{y}): expected thread_id_y={y}, got {stored_y}");
+            assert_eq!(
+                stored_x, x,
+                "Thread ({x},{y}): expected thread_id_x={x}, got {stored_x}"
+            );
+            assert_eq!(
+                stored_y, y,
+                "Thread ({x},{y}): expected thread_id_y={y}, got {stored_y}"
+            );
         }
     }
 }
@@ -157,7 +171,7 @@ fn test_roundtrip_special_register_workgroup_id() {
 "#;
 
     let config = EmulatorConfig {
-        grid_dim: [2, 2, 1],  // 4 workgroups
+        grid_dim: [2, 2, 1], // 4 workgroups
         workgroup_dim: [1, 1, 1],
         wave_width: 1,
         device_memory_size: 1024,
@@ -173,9 +187,18 @@ fn test_roundtrip_special_register_workgroup_id() {
             let stored_x = emulator.device_memory().read_u32(base_addr).unwrap();
             let stored_y = emulator.device_memory().read_u32(base_addr + 4).unwrap();
             let stored_z = emulator.device_memory().read_u32(base_addr + 8).unwrap();
-            assert_eq!(stored_x, wg_x, "Workgroup ({wg_x},{wg_y}): expected workgroup_id_x={wg_x}, got {stored_x}");
-            assert_eq!(stored_y, wg_y, "Workgroup ({wg_x},{wg_y}): expected workgroup_id_y={wg_y}, got {stored_y}");
-            assert_eq!(stored_z, 0, "Workgroup ({wg_x},{wg_y}): expected workgroup_id_z=0, got {stored_z}");
+            assert_eq!(
+                stored_x, wg_x,
+                "Workgroup ({wg_x},{wg_y}): expected workgroup_id_x={wg_x}, got {stored_x}"
+            );
+            assert_eq!(
+                stored_y, wg_y,
+                "Workgroup ({wg_x},{wg_y}): expected workgroup_id_y={wg_y}, got {stored_y}"
+            );
+            assert_eq!(
+                stored_z, 0,
+                "Workgroup ({wg_x},{wg_y}): expected workgroup_id_z=0, got {stored_z}"
+            );
         }
     }
 }

@@ -31,8 +31,12 @@ impl Pass for StrengthReduce {
             for inst in &block.instructions {
                 if let MirInst::Const { dest, value } = inst {
                     match value {
-                        ConstValue::I32(v) => { constants.insert(*dest, *v as u32); }
-                        ConstValue::U32(v) => { constants.insert(*dest, *v); }
+                        ConstValue::I32(v) => {
+                            constants.insert(*dest, *v as u32);
+                        }
+                        ConstValue::U32(v) => {
+                            constants.insert(*dest, *v);
+                        }
                         _ => {}
                     }
                 }
@@ -41,7 +45,14 @@ impl Pass for StrengthReduce {
             let mut replacements: Vec<(usize, MirInst, MirInst)> = Vec::new();
 
             for (idx, inst) in block.instructions.iter().enumerate() {
-                if let MirInst::BinOp { dest, op, lhs, rhs, ty } = inst {
+                if let MirInst::BinOp {
+                    dest,
+                    op,
+                    lhs,
+                    rhs,
+                    ty,
+                } = inst
+                {
                     if let Some(&rhs_val) = constants.get(rhs) {
                         if rhs_val.is_power_of_two() && rhs_val > 1 {
                             let shift = rhs_val.trailing_zeros();

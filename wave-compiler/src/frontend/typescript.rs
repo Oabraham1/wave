@@ -37,10 +37,17 @@ impl<'a> TsParser<'a> {
     fn parse_kernel(&mut self) -> Result<Kernel, CompileError> {
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos].trim();
-            if line.starts_with("function ") || line.contains("function ") || line.starts_with("export function") {
+            if line.starts_with("function ")
+                || line.contains("function ")
+                || line.starts_with("export function")
+            {
                 return self.parse_function();
             }
-            if line.starts_with("import ") || line.is_empty() || line.starts_with("//") || line.starts_with("kernel(") {
+            if line.starts_with("import ")
+                || line.is_empty()
+                || line.starts_with("//")
+                || line.starts_with("kernel(")
+            {
                 self.pos += 1;
                 continue;
             }
@@ -53,13 +60,17 @@ impl<'a> TsParser<'a> {
 
     fn parse_function(&mut self) -> Result<Kernel, CompileError> {
         let line = self.lines[self.pos].trim().to_string();
-        let func_pos = line.find("function ").ok_or_else(|| CompileError::ParseError {
-            message: "expected 'function'".into(),
-        })?;
+        let func_pos = line
+            .find("function ")
+            .ok_or_else(|| CompileError::ParseError {
+                message: "expected 'function'".into(),
+            })?;
         let after_func = &line[func_pos + 9..];
-        let paren_start = after_func.find('(').ok_or_else(|| CompileError::ParseError {
-            message: "expected '('".into(),
-        })?;
+        let paren_start = after_func
+            .find('(')
+            .ok_or_else(|| CompileError::ParseError {
+                message: "expected '('".into(),
+            })?;
         let name = after_func[..paren_start].trim().to_string();
 
         let paren_end = line.find(')').ok_or_else(|| CompileError::ParseError {
@@ -142,7 +153,10 @@ impl<'a> TsParser<'a> {
 
             if line.starts_with("if ") || line.starts_with("if(") {
                 stmts.push(self.parse_if()?);
-            } else if line.starts_with("const ") || line.starts_with("let ") || line.starts_with("var ") {
+            } else if line.starts_with("const ")
+                || line.starts_with("let ")
+                || line.starts_with("var ")
+            {
                 stmts.push(self.parse_declaration()?);
             } else if line.contains('=') && !line.contains("==") && !line.contains("!=") {
                 stmts.push(self.parse_assignment()?);
@@ -163,14 +177,19 @@ impl<'a> TsParser<'a> {
 
         let then_body = self.parse_body()?;
 
-        let else_body = if self.pos < self.lines.len() && self.lines[self.pos].trim().starts_with("else") {
-            self.pos += 1;
-            Some(self.parse_body()?)
-        } else {
-            None
-        };
+        let else_body =
+            if self.pos < self.lines.len() && self.lines[self.pos].trim().starts_with("else") {
+                self.pos += 1;
+                Some(self.parse_body()?)
+            } else {
+                None
+            };
 
-        Ok(Stmt::If { condition, then_body, else_body })
+        Ok(Stmt::If {
+            condition,
+            then_body,
+            else_body,
+        })
     }
 
     fn parse_declaration(&mut self) -> Result<Stmt, CompileError> {
@@ -212,12 +231,27 @@ impl<'a> TsParser<'a> {
             let index_str = &lhs[bracket_pos + 1..bracket_end];
             let base = Expr::Var(base_name.to_string());
             let index = parse_ts_expr(index_str)?;
-            let offset = Expr::BinOp { op: BinOp::Mul, lhs: Box::new(index), rhs: Box::new(Expr::Literal(Literal::Int(4))) };
-            let addr = Expr::BinOp { op: BinOp::Add, lhs: Box::new(base), rhs: Box::new(offset) };
-            return Ok(Stmt::Store { addr, value, space: AddressSpace::Device });
+            let offset = Expr::BinOp {
+                op: BinOp::Mul,
+                lhs: Box::new(index),
+                rhs: Box::new(Expr::Literal(Literal::Int(4))),
+            };
+            let addr = Expr::BinOp {
+                op: BinOp::Add,
+                lhs: Box::new(base),
+                rhs: Box::new(offset),
+            };
+            return Ok(Stmt::Store {
+                addr,
+                value,
+                space: AddressSpace::Device,
+            });
         }
 
-        Ok(Stmt::Assign { target: lhs.to_string(), value })
+        Ok(Stmt::Assign {
+            target: lhs.to_string(),
+            value,
+        })
     }
 }
 
@@ -244,7 +278,12 @@ fn parse_ts_expr(s: &str) -> Result<Expr, CompileError> {
         }
     }
 
-    for &(op_str, op) in &[(" < ", BinOp::Lt), (" > ", BinOp::Gt), (" === ", BinOp::Eq), (" !== ", BinOp::Ne)] {
+    for &(op_str, op) in &[
+        (" < ", BinOp::Lt),
+        (" > ", BinOp::Gt),
+        (" === ", BinOp::Eq),
+        (" !== ", BinOp::Ne),
+    ] {
         if let Some(pos) = s.rfind(op_str) {
             return Ok(Expr::BinOp {
                 op,
@@ -277,8 +316,12 @@ fn parse_ts_expr(s: &str) -> Result<Expr, CompileError> {
         }
     }
 
-    if let Ok(v) = s.parse::<i64>() { return Ok(Expr::Literal(Literal::Int(v))); }
-    if let Ok(v) = s.parse::<f64>() { return Ok(Expr::Literal(Literal::Float(v))); }
+    if let Ok(v) = s.parse::<i64>() {
+        return Ok(Expr::Literal(Literal::Int(v)));
+    }
+    if let Ok(v) = s.parse::<f64>() {
+        return Ok(Expr::Literal(Literal::Float(v)));
+    }
 
     if s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.is_empty() {
         return Ok(Expr::Var(s.to_string()));

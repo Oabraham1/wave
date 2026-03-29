@@ -32,7 +32,12 @@ pub enum LirInst {
     /// Float division.
     Fdiv { dest: VReg, src1: VReg, src2: VReg },
     /// Fused multiply-add: dest = src1 * src2 + src3.
-    Fma { dest: VReg, src1: VReg, src2: VReg, src3: VReg },
+    Fma {
+        dest: VReg,
+        src1: VReg,
+        src2: VReg,
+        src3: VReg,
+    },
     /// Float negation.
     Fneg { dest: VReg, src: VReg },
     /// Float absolute value.
@@ -72,13 +77,29 @@ pub enum LirInst {
     /// Shift right (arithmetic).
     Sar { dest: VReg, src1: VReg, src2: VReg },
     /// Load from local (shared) memory.
-    LocalLoad { dest: VReg, addr: VReg, width: MemWidth },
+    LocalLoad {
+        dest: VReg,
+        addr: VReg,
+        width: MemWidth,
+    },
     /// Store to local (shared) memory.
-    LocalStore { addr: VReg, value: VReg, width: MemWidth },
+    LocalStore {
+        addr: VReg,
+        value: VReg,
+        width: MemWidth,
+    },
     /// Load from device (global) memory.
-    DeviceLoad { dest: VReg, addr: VReg, width: MemWidth },
+    DeviceLoad {
+        dest: VReg,
+        addr: VReg,
+        width: MemWidth,
+    },
     /// Store to device (global) memory.
-    DeviceStore { addr: VReg, value: VReg, width: MemWidth },
+    DeviceStore {
+        addr: VReg,
+        value: VReg,
+        width: MemWidth,
+    },
     /// Signed integer compare equal.
     IcmpEq { dest: PReg, src1: VReg, src2: VReg },
     /// Signed integer compare not equal.

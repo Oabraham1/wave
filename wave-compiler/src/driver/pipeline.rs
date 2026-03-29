@@ -55,10 +55,7 @@ pub fn compile_kernel(kernel: &Kernel, config: &CompilerConfig) -> Result<Vec<u8
 /// # Errors
 ///
 /// Returns `CompileError` if parsing or compilation fails.
-pub fn compile_source(
-    source: &str,
-    config: &CompilerConfig,
-) -> Result<Vec<u8>, CompileError> {
+pub fn compile_source(source: &str, config: &CompilerConfig) -> Result<Vec<u8>, CompileError> {
     let kernel = crate::frontend::parse(source, config.language)?;
 
     if config.dump_hir {
@@ -208,7 +205,9 @@ mod tests {
         let code = parsed.code();
         let decoded = wave_decode::decode_all(code).unwrap();
 
-        let mov_sr = decoded.iter().find(|i| matches!(i.operation, wave_decode::Operation::MovSr { .. }));
+        let mov_sr = decoded
+            .iter()
+            .find(|i| matches!(i.operation, wave_decode::Operation::MovSr { .. }));
         assert!(mov_sr.is_some());
     }
 }

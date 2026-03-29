@@ -172,9 +172,18 @@ mod tests {
     #[test]
     fn test_may_alias_set() {
         let ops = vec![
-            MemOp { addr: ValueId(0), space: AddressSpace::Device },
-            MemOp { addr: ValueId(1), space: AddressSpace::Device },
-            MemOp { addr: ValueId(2), space: AddressSpace::Local },
+            MemOp {
+                addr: ValueId(0),
+                space: AddressSpace::Device,
+            },
+            MemOp {
+                addr: ValueId(1),
+                space: AddressSpace::Device,
+            },
+            MemOp {
+                addr: ValueId(2),
+                space: AddressSpace::Local,
+            },
         ];
         let info = AliasInfo {
             mem_ops: ops.clone(),

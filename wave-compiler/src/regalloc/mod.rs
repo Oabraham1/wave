@@ -25,11 +25,7 @@ use crate::lir::operand::VReg;
 /// Returns the register mapping from VRegs to PhysRegs.
 /// Pre-colors parameter registers: VReg(0)→PhysReg(0), etc.
 #[must_use]
-pub fn allocate_registers(
-    instructions: &[LirInst],
-    num_params: u32,
-    max_regs: u32,
-) -> RegMap {
+pub fn allocate_registers(instructions: &[LirInst], num_params: u32, max_regs: u32) -> RegMap {
     let ig = interference::InterferenceGraph::build_with_params(instructions, num_params);
     let coalesce_result = coalesce::coalesce(&ig, max_regs);
     let coloring_result = coloring::color(&ig, max_regs, num_params);
@@ -80,8 +76,14 @@ mod tests {
     #[test]
     fn test_allocate_registers_simple() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovImm { dest: VReg(1), value: 2 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovImm {
+                dest: VReg(1),
+                value: 2,
+            },
             LirInst::Iadd {
                 dest: VReg(2),
                 src1: VReg(0),

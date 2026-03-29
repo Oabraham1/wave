@@ -77,7 +77,10 @@ impl Thread {
     }
 
     pub fn read_predicate(&self, index: u8) -> bool {
-        self.predicates.get(index as usize).copied().unwrap_or(false)
+        self.predicates
+            .get(index as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn write_predicate(&mut self, index: u8, value: bool) {

@@ -101,9 +101,7 @@ impl LivenessInfo {
     /// Check if a value is live at the entry of a block.
     #[must_use]
     pub fn is_live_in(&self, block: BlockId, value: ValueId) -> bool {
-        self.live_in
-            .get(&block)
-            .is_some_and(|s| s.contains(&value))
+        self.live_in.get(&block).is_some_and(|s| s.contains(&value))
     }
 
     /// Check if a value is live at the exit of a block.

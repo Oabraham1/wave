@@ -108,7 +108,17 @@ mod tests {
     use super::*;
 
     fn create_test_wave(wave_id: u32) -> Wave {
-        Wave::new(32, 32, wave_id, [0, 0, 0], [64, 1, 1], [1, 1, 1], wave_id * 32, 64, 2)
+        Wave::new(
+            32,
+            32,
+            wave_id,
+            [0, 0, 0],
+            [64, 1, 1],
+            [1, 1, 1],
+            wave_id * 32,
+            64,
+            2,
+        )
     }
 
     #[test]

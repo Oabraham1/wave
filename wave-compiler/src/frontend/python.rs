@@ -38,7 +38,11 @@ impl<'a> PythonParser<'a> {
     fn parse_kernel(&mut self) -> Result<Kernel, CompileError> {
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos].trim();
-            if line.is_empty() || line.starts_with('#') || line.starts_with("from ") || line.starts_with("import ") {
+            if line.is_empty()
+                || line.starts_with('#')
+                || line.starts_with("from ")
+                || line.starts_with("import ")
+            {
                 self.pos += 1;
                 continue;
             }
@@ -58,18 +62,24 @@ impl<'a> PythonParser<'a> {
 
     fn parse_def(&mut self) -> Result<Kernel, CompileError> {
         let line = self.lines[self.pos].trim();
-        let after_def = line.strip_prefix("def ").ok_or_else(|| CompileError::ParseError {
-            message: "expected 'def'".into(),
-        })?;
+        let after_def = line
+            .strip_prefix("def ")
+            .ok_or_else(|| CompileError::ParseError {
+                message: "expected 'def'".into(),
+            })?;
 
-        let paren_start = after_def.find('(').ok_or_else(|| CompileError::ParseError {
-            message: "expected '(' in function definition".into(),
-        })?;
+        let paren_start = after_def
+            .find('(')
+            .ok_or_else(|| CompileError::ParseError {
+                message: "expected '(' in function definition".into(),
+            })?;
         let name = after_def[..paren_start].trim().to_string();
 
-        let paren_end = after_def.find(')').ok_or_else(|| CompileError::ParseError {
-            message: "expected ')' in function definition".into(),
-        })?;
+        let paren_end = after_def
+            .find(')')
+            .ok_or_else(|| CompileError::ParseError {
+                message: "expected ')' in function definition".into(),
+            })?;
         let params_str = &after_def[paren_start + 1..paren_end];
         let params = self.parse_params(params_str)?;
 
@@ -304,11 +314,18 @@ impl<'a> PythonParser<'a> {
 
         if let Some(bracket_pos) = line.find('[') {
             if let Some(eq_pos) = line.find('=') {
-                if bracket_pos < eq_pos && !line[..eq_pos].ends_with('!') && !line[..eq_pos].ends_with('<') && !line[..eq_pos].ends_with('>') {
+                if bracket_pos < eq_pos
+                    && !line[..eq_pos].ends_with('!')
+                    && !line[..eq_pos].ends_with('<')
+                    && !line[..eq_pos].ends_with('>')
+                {
                     let base_name = line[..bracket_pos].trim();
-                    let bracket_end = line[..eq_pos].rfind(']').ok_or_else(|| CompileError::ParseError {
-                        message: format!("missing ']' in: {line}"),
-                    })?;
+                    let bracket_end =
+                        line[..eq_pos]
+                            .rfind(']')
+                            .ok_or_else(|| CompileError::ParseError {
+                                message: format!("missing ']' in: {line}"),
+                            })?;
                     let index_str = &line[bracket_pos + 1..bracket_end];
                     let value_str = line[eq_pos + 1..].trim();
 
@@ -341,7 +358,11 @@ impl<'a> PythonParser<'a> {
             message: format!("expected '=' in assignment: {line}"),
         })?;
 
-        if eq_pos > 0 && (line.as_bytes()[eq_pos - 1] == b'!' || line.as_bytes()[eq_pos - 1] == b'<' || line.as_bytes()[eq_pos - 1] == b'>') {
+        if eq_pos > 0
+            && (line.as_bytes()[eq_pos - 1] == b'!'
+                || line.as_bytes()[eq_pos - 1] == b'<'
+                || line.as_bytes()[eq_pos - 1] == b'>')
+        {
             return Err(CompileError::ParseError {
                 message: format!("unexpected operator in: {line}"),
             });
@@ -367,10 +388,7 @@ impl<'a> PythonParser<'a> {
     fn parse_expr(&self, s: &str) -> Result<Expr, CompileError> {
         let s = s.trim();
 
-        for &(op_str, op) in &[
-            (" + ", BinOp::Add),
-            (" - ", BinOp::Sub),
-        ] {
+        for &(op_str, op) in &[(" + ", BinOp::Add), (" - ", BinOp::Sub)] {
             if let Some(pos) = find_top_level_op(s, op_str) {
                 let lhs = self.parse_expr(&s[..pos])?;
                 let rhs = self.parse_expr(&s[pos + op_str.len()..])?;
@@ -459,7 +477,9 @@ impl<'a> PythonParser<'a> {
             "thread_id_y()" => return Ok(Expr::ThreadId(Dimension::Y)),
             "thread_id_z()" => return Ok(Expr::ThreadId(Dimension::Z)),
             "workgroup_id()" | "workgroup_id_x()" => return Ok(Expr::WorkgroupId(Dimension::X)),
-            "workgroup_size()" | "workgroup_size_x()" => return Ok(Expr::WorkgroupSize(Dimension::X)),
+            "workgroup_size()" | "workgroup_size_x()" => {
+                return Ok(Expr::WorkgroupSize(Dimension::X))
+            }
             "lane_id()" => return Ok(Expr::LaneId),
             "wave_width()" => return Ok(Expr::WaveWidth),
             "True" | "true" => return Ok(Expr::Literal(Literal::Bool(true))),
@@ -519,15 +539,42 @@ impl<'a> PythonParser<'a> {
         };
 
         match func_name {
-            "sqrt" => Ok(Expr::Call { func: BuiltinFunc::Sqrt, args }),
-            "sin" => Ok(Expr::Call { func: BuiltinFunc::Sin, args }),
-            "cos" => Ok(Expr::Call { func: BuiltinFunc::Cos, args }),
-            "exp2" => Ok(Expr::Call { func: BuiltinFunc::Exp2, args }),
-            "log2" => Ok(Expr::Call { func: BuiltinFunc::Log2, args }),
-            "abs" => Ok(Expr::Call { func: BuiltinFunc::Abs, args }),
-            "min" => Ok(Expr::Call { func: BuiltinFunc::Min, args }),
-            "max" => Ok(Expr::Call { func: BuiltinFunc::Max, args }),
-            "atomic_add" => Ok(Expr::Call { func: BuiltinFunc::AtomicAdd, args }),
+            "sqrt" => Ok(Expr::Call {
+                func: BuiltinFunc::Sqrt,
+                args,
+            }),
+            "sin" => Ok(Expr::Call {
+                func: BuiltinFunc::Sin,
+                args,
+            }),
+            "cos" => Ok(Expr::Call {
+                func: BuiltinFunc::Cos,
+                args,
+            }),
+            "exp2" => Ok(Expr::Call {
+                func: BuiltinFunc::Exp2,
+                args,
+            }),
+            "log2" => Ok(Expr::Call {
+                func: BuiltinFunc::Log2,
+                args,
+            }),
+            "abs" => Ok(Expr::Call {
+                func: BuiltinFunc::Abs,
+                args,
+            }),
+            "min" => Ok(Expr::Call {
+                func: BuiltinFunc::Min,
+                args,
+            }),
+            "max" => Ok(Expr::Call {
+                func: BuiltinFunc::Max,
+                args,
+            }),
+            "atomic_add" => Ok(Expr::Call {
+                func: BuiltinFunc::AtomicAdd,
+                args,
+            }),
             "thread_id" => Ok(Expr::ThreadId(Dimension::X)),
             "workgroup_id" => Ok(Expr::WorkgroupId(Dimension::X)),
             "workgroup_size" => Ok(Expr::WorkgroupSize(Dimension::X)),
@@ -535,16 +582,26 @@ impl<'a> PythonParser<'a> {
             "wave_width" => Ok(Expr::WaveWidth),
             "int" | "u32" => {
                 if args.len() == 1 {
-                    Ok(Expr::Cast { expr: Box::new(args.into_iter().next().unwrap()), to: Type::U32 })
+                    Ok(Expr::Cast {
+                        expr: Box::new(args.into_iter().next().unwrap()),
+                        to: Type::U32,
+                    })
                 } else {
-                    Err(CompileError::ParseError { message: "int() takes 1 argument".to_string() })
+                    Err(CompileError::ParseError {
+                        message: "int() takes 1 argument".to_string(),
+                    })
                 }
             }
             "float" | "f32" => {
                 if args.len() == 1 {
-                    Ok(Expr::Cast { expr: Box::new(args.into_iter().next().unwrap()), to: Type::F32 })
+                    Ok(Expr::Cast {
+                        expr: Box::new(args.into_iter().next().unwrap()),
+                        to: Type::F32,
+                    })
                 } else {
-                    Err(CompileError::ParseError { message: "float() takes 1 argument".to_string() })
+                    Err(CompileError::ParseError {
+                        message: "float() takes 1 argument".to_string(),
+                    })
                 }
             }
             _ => Err(CompileError::ParseError {

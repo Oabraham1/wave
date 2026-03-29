@@ -78,7 +78,9 @@ pub enum EmulatorError {
     #[error("IO error: {message}")]
     IoError { message: String },
 
-    #[error("instruction limit exceeded: {executed} instructions (limit: {limit}) at PC 0x{pc:08x}")]
+    #[error(
+        "instruction limit exceeded: {executed} instructions (limit: {limit}) at PC 0x{pc:08x}"
+    )]
     InstructionLimitExceeded { limit: u64, executed: u64, pc: u32 },
 }
 
@@ -94,6 +96,9 @@ pub struct EmulatorConfig {
     pub f64_enabled: bool,
     /// Maximum instructions to execute (0 = unlimited). Default: 10,000,000
     pub max_instructions: u64,
+    /// Initial register values set for all threads before execution.
+    /// Vec of (register_index, value) pairs.
+    pub initial_registers: Vec<(u8, u32)>,
 }
 
 impl Default for EmulatorConfig {
@@ -108,6 +113,7 @@ impl Default for EmulatorConfig {
             trace_enabled: false,
             f64_enabled: false,
             max_instructions: 10_000_000,
+            initial_registers: Vec::new(),
         }
     }
 }
@@ -158,10 +164,14 @@ impl Emulator {
             });
         }
 
-        let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
-        let code_size = u32::from_le_bytes([binary[0x0C], binary[0x0D], binary[0x0E], binary[0x0F]]) as usize;
-        let symbol_offset = u32::from_le_bytes([binary[0x10], binary[0x11], binary[0x12], binary[0x13]]) as usize;
-        let metadata_offset = u32::from_le_bytes([binary[0x18], binary[0x19], binary[0x1A], binary[0x1B]]) as usize;
+        let code_offset =
+            u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+        let code_size =
+            u32::from_le_bytes([binary[0x0C], binary[0x0D], binary[0x0E], binary[0x0F]]) as usize;
+        let symbol_offset =
+            u32::from_le_bytes([binary[0x10], binary[0x11], binary[0x12], binary[0x13]]) as usize;
+        let metadata_offset =
+            u32::from_le_bytes([binary[0x18], binary[0x19], binary[0x1A], binary[0x1B]]) as usize;
 
         if code_offset + code_size > binary.len() {
             return Err(EmulatorError::InvalidBinary {
@@ -192,7 +202,10 @@ impl Emulator {
                     binary[base + 3],
                 ]) as usize;
 
-                let name = if symbol_offset > 0 && name_offset >= symbol_offset && name_offset < binary.len() {
+                let name = if symbol_offset > 0
+                    && name_offset >= symbol_offset
+                    && name_offset < binary.len()
+                {
                     let mut end = name_offset;
                     while end < binary.len() && binary[end] != 0 {
                         end += 1;
@@ -343,8 +356,9 @@ pub fn load_binary_file(path: &std::path::Path) -> Result<Vec<u8>, EmulatorError
         message: e.to_string(),
     })?;
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).map_err(|e| EmulatorError::IoError {
-        message: e.to_string(),
-    })?;
+    file.read_to_end(&mut buffer)
+        .map_err(|e| EmulatorError::IoError {
+            message: e.to_string(),
+        })?;
     Ok(buffer)
 }

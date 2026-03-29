@@ -170,7 +170,11 @@ impl<'a> CppParser<'a> {
             None
         };
 
-        Ok(Stmt::If { condition, then_body, else_body })
+        Ok(Stmt::If {
+            condition,
+            then_body,
+            else_body,
+        })
     }
 
     fn parse_assignment(&mut self) -> Result<Stmt, CompileError> {
@@ -205,9 +209,21 @@ impl<'a> CppParser<'a> {
 
             let base = Expr::Var(base_name.to_string());
             let index = parse_c_expr(index_str)?;
-            let offset = Expr::BinOp { op: BinOp::Mul, lhs: Box::new(index), rhs: Box::new(Expr::Literal(Literal::Int(4))) };
-            let addr = Expr::BinOp { op: BinOp::Add, lhs: Box::new(base), rhs: Box::new(offset) };
-            return Ok(Stmt::Store { addr, value, space: AddressSpace::Device });
+            let offset = Expr::BinOp {
+                op: BinOp::Mul,
+                lhs: Box::new(index),
+                rhs: Box::new(Expr::Literal(Literal::Int(4))),
+            };
+            let addr = Expr::BinOp {
+                op: BinOp::Add,
+                lhs: Box::new(base),
+                rhs: Box::new(offset),
+            };
+            return Ok(Stmt::Store {
+                addr,
+                value,
+                space: AddressSpace::Device,
+            });
         }
 
         Ok(Stmt::Assign {
@@ -224,23 +240,46 @@ fn parse_c_expr(s: &str) -> Result<Expr, CompileError> {
         if let Some(pos) = s.rfind(op_str) {
             let lhs = parse_c_expr(&s[..pos])?;
             let rhs = parse_c_expr(&s[pos + op_str.len()..])?;
-            return Ok(Expr::BinOp { op, lhs: Box::new(lhs), rhs: Box::new(rhs) });
+            return Ok(Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            });
         }
     }
 
-    for &(op_str, op) in &[(" * ", BinOp::Mul), (" / ", BinOp::Div), (" % ", BinOp::Mod)] {
+    for &(op_str, op) in &[
+        (" * ", BinOp::Mul),
+        (" / ", BinOp::Div),
+        (" % ", BinOp::Mod),
+    ] {
         if let Some(pos) = s.rfind(op_str) {
             let lhs = parse_c_expr(&s[..pos])?;
             let rhs = parse_c_expr(&s[pos + op_str.len()..])?;
-            return Ok(Expr::BinOp { op, lhs: Box::new(lhs), rhs: Box::new(rhs) });
+            return Ok(Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            });
         }
     }
 
-    for &(op_str, op) in &[(" < ", BinOp::Lt), (" <= ", BinOp::Le), (" > ", BinOp::Gt), (" >= ", BinOp::Ge), (" == ", BinOp::Eq), (" != ", BinOp::Ne)] {
+    for &(op_str, op) in &[
+        (" < ", BinOp::Lt),
+        (" <= ", BinOp::Le),
+        (" > ", BinOp::Gt),
+        (" >= ", BinOp::Ge),
+        (" == ", BinOp::Eq),
+        (" != ", BinOp::Ne),
+    ] {
         if let Some(pos) = s.rfind(op_str) {
             let lhs = parse_c_expr(&s[..pos])?;
             let rhs = parse_c_expr(&s[pos + op_str.len()..])?;
-            return Ok(Expr::BinOp { op, lhs: Box::new(lhs), rhs: Box::new(rhs) });
+            return Ok(Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            });
         }
     }
 

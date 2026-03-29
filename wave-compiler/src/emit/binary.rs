@@ -107,10 +107,7 @@ mod tests {
         let wbin = generate_wbin("test_kernel", &instructions, &reg_map, 4).unwrap();
 
         assert_eq!(&wbin[0..4], b"WAVE");
-        assert_eq!(
-            u16::from_le_bytes([wbin[4], wbin[5]]),
-            WBIN_VERSION
-        );
+        assert_eq!(u16::from_le_bytes([wbin[4], wbin[5]]), WBIN_VERSION);
 
         let wbin_file = wave_decode::WbinFile::parse(&wbin).unwrap();
         assert_eq!(wbin_file.kernels.len(), 1);

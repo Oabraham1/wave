@@ -35,7 +35,8 @@ impl<'a> Core<'a> {
         device_memory: &'a mut DeviceMemory,
         workgroup_id: [u32; 3],
     ) -> Self {
-        let total_threads = config.workgroup_dim[0] * config.workgroup_dim[1] * config.workgroup_dim[2];
+        let total_threads =
+            config.workgroup_dim[0] * config.workgroup_dim[1] * config.workgroup_dim[2];
         let num_waves = total_threads.div_ceil(config.wave_width);
 
         let mut waves = Vec::with_capacity(num_waves as usize);
@@ -53,6 +54,15 @@ impl<'a> Core<'a> {
                 num_waves,
             );
             waves.push(wave);
+        }
+
+        // Apply initial register values to all threads in all waves
+        for wave in &mut waves {
+            for thread in &mut wave.threads {
+                for &(reg, val) in &config.initial_registers {
+                    thread.write_register(reg, val);
+                }
+            }
         }
 
         let local_memory = LocalMemory::new(config.local_memory_size);
@@ -255,9 +265,18 @@ mod tests {
         let mut device_memory = DeviceMemory::new(1024);
         let core = Core::new(&config, &code, &mut device_memory, [1, 0, 0]);
 
-        assert_eq!(core.waves[0].threads[0].special_registers.workgroup_id, [1, 0, 0]);
-        assert_eq!(core.waves[0].threads[0].special_registers.thread_id, [0, 0, 0]);
-        assert_eq!(core.waves[0].threads[8].special_registers.thread_id, [0, 1, 0]);
+        assert_eq!(
+            core.waves[0].threads[0].special_registers.workgroup_id,
+            [1, 0, 0]
+        );
+        assert_eq!(
+            core.waves[0].threads[0].special_registers.thread_id,
+            [0, 0, 0]
+        );
+        assert_eq!(
+            core.waves[0].threads[8].special_registers.thread_id,
+            [0, 1, 0]
+        );
     }
 
     fn encode_mov_sr(rd: u8, sr_index: u8) -> Vec<u8> {
@@ -318,9 +337,9 @@ mod tests {
 
     #[test]
     fn test_core_mov_sr_and_device_store() {
-        let mut code = encode_mov_sr(0, 4);        // r0 = lane_id
+        let mut code = encode_mov_sr(0, 4); // r0 = lane_id
         code.extend_from_slice(&encode_mov_imm(1, 2)); // r1 = 2
-        code.extend_from_slice(&encode_shl(2, 0, 1));  // r2 = r0 << r1 = lane_id * 4
+        code.extend_from_slice(&encode_shl(2, 0, 1)); // r2 = r0 << r1 = lane_id * 4
         code.extend_from_slice(&encode_device_store_u32(2, 0)); // store r0 at addr r2
         code.extend_from_slice(&encode_halt());
 

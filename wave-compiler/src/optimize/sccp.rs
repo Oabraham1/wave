@@ -64,28 +64,26 @@ impl Pass for Sccp {
                     cond,
                     true_target,
                     false_target,
-                } => {
-                    match lattice.get(cond) {
-                        Some(Lattice::Constant(v)) if *v != 0 => {
-                            if executable.insert(*true_target) {
-                                worklist.push_back(*true_target);
-                            }
-                        }
-                        Some(Lattice::Constant(0)) => {
-                            if executable.insert(*false_target) {
-                                worklist.push_back(*false_target);
-                            }
-                        }
-                        _ => {
-                            if executable.insert(*true_target) {
-                                worklist.push_back(*true_target);
-                            }
-                            if executable.insert(*false_target) {
-                                worklist.push_back(*false_target);
-                            }
+                } => match lattice.get(cond) {
+                    Some(Lattice::Constant(v)) if *v != 0 => {
+                        if executable.insert(*true_target) {
+                            worklist.push_back(*true_target);
                         }
                     }
-                }
+                    Some(Lattice::Constant(0)) => {
+                        if executable.insert(*false_target) {
+                            worklist.push_back(*false_target);
+                        }
+                    }
+                    _ => {
+                        if executable.insert(*true_target) {
+                            worklist.push_back(*true_target);
+                        }
+                        if executable.insert(*false_target) {
+                            worklist.push_back(*false_target);
+                        }
+                    }
+                },
                 Terminator::Return => {}
             }
         }
@@ -109,7 +107,8 @@ impl Pass for Sccp {
         }
 
         let original_count = func.blocks.len();
-        func.blocks.retain(|b| executable.contains(&b.id) || b.id == func.entry);
+        func.blocks
+            .retain(|b| executable.contains(&b.id) || b.id == func.entry);
         if func.blocks.len() != original_count {
             changed = true;
         }
@@ -136,16 +135,14 @@ fn evaluate_instruction(inst: &MirInst, lattice: &mut HashMap<ValueId, Lattice>)
             let r = lattice.get(rhs).cloned().unwrap_or(Lattice::Bottom);
 
             let result = match (&l, &r) {
-                (Lattice::Constant(a), Lattice::Constant(b)) => {
-                    match op {
-                        BinOp::Add => Lattice::Constant(a.wrapping_add(*b)),
-                        BinOp::Sub => Lattice::Constant(a.wrapping_sub(*b)),
-                        BinOp::Mul => Lattice::Constant(a.wrapping_mul(*b)),
-                        BinOp::Lt => Lattice::Constant(i32::from(*a < *b)),
-                        BinOp::Eq => Lattice::Constant(i32::from(*a == *b)),
-                        _ => Lattice::Bottom,
-                    }
-                }
+                (Lattice::Constant(a), Lattice::Constant(b)) => match op {
+                    BinOp::Add => Lattice::Constant(a.wrapping_add(*b)),
+                    BinOp::Sub => Lattice::Constant(a.wrapping_sub(*b)),
+                    BinOp::Mul => Lattice::Constant(a.wrapping_mul(*b)),
+                    BinOp::Lt => Lattice::Constant(i32::from(*a < *b)),
+                    BinOp::Eq => Lattice::Constant(i32::from(*a == *b)),
+                    _ => Lattice::Bottom,
+                },
                 _ => Lattice::Bottom,
             };
             lattice.insert(*dest, result);

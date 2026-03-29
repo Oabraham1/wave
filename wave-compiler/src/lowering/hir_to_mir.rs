@@ -107,17 +107,48 @@ impl HirToMirLowerer {
                         target: merge_block,
                     });
                 } else {
+                    let pre_block = self.builder.current_block();
                     self.builder.set_terminator(Terminator::CondBranch {
                         cond,
                         true_target: then_block,
                         false_target: merge_block,
                     });
 
+                    let vars_before: Vec<(String, ValueId, MirType)> = self
+                        .variables
+                        .iter()
+                        .map(|(name, &val)| {
+                            let ty = self
+                                .variable_types
+                                .get(name)
+                                .copied()
+                                .unwrap_or(MirType::I32);
+                            (name.clone(), val, ty)
+                        })
+                        .collect();
+
                     self.builder.switch_to_block(then_block);
                     self.lower_stmts(then_body)?;
                     self.builder.set_terminator(Terminator::Branch {
                         target: merge_block,
                     });
+
+                    self.builder.switch_to_block(merge_block);
+                    for (name, pre_val, ty) in &vars_before {
+                        let then_val = self.variables.get(name).copied().unwrap_or(*pre_val);
+                        if then_val != *pre_val {
+                            let phi_dest = self.builder.next_value();
+                            if let Some(merge_bb) = self.builder.get_block_mut(merge_block) {
+                                merge_bb.phis.push(PhiNode {
+                                    dest: phi_dest,
+                                    ty: *ty,
+                                    incoming: vec![(then_block, then_val), (pre_block, *pre_val)],
+                                });
+                            }
+                            self.variables.insert(name.clone(), phi_dest);
+                        }
+                    }
+                    return Ok(());
                 }
 
                 self.builder.switch_to_block(merge_block);
@@ -155,9 +186,6 @@ impl HirToMirLowerer {
                 self.variables.insert(var.clone(), phi_dest);
                 self.variable_types.insert(var.clone(), MirType::I32);
 
-                // Create phi placeholders for all other variables in scope.
-                // Variables modified in the loop body (e.g. accumulators) need
-                // SSA phi nodes at the loop header for loop-carried values.
                 let var_entries: Vec<(String, ValueId, MirType)> = self
                     .variables
                     .iter()
@@ -182,7 +210,20 @@ impl HirToMirLowerer {
                     self.variables.insert(name.clone(), *phi);
                 }
 
-                let cond = self.builder.emit_binop(BinOp::Lt, phi_dest, end_val, MirType::I32);
+                let mut end_val = end_val;
+                let mut step_val = step_val;
+                for (_, pre_val, phi, _) in &loop_carried {
+                    if end_val == *pre_val {
+                        end_val = *phi;
+                    }
+                    if step_val == *pre_val {
+                        step_val = *phi;
+                    }
+                }
+
+                let cond = self
+                    .builder
+                    .emit_binop(BinOp::Lt, phi_dest, end_val, MirType::I32);
                 self.builder.set_terminator(Terminator::CondBranch {
                     cond,
                     true_target: body_block,
@@ -196,17 +237,16 @@ impl HirToMirLowerer {
                 });
 
                 self.builder.switch_to_block(latch_block);
-                let current_var = *self.variables.get(var).ok_or_else(|| {
-                    CompileError::InternalError {
-                        message: "loop variable missing after body".into(),
-                    }
-                })?;
-                let updated = self.builder.emit_binop(
-                    BinOp::Add,
-                    current_var,
-                    step_val,
-                    MirType::I32,
-                );
+                let current_var =
+                    *self
+                        .variables
+                        .get(var)
+                        .ok_or_else(|| CompileError::InternalError {
+                            message: "loop variable missing after body".into(),
+                        })?;
+                let updated =
+                    self.builder
+                        .emit_binop(BinOp::Add, current_var, step_val, MirType::I32);
                 self.variables.insert(var.clone(), updated);
                 self.builder.set_terminator(Terminator::Branch {
                     target: header_block,
@@ -216,31 +256,22 @@ impl HirToMirLowerer {
                     header_bb.phis.push(PhiNode {
                         dest: phi_dest,
                         ty: MirType::I32,
-                        incoming: vec![
-                            (preheader_block, start_val),
-                            (latch_block, updated),
-                        ],
+                        incoming: vec![(preheader_block, start_val), (latch_block, updated)],
                     });
-                    header_bb.instructions.retain(|inst| {
-                        !matches!(inst, MirInst::Const { dest, .. } if *dest == phi_dest)
-                    });
+                    header_bb.instructions.retain(
+                        |inst| !matches!(inst, MirInst::Const { dest, .. } if *dest == phi_dest),
+                    );
 
-                    // Add phis for loop-carried variables
                     for (name, pre_val, phi, ty) in &loop_carried {
-                        let body_val =
-                            self.variables.get(name).copied().unwrap_or(*phi);
+                        let body_val = self.variables.get(name).copied().unwrap_or(*phi);
                         header_bb.phis.push(PhiNode {
                             dest: *phi,
                             ty: *ty,
-                            incoming: vec![
-                                (preheader_block, *pre_val),
-                                (latch_block, body_val),
-                            ],
+                            incoming: vec![(preheader_block, *pre_val), (latch_block, body_val)],
                         });
                     }
                 }
 
-                // Restore loop-carried variables to phi dests for exit block
                 for (name, _, phi, _) in &loop_carried {
                     self.variables.insert(name.clone(), *phi);
                 }
@@ -297,11 +328,11 @@ impl HirToMirLowerer {
 
     fn lower_expr(&mut self, expr: &Expr) -> Result<ValueId, CompileError> {
         match expr {
-            Expr::Var(name) => self.variables.get(name).copied().ok_or_else(|| {
-                CompileError::UndefinedVariable {
-                    name: name.clone(),
-                }
-            }),
+            Expr::Var(name) => self
+                .variables
+                .get(name)
+                .copied()
+                .ok_or_else(|| CompileError::UndefinedVariable { name: name.clone() }),
             Expr::Literal(lit) => match lit {
                 Literal::Int(v) => Ok(self.builder.emit_const(ConstValue::I32(*v as i32))),
                 Literal::UInt(v) => Ok(self.builder.emit_const(ConstValue::U32(*v as u32))),
@@ -343,8 +374,12 @@ impl HirToMirLowerer {
                 let base_val = self.lower_expr(base)?;
                 let idx_val = self.lower_expr(index)?;
                 let elem_size = self.builder.emit_const(ConstValue::U32(4));
-                let offset = self.builder.emit_binop(BinOp::Mul, idx_val, elem_size, MirType::I32);
-                let addr = self.builder.emit_binop(BinOp::Add, base_val, offset, MirType::I32);
+                let offset = self
+                    .builder
+                    .emit_binop(BinOp::Mul, idx_val, elem_size, MirType::I32);
+                let addr = self
+                    .builder
+                    .emit_binop(BinOp::Add, base_val, offset, MirType::I32);
                 Ok(self
                     .builder
                     .emit_load(addr, AddressSpace::Device, MirType::F32))
@@ -388,7 +423,8 @@ impl HirToMirLowerer {
 
     fn emit_special_reg_read(&mut self, sr_index: u8) -> Result<ValueId, CompileError> {
         let dest = self.builder.next_value();
-        self.builder.emit(MirInst::ReadSpecialReg { dest, sr_index });
+        self.builder
+            .emit(MirInst::ReadSpecialReg { dest, sr_index });
         Ok(dest)
     }
 
@@ -396,9 +432,11 @@ impl HirToMirLowerer {
         match expr {
             Expr::Literal(Literal::Float(_)) => MirType::F32,
             Expr::Literal(Literal::Bool(_)) => MirType::Bool,
-            Expr::Var(name) => {
-                self.variable_types.get(name).copied().unwrap_or(MirType::I32)
-            }
+            Expr::Var(name) => self
+                .variable_types
+                .get(name)
+                .copied()
+                .unwrap_or(MirType::I32),
             Expr::BinOp { op, lhs, .. } => {
                 if op.is_comparison() {
                     MirType::Bool
@@ -406,7 +444,15 @@ impl HirToMirLowerer {
                     self.infer_mir_type(lhs)
                 }
             }
-            Expr::Call { func: BuiltinFunc::Sqrt | BuiltinFunc::Sin | BuiltinFunc::Cos | BuiltinFunc::Exp2 | BuiltinFunc::Log2, .. } => MirType::F32,
+            Expr::Call {
+                func:
+                    BuiltinFunc::Sqrt
+                    | BuiltinFunc::Sin
+                    | BuiltinFunc::Cos
+                    | BuiltinFunc::Exp2
+                    | BuiltinFunc::Log2,
+                ..
+            } => MirType::F32,
             Expr::Call { .. } => MirType::I32,
             Expr::Index { .. } | Expr::Load { .. } => MirType::F32,
             _ => MirType::I32,
@@ -449,13 +495,32 @@ mod tests {
         let kernel = Kernel {
             name: "vector_add".into(),
             params: vec![
-                KernelParam { name: "a".into(), ty: Type::Ptr(AddressSpace::Device), address_space: AddressSpace::Device },
-                KernelParam { name: "b".into(), ty: Type::Ptr(AddressSpace::Device), address_space: AddressSpace::Device },
-                KernelParam { name: "out".into(), ty: Type::Ptr(AddressSpace::Device), address_space: AddressSpace::Device },
-                KernelParam { name: "n".into(), ty: Type::U32, address_space: AddressSpace::Private },
+                KernelParam {
+                    name: "a".into(),
+                    ty: Type::Ptr(AddressSpace::Device),
+                    address_space: AddressSpace::Device,
+                },
+                KernelParam {
+                    name: "b".into(),
+                    ty: Type::Ptr(AddressSpace::Device),
+                    address_space: AddressSpace::Device,
+                },
+                KernelParam {
+                    name: "out".into(),
+                    ty: Type::Ptr(AddressSpace::Device),
+                    address_space: AddressSpace::Device,
+                },
+                KernelParam {
+                    name: "n".into(),
+                    ty: Type::U32,
+                    address_space: AddressSpace::Private,
+                },
             ],
             body: vec![
-                Stmt::Assign { target: "gid".into(), value: Expr::ThreadId(Dimension::X) },
+                Stmt::Assign {
+                    target: "gid".into(),
+                    value: Expr::ThreadId(Dimension::X),
+                },
                 Stmt::If {
                     condition: Expr::BinOp {
                         op: BinOp::Lt,
@@ -466,8 +531,14 @@ mod tests {
                         target: "result".into(),
                         value: Expr::BinOp {
                             op: BinOp::Add,
-                            lhs: Box::new(Expr::Index { base: Box::new(Expr::Var("a".into())), index: Box::new(Expr::Var("gid".into())) }),
-                            rhs: Box::new(Expr::Index { base: Box::new(Expr::Var("b".into())), index: Box::new(Expr::Var("gid".into())) }),
+                            lhs: Box::new(Expr::Index {
+                                base: Box::new(Expr::Var("a".into())),
+                                index: Box::new(Expr::Var("gid".into())),
+                            }),
+                            rhs: Box::new(Expr::Index {
+                                base: Box::new(Expr::Var("b".into())),
+                                index: Box::new(Expr::Var("gid".into())),
+                            }),
                         },
                     }],
                     else_body: None,
@@ -501,9 +572,11 @@ mod tests {
     fn test_lower_for_loop_has_phi() {
         let kernel = Kernel {
             name: "loop_test".into(),
-            params: vec![
-                KernelParam { name: "n".into(), ty: Type::U32, address_space: AddressSpace::Private },
-            ],
+            params: vec![KernelParam {
+                name: "n".into(),
+                ty: Type::U32,
+                address_space: AddressSpace::Private,
+            }],
             body: vec![Stmt::For {
                 var: "i".into(),
                 start: Expr::Literal(Literal::Int(0)),
@@ -523,7 +596,13 @@ mod tests {
     #[test]
     fn test_infer_float_type() {
         let lowerer = HirToMirLowerer::new("test");
-        assert_eq!(lowerer.infer_mir_type(&Expr::Literal(Literal::Float(1.0))), MirType::F32);
-        assert_eq!(lowerer.infer_mir_type(&Expr::Literal(Literal::Int(1))), MirType::I32);
+        assert_eq!(
+            lowerer.infer_mir_type(&Expr::Literal(Literal::Float(1.0))),
+            MirType::F32
+        );
+        assert_eq!(
+            lowerer.infer_mir_type(&Expr::Literal(Literal::Int(1))),
+            MirType::I32
+        );
     }
 }

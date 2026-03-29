@@ -61,7 +61,8 @@ impl Wave {
             threads.push(Thread::with_special_registers(register_count, special));
         }
 
-        let active_threads = (total_threads_in_workgroup.saturating_sub(base_thread_index)).min(wave_width);
+        let active_threads =
+            (total_threads_in_workgroup.saturating_sub(base_thread_index)).min(wave_width);
         let active_mask = if active_threads >= 64 {
             u64::MAX
         } else {

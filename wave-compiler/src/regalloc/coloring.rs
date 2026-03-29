@@ -87,8 +87,14 @@ mod tests {
     #[test]
     fn test_coloring_simple() {
         let insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 1 },
-            LirInst::MovImm { dest: VReg(1), value: 2 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 1,
+            },
+            LirInst::MovImm {
+                dest: VReg(1),
+                value: 2,
+            },
             LirInst::Iadd {
                 dest: VReg(2),
                 src1: VReg(0),

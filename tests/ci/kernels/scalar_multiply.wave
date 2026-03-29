@@ -1,0 +1,22 @@
+; scalar_multiply: c[i] = a[i] * 5.0
+; Memory layout: a at byte 0, c at byte 1024 (256 elements each)
+
+.kernel scalar_multiply
+.registers 16
+.workgroup_size 256, 1, 1
+
+    mov_sr r0, sr_thread_id_x
+    mov_imm r1, 4
+    imul r2, r0, r1
+
+    device_load_u32 r3, r2
+
+    mov_imm r4, 0x40a00000     ; 5.0 as IEEE 754
+    fmul r5, r3, r4
+
+    mov_imm r6, 1024
+    iadd r7, r2, r6
+    device_store_u32 r7, r5
+
+    halt
+.end

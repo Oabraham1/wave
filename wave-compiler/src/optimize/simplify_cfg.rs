@@ -59,9 +59,7 @@ fn merge_single_predecessor_blocks(func: &mut MirFunction) -> bool {
             if let Terminator::Branch { target } = term {
                 if let Some(pred_list) = preds.get(&target) {
                     if pred_list.len() == 1 && pred_list[0] == func.blocks[i].id {
-                        if let Some(target_idx) =
-                            func.blocks.iter().position(|b| b.id == target)
-                        {
+                        if let Some(target_idx) = func.blocks.iter().position(|b| b.id == target) {
                             if target_idx != i {
                                 let target_block = func.blocks.remove(target_idx);
                                 let adjusted_i = if target_idx < i { i - 1 } else { i };
@@ -116,9 +114,7 @@ mod tests {
             dest: ValueId(0),
             value: ConstValue::I32(1),
         });
-        bb0.terminator = Terminator::Branch {
-            target: BlockId(1),
-        };
+        bb0.terminator = Terminator::Branch { target: BlockId(1) };
 
         let mut bb1 = BasicBlock::new(BlockId(1));
         bb1.instructions.push(MirInst::Const {

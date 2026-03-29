@@ -97,17 +97,12 @@ mod tests {
             expected: "i32".into(),
             found: "f32".into(),
         };
-        assert_eq!(
-            err.to_string(),
-            "type mismatch: expected i32, found f32"
-        );
+        assert_eq!(err.to_string(), "type mismatch: expected i32, found f32");
     }
 
     #[test]
     fn test_undefined_variable_error() {
-        let err = CompileError::UndefinedVariable {
-            name: "foo".into(),
-        };
+        let err = CompileError::UndefinedVariable { name: "foo".into() };
         assert_eq!(err.to_string(), "undefined variable: foo");
     }
 

@@ -38,11 +38,7 @@ impl MirBuilder {
     /// Add a kernel parameter and return its SSA value.
     pub fn add_param(&mut self, name: String, ty: MirType) -> ValueId {
         let value = self.gen.next_value();
-        self.func.params.push(MirParam {
-            value,
-            ty,
-            name,
-        });
+        self.func.params.push(MirParam { value, ty, name });
         self.func.set_type(value, ty);
         value
     }
@@ -98,12 +94,7 @@ impl MirBuilder {
     }
 
     /// Emit a load instruction.
-    pub fn emit_load(
-        &mut self,
-        addr: ValueId,
-        space: AddressSpace,
-        ty: MirType,
-    ) -> ValueId {
+    pub fn emit_load(&mut self, addr: ValueId, space: AddressSpace, ty: MirType) -> ValueId {
         let dest = self.gen.next_value();
         self.func.set_type(dest, ty);
         self.emit(MirInst::Load {
@@ -117,11 +108,7 @@ impl MirBuilder {
 
     /// Emit a store instruction.
     pub fn emit_store(&mut self, addr: ValueId, value: ValueId, space: AddressSpace) {
-        self.emit(MirInst::Store {
-            addr,
-            value,
-            space,
-        });
+        self.emit(MirInst::Store { addr, value, space });
     }
 
     /// Emit an arbitrary instruction to the current block.

@@ -130,8 +130,7 @@ pub fn wave_ballot(wave: &mut Wave, rd: u8, pd_src: u8) {
 
     let mut ballot: u64 = 0;
     for lane in 0..wave_width {
-        if (active_mask & (1u64 << lane)) != 0
-            && wave.threads[lane as usize].read_predicate(pd_src)
+        if (active_mask & (1u64 << lane)) != 0 && wave.threads[lane as usize].read_predicate(pd_src)
         {
             ballot |= 1u64 << lane;
         }
@@ -152,8 +151,7 @@ pub fn wave_any(wave: &mut Wave, pd_dst: u8, pd_src: u8) {
 
     let mut any_true = false;
     for lane in 0..wave_width {
-        if (active_mask & (1u64 << lane)) != 0
-            && wave.threads[lane as usize].read_predicate(pd_src)
+        if (active_mask & (1u64 << lane)) != 0 && wave.threads[lane as usize].read_predicate(pd_src)
         {
             any_true = true;
             break;

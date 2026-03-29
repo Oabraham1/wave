@@ -51,10 +51,8 @@ impl Pass for Licm {
                         if inst.has_side_effects() {
                             continue;
                         }
-                        let all_operands_invariant = inst
-                            .operands()
-                            .iter()
-                            .all(|op| !defs_in_loop.contains(op));
+                        let all_operands_invariant =
+                            inst.operands().iter().all(|op| !defs_in_loop.contains(op));
                         if all_operands_invariant {
                             if let Some(dest) = inst.dest() {
                                 invariant_insts.push((idx, inst.clone()));

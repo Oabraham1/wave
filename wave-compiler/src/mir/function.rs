@@ -108,9 +108,7 @@ mod tests {
     fn test_mir_function_blocks() {
         let mut func = MirFunction::new("test".into(), BlockId(0));
         let mut bb0 = BasicBlock::new(BlockId(0));
-        bb0.terminator = Terminator::Branch {
-            target: BlockId(1),
-        };
+        bb0.terminator = Terminator::Branch { target: BlockId(1) };
         let bb1 = BasicBlock::new(BlockId(1));
         func.blocks.push(bb0);
         func.blocks.push(bb1);

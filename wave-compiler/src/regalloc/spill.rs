@@ -33,7 +33,8 @@ pub fn insert_spill_code(
     let mut spill_count = 0u32;
 
     for inst in instructions.iter() {
-        let mut reload_map: std::collections::HashMap<VReg, VReg> = std::collections::HashMap::new();
+        let mut reload_map: std::collections::HashMap<VReg, VReg> =
+            std::collections::HashMap::new();
 
         for src in inst.src_vregs() {
             if let Some(&offset) = spill_offsets.get(&src) {
@@ -89,7 +90,10 @@ mod tests {
     #[test]
     fn test_no_spills_no_change() {
         let mut insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 42 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 42,
+            },
             LirInst::Halt,
         ];
         let original_len = insts.len();
@@ -102,14 +106,19 @@ mod tests {
     #[test]
     fn test_spill_inserts_stores() {
         let mut insts = vec![
-            LirInst::MovImm { dest: VReg(0), value: 42 },
+            LirInst::MovImm {
+                dest: VReg(0),
+                value: 42,
+            },
             LirInst::Halt,
         ];
         let mut next_vreg = 1;
         let count = insert_spill_code(&mut insts, &[VReg(0)], &mut next_vreg, 0);
         assert!(count > 0);
         assert!(insts.len() > 2);
-        let has_store = insts.iter().any(|i| matches!(i, LirInst::LocalStore { .. }));
+        let has_store = insts
+            .iter()
+            .any(|i| matches!(i, LirInst::LocalStore { .. }));
         assert!(has_store);
     }
 }

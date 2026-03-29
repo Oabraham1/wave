@@ -1,0 +1,57 @@
+name: WAVE CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: |
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+            cd $crate && cargo fmt --check && cd ..
+          done
+
+      - name: Run clippy
+        run: |
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+            cd $crate && cargo clippy -- -D warnings && cd ..
+          done
+
+  build-and-test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build all crates
+        run: |
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+            cd $crate && cargo build --release && cd ..
+          done
+
+      - name: Run unit tests
+        run: |
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+            cd $crate && cargo test && cd ..
+          done
+
+      - name: Run emulator integration tests
+        run: |
+          chmod +x tests/ci/run_emulator_tests.sh
+          ./tests/ci/run_emulator_tests.sh
+
+      - name: Run backend codegen tests
+        run: |
+          chmod +x tests/ci/run_backend_tests.sh
+          ./tests/ci/run_backend_tests.sh

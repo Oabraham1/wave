@@ -8,8 +8,8 @@
 //! for bit-accurate encoding.
 
 use wave_decode::opcodes::{
-    CmpOp, ControlOp, FUnaryOp, MemWidth as DecodeMemWidth, MiscOp, Opcode,
-    SyncOp, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT, RD_SHIFT, RS1_SHIFT, RS2_SHIFT,
+    CmpOp, ControlOp, FUnaryOp, MemWidth as DecodeMemWidth, MiscOp, Opcode, SyncOp, MODIFIER_MASK,
+    MODIFIER_SHIFT, OPCODE_SHIFT, RD_SHIFT, RS1_SHIFT, RS2_SHIFT,
 };
 
 use crate::lir::instruction::LirInst;
@@ -31,7 +31,11 @@ impl EncodedInst {
     /// Returns the size in bytes.
     #[must_use]
     pub fn size(&self) -> usize {
-        if self.word1.is_some() { 8 } else { 4 }
+        if self.word1.is_some() {
+            8
+        } else {
+            4
+        }
     }
 
     /// Encode to bytes (little-endian).
@@ -55,83 +59,271 @@ pub type RegMap = std::collections::HashMap<VReg, PhysReg>;
 #[must_use]
 pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
     match inst {
-        LirInst::Iadd { dest, src1, src2 } => encode_alu3(Opcode::Iadd, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Isub { dest, src1, src2 } => encode_alu3(Opcode::Isub, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Imul { dest, src1, src2 } => encode_alu3(Opcode::Imul, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Idiv { dest, src1, src2 } => encode_alu3(Opcode::Idiv, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Imod { dest, src1, src2 } => encode_alu3(Opcode::Imod, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Ineg { dest, src } => encode_alu2(Opcode::Ineg, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fadd { dest, src1, src2 } => encode_alu3(Opcode::Fadd, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Fsub { dest, src1, src2 } => encode_alu3(Opcode::Fsub, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Fmul { dest, src1, src2 } => encode_alu3(Opcode::Fmul, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Fdiv { dest, src1, src2 } => encode_alu3(Opcode::Fdiv, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Fma { dest, src1, src2, src3 } => {
-            let word0 = encode_base_word(Opcode::Fma, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map), 0);
+        LirInst::Iadd { dest, src1, src2 } => encode_alu3(
+            Opcode::Iadd,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Isub { dest, src1, src2 } => encode_alu3(
+            Opcode::Isub,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Imul { dest, src1, src2 } => encode_alu3(
+            Opcode::Imul,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Idiv { dest, src1, src2 } => encode_alu3(
+            Opcode::Idiv,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Imod { dest, src1, src2 } => encode_alu3(
+            Opcode::Imod,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Ineg { dest, src } => {
+            encode_alu2(Opcode::Ineg, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fadd { dest, src1, src2 } => encode_alu3(
+            Opcode::Fadd,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Fsub { dest, src1, src2 } => encode_alu3(
+            Opcode::Fsub,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Fmul { dest, src1, src2 } => encode_alu3(
+            Opcode::Fmul,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Fdiv { dest, src1, src2 } => encode_alu3(
+            Opcode::Fdiv,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Fma {
+            dest,
+            src1,
+            src2,
+            src3,
+        } => {
+            let word0 = encode_base_word(
+                Opcode::Fma,
+                reg(dest, reg_map),
+                reg(src1, reg_map),
+                reg(src2, reg_map),
+                0,
+            );
             let word1 = u32::from(reg(src3, reg_map)) << 27;
             EncodedInst {
                 word0,
                 word1: Some(word1),
             }
         }
-        LirInst::Fneg { dest, src } => encode_alu2(Opcode::Fneg, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fabs { dest, src } => encode_alu2(Opcode::Fabs, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fsqrt { dest, src } => encode_alu2(Opcode::Fsqrt, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fsin { dest, src } => encode_funary(FUnaryOp::Fsin, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fcos { dest, src } => encode_funary(FUnaryOp::Fcos, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fexp2 { dest, src } => encode_funary(FUnaryOp::Fexp2, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Flog2 { dest, src } => encode_funary(FUnaryOp::Flog2, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Fmin { dest, src1, src2 } => encode_alu3(Opcode::Fmin, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Fmax { dest, src1, src2 } => encode_alu3(Opcode::Fmax, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
+        LirInst::Fneg { dest, src } => {
+            encode_alu2(Opcode::Fneg, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fabs { dest, src } => {
+            encode_alu2(Opcode::Fabs, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fsqrt { dest, src } => {
+            encode_alu2(Opcode::Fsqrt, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fsin { dest, src } => {
+            encode_funary(FUnaryOp::Fsin, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fcos { dest, src } => {
+            encode_funary(FUnaryOp::Fcos, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fexp2 { dest, src } => {
+            encode_funary(FUnaryOp::Fexp2, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Flog2 { dest, src } => {
+            encode_funary(FUnaryOp::Flog2, reg(dest, reg_map), reg(src, reg_map))
+        }
+        LirInst::Fmin { dest, src1, src2 } => encode_alu3(
+            Opcode::Fmin,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Fmax { dest, src1, src2 } => encode_alu3(
+            Opcode::Fmax,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
         LirInst::MovImm { dest, value } => {
-            let word0 = encode_control_word(MiscOp::MovImm as u8, reg(dest, reg_map), 0, 0) | MISC_OP_FLAG;
+            let word0 =
+                encode_control_word(MiscOp::MovImm as u8, reg(dest, reg_map), 0, 0) | MISC_OP_FLAG;
             EncodedInst {
                 word0,
                 word1: Some(*value),
             }
         }
         LirInst::MovReg { dest, src } => {
-            let word0 = encode_control_word(MiscOp::Mov as u8, reg(dest, reg_map), reg(src, reg_map), 0) | MISC_OP_FLAG;
-            EncodedInst {
-                word0,
-                word1: None,
-            }
+            let word0 =
+                encode_control_word(MiscOp::Mov as u8, reg(dest, reg_map), reg(src, reg_map), 0)
+                    | MISC_OP_FLAG;
+            EncodedInst { word0, word1: None }
         }
         LirInst::MovSr { dest, sr } => {
-            let word0 = encode_control_word(MiscOp::MovSr as u8, reg(dest, reg_map), sr.index(), 0) | MISC_OP_FLAG;
-            EncodedInst {
-                word0,
-                word1: None,
-            }
+            let word0 = encode_control_word(MiscOp::MovSr as u8, reg(dest, reg_map), sr.index(), 0)
+                | MISC_OP_FLAG;
+            EncodedInst { word0, word1: None }
         }
-        LirInst::And { dest, src1, src2 } => encode_alu3(Opcode::And, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Or { dest, src1, src2 } => encode_alu3(Opcode::Or, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Xor { dest, src1, src2 } => encode_alu3(Opcode::Xor, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Not { dest, src } => encode_alu2(Opcode::Not, reg(dest, reg_map), reg(src, reg_map)),
-        LirInst::Shl { dest, src1, src2 } => encode_alu3(Opcode::Shl, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Shr { dest, src1, src2 } => encode_alu3(Opcode::Shr, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::Sar { dest, src1, src2 } => encode_alu3(Opcode::Sar, reg(dest, reg_map), reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::LocalLoad { dest, addr, width } => {
-            encode_mem(Opcode::LocalLoad, reg(dest, reg_map), reg(addr, reg_map), 0, lir_width_to_decode(*width))
+        LirInst::And { dest, src1, src2 } => encode_alu3(
+            Opcode::And,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Or { dest, src1, src2 } => encode_alu3(
+            Opcode::Or,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Xor { dest, src1, src2 } => encode_alu3(
+            Opcode::Xor,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Not { dest, src } => {
+            encode_alu2(Opcode::Not, reg(dest, reg_map), reg(src, reg_map))
         }
-        LirInst::LocalStore { addr, value, width } => {
-            encode_mem(Opcode::LocalStore, 0, reg(addr, reg_map), reg(value, reg_map), lir_width_to_decode(*width))
-        }
-        LirInst::DeviceLoad { dest, addr, width } => {
-            encode_mem(Opcode::DeviceLoad, reg(dest, reg_map), reg(addr, reg_map), 0, lir_width_to_decode(*width))
-        }
-        LirInst::DeviceStore { addr, value, width } => {
-            encode_mem(Opcode::DeviceStore, 0, reg(addr, reg_map), reg(value, reg_map), lir_width_to_decode(*width))
-        }
-        LirInst::IcmpEq { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Eq, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::IcmpNe { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Ne, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::IcmpLt { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Lt, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::IcmpLe { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Le, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::IcmpGt { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Gt, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::IcmpGe { dest, src1, src2 } => encode_cmp(Opcode::Icmp, CmpOp::Ge, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::UcmpLt { dest, src1, src2 } => encode_cmp(Opcode::Ucmp, CmpOp::Lt, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::FcmpEq { dest, src1, src2 } => encode_cmp(Opcode::Fcmp, CmpOp::Eq, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::FcmpLt { dest, src1, src2 } => encode_cmp(Opcode::Fcmp, CmpOp::Lt, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
-        LirInst::FcmpGt { dest, src1, src2 } => encode_cmp(Opcode::Fcmp, CmpOp::Gt, dest.0, reg(src1, reg_map), reg(src2, reg_map)),
+        LirInst::Shl { dest, src1, src2 } => encode_alu3(
+            Opcode::Shl,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Shr { dest, src1, src2 } => encode_alu3(
+            Opcode::Shr,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::Sar { dest, src1, src2 } => encode_alu3(
+            Opcode::Sar,
+            reg(dest, reg_map),
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::LocalLoad { dest, addr, width } => encode_mem(
+            Opcode::LocalLoad,
+            reg(dest, reg_map),
+            reg(addr, reg_map),
+            0,
+            lir_width_to_decode(*width),
+        ),
+        LirInst::LocalStore { addr, value, width } => encode_mem(
+            Opcode::LocalStore,
+            0,
+            reg(addr, reg_map),
+            reg(value, reg_map),
+            lir_width_to_decode(*width),
+        ),
+        LirInst::DeviceLoad { dest, addr, width } => encode_mem(
+            Opcode::DeviceLoad,
+            reg(dest, reg_map),
+            reg(addr, reg_map),
+            0,
+            lir_width_to_decode(*width),
+        ),
+        LirInst::DeviceStore { addr, value, width } => encode_mem(
+            Opcode::DeviceStore,
+            0,
+            reg(addr, reg_map),
+            reg(value, reg_map),
+            lir_width_to_decode(*width),
+        ),
+        LirInst::IcmpEq { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Eq,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::IcmpNe { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Ne,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::IcmpLt { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Lt,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::IcmpLe { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Le,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::IcmpGt { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Gt,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::IcmpGe { dest, src1, src2 } => encode_cmp(
+            Opcode::Icmp,
+            CmpOp::Ge,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::UcmpLt { dest, src1, src2 } => encode_cmp(
+            Opcode::Ucmp,
+            CmpOp::Lt,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::FcmpEq { dest, src1, src2 } => encode_cmp(
+            Opcode::Fcmp,
+            CmpOp::Eq,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::FcmpLt { dest, src1, src2 } => encode_cmp(
+            Opcode::Fcmp,
+            CmpOp::Lt,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
+        LirInst::FcmpGt { dest, src1, src2 } => encode_cmp(
+            Opcode::Fcmp,
+            CmpOp::Gt,
+            dest.0,
+            reg(src1, reg_map),
+            reg(src2, reg_map),
+        ),
         LirInst::CvtF32I32 { dest, src } => {
             let word0 = encode_base_word(Opcode::Cvt, reg(dest, reg_map), reg(src, reg_map), 0, 0);
             EncodedInst { word0, word1: None }

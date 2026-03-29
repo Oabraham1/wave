@@ -39,11 +39,7 @@ impl Pass for ConstantFold {
                         }
                     }
                     MirInst::BinOp {
-                        dest,
-                        op,
-                        lhs,
-                        rhs,
-                        ..
+                        dest, op, lhs, rhs, ..
                     } => {
                         if let (Some(&l), Some(&r)) = (constants.get(lhs), constants.get(rhs)) {
                             if let Some(result) = fold_binop(*op, l, r) {

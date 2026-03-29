@@ -22,28 +22,56 @@ struct Args {
     #[arg(help = "WBIN binary file to execute")]
     binary: PathBuf,
 
-    #[arg(long, value_name = "X,Y,Z", default_value = "1,1,1", help = "Grid dimensions")]
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        default_value = "1,1,1",
+        help = "Grid dimensions"
+    )]
     grid: String,
 
-    #[arg(long, value_name = "X,Y,Z", default_value = "32,1,1", help = "Workgroup dimensions")]
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        default_value = "32,1,1",
+        help = "Workgroup dimensions"
+    )]
     workgroup: String,
 
     #[arg(long, default_value = "32", help = "Registers per thread")]
     registers: u32,
 
-    #[arg(long, value_name = "BYTES", default_value = "16384", help = "Local memory size")]
+    #[arg(
+        long,
+        value_name = "BYTES",
+        default_value = "16384",
+        help = "Local memory size"
+    )]
     local_memory: usize,
 
-    #[arg(long, value_name = "BYTES", default_value = "1048576", help = "Device memory size")]
+    #[arg(
+        long,
+        value_name = "BYTES",
+        default_value = "1048576",
+        help = "Device memory size"
+    )]
     device_memory: usize,
 
-    #[arg(long, value_name = "OFFSET:FILE", help = "Load file into device memory at offset")]
+    #[arg(
+        long,
+        value_name = "OFFSET:FILE",
+        help = "Load file into device memory at offset"
+    )]
     arg: Vec<String>,
 
     #[arg(long, help = "Print register state after execution")]
     dump_regs: bool,
 
-    #[arg(long, value_name = "START:END", help = "Hex dump device memory range after execution")]
+    #[arg(
+        long,
+        value_name = "START:END",
+        help = "Hex dump device memory range after execution"
+    )]
     dump_memory: Option<String>,
 
     #[arg(long, help = "Print execution statistics")]
@@ -55,19 +83,60 @@ struct Args {
     #[arg(long, default_value = "32", help = "Wave width")]
     wave_width: u32,
 
-    #[arg(long, default_value = "10000000", help = "Maximum instructions to execute (0 = unlimited)")]
+    #[arg(
+        long,
+        default_value = "10000000",
+        help = "Maximum instructions to execute (0 = unlimited)"
+    )]
     max_instructions: u64,
+
+    #[arg(
+        long,
+        value_name = "REG:VALUE",
+        help = "Set initial register value for all threads (e.g. 0:4096)"
+    )]
+    set_reg: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "OFFSET:TYPE:COUNT:SCALE",
+        help = "Fill memory with iota pattern (0, scale, 2*scale, ...)"
+    )]
+    fill_iota: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "OFFSET:TYPE:COUNT",
+        help = "Fill memory region with zeros"
+    )]
+    fill_zero: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "OFFSET:COUNT",
+        help = "Dump device memory as f32 values, one per line"
+    )]
+    dump_f32: Option<String>,
 }
 
 fn parse_dimensions(s: &str) -> Result<[u32; 3], String> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 3 {
-        return Err(format!("expected 3 comma-separated values, got {}", parts.len()));
+        return Err(format!(
+            "expected 3 comma-separated values, got {}",
+            parts.len()
+        ));
     }
 
-    let x = parts[0].parse::<u32>().map_err(|e| format!("invalid x: {e}"))?;
-    let y = parts[1].parse::<u32>().map_err(|e| format!("invalid y: {e}"))?;
-    let z = parts[2].parse::<u32>().map_err(|e| format!("invalid z: {e}"))?;
+    let x = parts[0]
+        .parse::<u32>()
+        .map_err(|e| format!("invalid x: {e}"))?;
+    let y = parts[1]
+        .parse::<u32>()
+        .map_err(|e| format!("invalid y: {e}"))?;
+    let z = parts[2]
+        .parse::<u32>()
+        .map_err(|e| format!("invalid z: {e}"))?;
 
     Ok([x, y, z])
 }
@@ -106,6 +175,27 @@ fn parse_memory_range(s: &str) -> Result<(u64, u64), String> {
     }
 
     Ok((start, end))
+}
+
+fn parse_set_reg(spec: &str) -> Result<(u8, u32), String> {
+    let parts: Vec<&str> = spec.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        return Err("expected format REG:VALUE".into());
+    }
+    let reg = parts[0]
+        .parse::<u8>()
+        .map_err(|e| format!("invalid register: {e}"))?;
+    let value = parse_offset(parts[1])? as u32;
+    Ok((reg, value))
+}
+
+fn generate_iota_f32(count: usize, scale: f32) -> Vec<u8> {
+    let mut data = Vec::with_capacity(count * 4);
+    for i in 0..count {
+        let val = i as f32 * scale;
+        data.extend_from_slice(&val.to_le_bytes());
+    }
+    data
 }
 
 fn hex_dump(data: &[u8], base_addr: u64) {
@@ -147,9 +237,18 @@ fn run() -> Result<(), EmulatorError> {
         message: format!("invalid --grid: {e}"),
     })?;
 
-    let workgroup_dim = parse_dimensions(&args.workgroup).map_err(|e| EmulatorError::InvalidBinary {
-        message: format!("invalid --workgroup: {e}"),
-    })?;
+    let workgroup_dim =
+        parse_dimensions(&args.workgroup).map_err(|e| EmulatorError::InvalidBinary {
+            message: format!("invalid --workgroup: {e}"),
+        })?;
+
+    let mut initial_registers = Vec::new();
+    for spec in &args.set_reg {
+        let (reg, value) = parse_set_reg(spec).map_err(|e| EmulatorError::InvalidBinary {
+            message: format!("invalid --set-reg: {e}"),
+        })?;
+        initial_registers.push((reg, value));
+    }
 
     let config = EmulatorConfig {
         grid_dim,
@@ -161,25 +260,80 @@ fn run() -> Result<(), EmulatorError> {
         trace_enabled: args.trace,
         f64_enabled: false,
         max_instructions: args.max_instructions,
+        initial_registers,
     };
 
     let binary = load_binary_file(&args.binary)?;
     let mut emulator = Emulator::new(config);
     emulator.load_binary(&binary)?;
 
-    for arg_spec in &args.arg {
-        let (offset, path) = parse_arg_spec(arg_spec).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("invalid --arg: {e}"),
+    // Process --fill-zero: fill memory with zeros
+    for spec in &args.fill_zero {
+        let parts: Vec<&str> = spec.split(':').collect();
+        if parts.len() != 3 {
+            return Err(EmulatorError::InvalidBinary {
+                message: format!("--fill-zero expects OFFSET:TYPE:COUNT, got '{spec}'"),
+            });
+        }
+        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
+            message: format!("--fill-zero offset: {e}"),
         })?;
+        // parts[1] is type (f32/u32) — both are 4 bytes
+        let count = parts[2]
+            .parse::<usize>()
+            .map_err(|e| EmulatorError::InvalidBinary {
+                message: format!("--fill-zero count: {e}"),
+            })?;
+        let data = vec![0u8; count * 4];
+        emulator.load_device_memory(offset, &data)?;
+    }
+
+    // Process --fill-iota: fill memory with scaled iota pattern
+    for spec in &args.fill_iota {
+        let parts: Vec<&str> = spec.split(':').collect();
+        if parts.len() < 3 || parts.len() > 4 {
+            return Err(EmulatorError::InvalidBinary {
+                message: format!("--fill-iota expects OFFSET:TYPE:COUNT[:SCALE], got '{spec}'"),
+            });
+        }
+        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
+            message: format!("--fill-iota offset: {e}"),
+        })?;
+        // parts[1] is type (f32/u32)
+        let count = parts[2]
+            .parse::<usize>()
+            .map_err(|e| EmulatorError::InvalidBinary {
+                message: format!("--fill-iota count: {e}"),
+            })?;
+        let scale: f32 = if parts.len() == 4 {
+            parts[3]
+                .parse::<f32>()
+                .map_err(|e| EmulatorError::InvalidBinary {
+                    message: format!("--fill-iota scale: {e}"),
+                })?
+        } else {
+            1.0
+        };
+        let data = generate_iota_f32(count, scale);
+        emulator.load_device_memory(offset, &data)?;
+    }
+
+    // Process --arg: load files into device memory
+    for arg_spec in &args.arg {
+        let (offset, path) =
+            parse_arg_spec(arg_spec).map_err(|e| EmulatorError::InvalidBinary {
+                message: format!("invalid --arg: {e}"),
+            })?;
 
         let mut file = File::open(&path).map_err(|e| EmulatorError::IoError {
             message: format!("failed to open {}: {}", path.display(), e),
         })?;
 
         let mut data = Vec::new();
-        file.read_to_end(&mut data).map_err(|e| EmulatorError::IoError {
-            message: format!("failed to read {}: {}", path.display(), e),
-        })?;
+        file.read_to_end(&mut data)
+            .map_err(|e| EmulatorError::IoError {
+                message: format!("failed to read {}: {}", path.display(), e),
+            })?;
 
         emulator.load_device_memory(offset, &data)?;
     }
@@ -191,15 +345,46 @@ fn run() -> Result<(), EmulatorError> {
     }
 
     if let Some(range_str) = &args.dump_memory {
-        let (start, end) = parse_memory_range(range_str).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("invalid --dump-memory: {e}"),
-        })?;
+        let (start, end) =
+            parse_memory_range(range_str).map_err(|e| EmulatorError::InvalidBinary {
+                message: format!("invalid --dump-memory: {e}"),
+            })?;
 
         let len = (end - start) as usize;
         let data = emulator.read_device_memory(start, len)?;
 
         println!("Device memory 0x{start:08x}-0x{end:08x}:");
         hex_dump(&data, start);
+    }
+
+    // Dump f32 values from device memory
+    if let Some(spec) = &args.dump_f32 {
+        let parts: Vec<&str> = spec.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(EmulatorError::InvalidBinary {
+                message: format!("--dump-f32 expects OFFSET:COUNT, got '{spec}'"),
+            });
+        }
+        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
+            message: format!("--dump-f32 offset: {e}"),
+        })?;
+        let count = parts[1]
+            .parse::<usize>()
+            .map_err(|e| EmulatorError::InvalidBinary {
+                message: format!("--dump-f32 count: {e}"),
+            })?;
+        let data = emulator.read_device_memory(offset, count * 4)?;
+        for i in 0..count {
+            let bytes = [
+                data[i * 4],
+                data[i * 4 + 1],
+                data[i * 4 + 2],
+                data[i * 4 + 3],
+            ];
+            let val = f32::from_le_bytes(bytes);
+            // Use Debug format to always include decimal point (e.g. "0.0" not "0")
+            println!("{val:?}");
+        }
     }
 
     if args.stats {

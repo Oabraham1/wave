@@ -9,10 +9,10 @@
 
 use std::collections::HashSet;
 
+use crate::hir::types::AddressSpace;
 use crate::mir::function::MirFunction;
 use crate::mir::instruction::MirInst;
 use crate::mir::value::ValueId;
-use crate::hir::types::AddressSpace;
 
 /// Result of escape analysis.
 pub struct EscapeInfo {

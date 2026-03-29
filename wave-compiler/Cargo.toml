@@ -5,6 +5,8 @@ edition = "2021"
 authors = ["Ojima Abraham"]
 description = "WAVE compiler - compiles high-level kernel code to WAVE ISA binaries"
 license = "Apache-2.0"
+# examples/ contains kernel source files for multiple languages, not Cargo examples
+autoexamples = false
 
 [dependencies]
 wave-decode = { path = "../wave-decode" }

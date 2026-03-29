@@ -96,11 +96,17 @@ impl ControlFlowStack {
     }
 
     pub fn find_loop(&self) -> Option<&ControlFrame> {
-        self.frames.iter().rev().find(|f| f.kind == ControlFrameKind::Loop)
+        self.frames
+            .iter()
+            .rev()
+            .find(|f| f.kind == ControlFrameKind::Loop)
     }
 
     pub fn find_loop_mut(&mut self) -> Option<&mut ControlFrame> {
-        self.frames.iter_mut().rev().find(|f| f.kind == ControlFrameKind::Loop)
+        self.frames
+            .iter_mut()
+            .rev()
+            .find(|f| f.kind == ControlFrameKind::Loop)
     }
 }
 
@@ -116,7 +122,11 @@ impl ControlFlowManager {
         }
     }
 
-    pub fn handle_if(&mut self, active_mask: u64, predicate_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
+    pub fn handle_if(
+        &mut self,
+        active_mask: u64,
+        predicate_mask: u64,
+    ) -> Result<(u64, Option<u32>), EmulatorError> {
         let then_mask = active_mask & predicate_mask;
         let else_mask = active_mask & !predicate_mask;
 
@@ -127,9 +137,12 @@ impl ControlFlowManager {
     }
 
     pub fn handle_else(&mut self, active_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
-        let frame = self.stack.top_mut().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "else without matching if".into(),
-        })?;
+        let frame = self
+            .stack
+            .top_mut()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "else without matching if".into(),
+            })?;
 
         if frame.kind != ControlFrameKind::If {
             return Err(EmulatorError::ControlFlowError {
@@ -143,9 +156,12 @@ impl ControlFlowManager {
     }
 
     pub fn handle_endif(&mut self) -> Result<u64, EmulatorError> {
-        let frame = self.stack.pop().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "endif without matching if".into(),
-        })?;
+        let frame = self
+            .stack
+            .pop()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "endif without matching if".into(),
+            })?;
 
         if frame.kind != ControlFrameKind::If {
             self.stack.push(frame)?;
@@ -163,10 +179,17 @@ impl ControlFlowManager {
         Ok(active_mask)
     }
 
-    pub fn handle_break(&mut self, active_mask: u64, predicate_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
-        let frame = self.stack.find_loop_mut().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "break outside of loop".into(),
-        })?;
+    pub fn handle_break(
+        &mut self,
+        active_mask: u64,
+        predicate_mask: u64,
+    ) -> Result<(u64, Option<u32>), EmulatorError> {
+        let frame = self
+            .stack
+            .find_loop_mut()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "break outside of loop".into(),
+            })?;
 
         let breaking_threads = active_mask & predicate_mask;
         frame.break_mask |= breaking_threads;
@@ -180,10 +203,17 @@ impl ControlFlowManager {
         }
     }
 
-    pub fn handle_continue(&mut self, active_mask: u64, predicate_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
-        let frame = self.stack.find_loop().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "continue outside of loop".into(),
-        })?;
+    pub fn handle_continue(
+        &mut self,
+        active_mask: u64,
+        predicate_mask: u64,
+    ) -> Result<(u64, Option<u32>), EmulatorError> {
+        let frame = self
+            .stack
+            .find_loop()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "continue outside of loop".into(),
+            })?;
 
         let continuing_threads = active_mask & predicate_mask;
         let new_mask = active_mask & !continuing_threads;
@@ -195,12 +225,18 @@ impl ControlFlowManager {
         }
     }
 
-    pub fn handle_endloop(&mut self, active_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
+    pub fn handle_endloop(
+        &mut self,
+        active_mask: u64,
+    ) -> Result<(u64, Option<u32>), EmulatorError> {
         let _ = active_mask;
 
-        let frame = self.stack.top_mut().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "endloop without matching loop".into(),
-        })?;
+        let frame = self
+            .stack
+            .top_mut()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "endloop without matching loop".into(),
+            })?;
 
         if frame.kind != ControlFrameKind::Loop {
             return Err(EmulatorError::ControlFlowError {
@@ -214,17 +250,23 @@ impl ControlFlowManager {
             let loop_start = frame.loop_start_pc;
             Ok((remaining_mask, Some(loop_start)))
         } else {
-            let frame = self.stack.pop().ok_or_else(|| EmulatorError::ControlFlowError {
-                message: "endloop without matching loop".into(),
-            })?;
+            let frame = self
+                .stack
+                .pop()
+                .ok_or_else(|| EmulatorError::ControlFlowError {
+                    message: "endloop without matching loop".into(),
+                })?;
             Ok((frame.entry_mask, None))
         }
     }
 
     pub fn pop_loop(&mut self) -> Result<u64, EmulatorError> {
-        let frame = self.stack.pop().ok_or_else(|| EmulatorError::ControlFlowError {
-            message: "endloop without matching loop".into(),
-        })?;
+        let frame = self
+            .stack
+            .pop()
+            .ok_or_else(|| EmulatorError::ControlFlowError {
+                message: "endloop without matching loop".into(),
+            })?;
 
         if frame.kind != ControlFrameKind::Loop {
             self.stack.push(frame)?;

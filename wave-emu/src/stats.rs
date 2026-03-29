@@ -127,20 +127,11 @@ impl TraceWriter {
         Self { enabled }
     }
 
-    pub fn trace_instruction(
-        &self,
-        workgroup_id: [u32; 3],
-        wave_id: u32,
-        pc: u32,
-        disasm: &str,
-    ) {
+    pub fn trace_instruction(&self, workgroup_id: [u32; 3], wave_id: u32, pc: u32, disasm: &str) {
         if self.enabled {
             eprintln!(
                 "wg({},{},{}) wave[{}] pc=0x{:04x}: {}",
-                workgroup_id[0], workgroup_id[1], workgroup_id[2],
-                wave_id,
-                pc,
-                disasm
+                workgroup_id[0], workgroup_id[1], workgroup_id[2], wave_id, pc, disasm
             );
         }
     }
@@ -168,12 +159,28 @@ impl std::fmt::Display for ExecutionStats {
         writeln!(f, "    Atomic ops:          {}", self.atomic_ops)?;
         writeln!(f)?;
         writeln!(f, "  Device memory:")?;
-        writeln!(f, "    Loads:  {} ({} bytes)", self.device_loads, self.device_load_bytes)?;
-        writeln!(f, "    Stores: {} ({} bytes)", self.device_stores, self.device_store_bytes)?;
+        writeln!(
+            f,
+            "    Loads:  {} ({} bytes)",
+            self.device_loads, self.device_load_bytes
+        )?;
+        writeln!(
+            f,
+            "    Stores: {} ({} bytes)",
+            self.device_stores, self.device_store_bytes
+        )?;
         writeln!(f)?;
         writeln!(f, "  Local memory:")?;
-        writeln!(f, "    Loads:  {} ({} bytes)", self.local_loads, self.local_load_bytes)?;
-        writeln!(f, "    Stores: {} ({} bytes)", self.local_stores, self.local_store_bytes)?;
+        writeln!(
+            f,
+            "    Loads:  {} ({} bytes)",
+            self.local_loads, self.local_load_bytes
+        )?;
+        writeln!(
+            f,
+            "    Stores: {} ({} bytes)",
+            self.local_stores, self.local_store_bytes
+        )?;
         writeln!(f)?;
         writeln!(f, "  Barriers: {}", self.barriers)?;
         writeln!(f, "  Divergent branches: {}", self.divergent_branches)?;

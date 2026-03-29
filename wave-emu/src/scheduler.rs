@@ -46,9 +46,18 @@ impl Scheduler {
     }
 
     pub fn count_by_status(&self, waves: &[Wave]) -> (usize, usize, usize) {
-        let ready = waves.iter().filter(|w| w.status == WaveStatus::Ready).count();
-        let suspended = waves.iter().filter(|w| w.status == WaveStatus::Suspended).count();
-        let halted = waves.iter().filter(|w| w.status == WaveStatus::Halted).count();
+        let ready = waves
+            .iter()
+            .filter(|w| w.status == WaveStatus::Ready)
+            .count();
+        let suspended = waves
+            .iter()
+            .filter(|w| w.status == WaveStatus::Suspended)
+            .count();
+        let halted = waves
+            .iter()
+            .filter(|w| w.status == WaveStatus::Halted)
+            .count();
         (ready, suspended, halted)
     }
 

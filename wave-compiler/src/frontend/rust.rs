@@ -25,9 +25,7 @@ pub fn parse_rust(source: &str) -> Result<Kernel, CompileError> {
 
     for item in &file.items {
         if let syn::Item::Fn(func) = item {
-            let has_kernel_attr = func.attrs.iter().any(|a| {
-                a.path().is_ident("kernel")
-            });
+            let has_kernel_attr = func.attrs.iter().any(|a| a.path().is_ident("kernel"));
             if has_kernel_attr || func.attrs.is_empty() {
                 return lower_function(func);
             }
@@ -70,7 +68,12 @@ fn lower_function(func: &syn::ItemFn) -> Result<Kernel, CompileError> {
 fn lower_type(ty: &syn::Type) -> (Type, AddressSpace) {
     match ty {
         syn::Type::Path(path) => {
-            let ident = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+            let ident = path
+                .path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string())
+                .unwrap_or_default();
             match ident.as_str() {
                 "u32" => (Type::U32, AddressSpace::Private),
                 "i32" => (Type::I32, AddressSpace::Private),
@@ -140,15 +143,32 @@ fn lower_stmt_expr(expr: &syn::Expr) -> Result<Option<Stmt>, CompileError> {
         syn::Expr::Assign(assign) => {
             let value = lower_expr(&assign.right)?;
             if let syn::Expr::Path(path) = &*assign.left {
-                let target = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+                let target = path
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default();
                 Ok(Some(Stmt::Assign { target, value }))
             } else if let syn::Expr::Index(idx) = &*assign.left {
                 let base = lower_expr(&idx.expr)?;
                 let index = lower_expr(&idx.index)?;
                 let elem_size = Expr::Literal(Literal::Int(4));
-                let offset = Expr::BinOp { op: BinOp::Mul, lhs: Box::new(index), rhs: Box::new(elem_size) };
-                let addr = Expr::BinOp { op: BinOp::Add, lhs: Box::new(base), rhs: Box::new(offset) };
-                Ok(Some(Stmt::Store { addr, value, space: AddressSpace::Device }))
+                let offset = Expr::BinOp {
+                    op: BinOp::Mul,
+                    lhs: Box::new(index),
+                    rhs: Box::new(elem_size),
+                };
+                let addr = Expr::BinOp {
+                    op: BinOp::Add,
+                    lhs: Box::new(base),
+                    rhs: Box::new(offset),
+                };
+                Ok(Some(Stmt::Store {
+                    addr,
+                    value,
+                    space: AddressSpace::Device,
+                }))
             } else {
                 Ok(None)
             }
@@ -173,10 +193,17 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
                 Ok(Expr::Literal(Literal::Float(v)))
             }
             syn::Lit::Bool(b) => Ok(Expr::Literal(Literal::Bool(b.value))),
-            _ => Err(CompileError::ParseError { message: "unsupported literal".into() }),
+            _ => Err(CompileError::ParseError {
+                message: "unsupported literal".into(),
+            }),
         },
         syn::Expr::Path(path) => {
-            let name = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+            let name = path
+                .path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string())
+                .unwrap_or_default();
             Ok(Expr::Var(name))
         }
         syn::Expr::Binary(bin) => {
@@ -199,13 +226,26 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
                 syn::BinOp::BitXor(_) => BinOp::BitXor,
                 syn::BinOp::Shl(_) => BinOp::Shl,
                 syn::BinOp::Shr(_) => BinOp::Shr,
-                _ => return Err(CompileError::ParseError { message: "unsupported binary op".into() }),
+                _ => {
+                    return Err(CompileError::ParseError {
+                        message: "unsupported binary op".into(),
+                    })
+                }
             };
-            Ok(Expr::BinOp { op, lhs: Box::new(lhs), rhs: Box::new(rhs) })
+            Ok(Expr::BinOp {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
         }
         syn::Expr::Call(call) => {
             if let syn::Expr::Path(path) = &*call.func {
-                let func_name = path.path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default();
+                let func_name = path
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default();
                 match func_name.as_str() {
                     "thread_id" => Ok(Expr::ThreadId(Dimension::X)),
                     "workgroup_id" => Ok(Expr::WorkgroupId(Dimension::X)),
@@ -214,7 +254,8 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
                     "wave_width" => Ok(Expr::WaveWidth),
                     "barrier" => Ok(Expr::Literal(Literal::Int(0))),
                     _ => {
-                        let args: Vec<Expr> = call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
+                        let args: Vec<Expr> =
+                            call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
                         Ok(Expr::Call {
                             func: match func_name.as_str() {
                                 "sqrt" => crate::hir::expr::BuiltinFunc::Sqrt,
@@ -223,28 +264,45 @@ fn lower_expr(expr: &syn::Expr) -> Result<Expr, CompileError> {
                                 "abs" => crate::hir::expr::BuiltinFunc::Abs,
                                 "min" => crate::hir::expr::BuiltinFunc::Min,
                                 "max" => crate::hir::expr::BuiltinFunc::Max,
-                                _ => return Err(CompileError::ParseError { message: format!("unknown function: {func_name}") }),
+                                _ => {
+                                    return Err(CompileError::ParseError {
+                                        message: format!("unknown function: {func_name}"),
+                                    })
+                                }
                             },
                             args,
                         })
                     }
                 }
             } else {
-                Err(CompileError::ParseError { message: "unsupported call".into() })
+                Err(CompileError::ParseError {
+                    message: "unsupported call".into(),
+                })
             }
         }
         syn::Expr::Index(idx) => {
             let base = lower_expr(&idx.expr)?;
             let index = lower_expr(&idx.index)?;
-            Ok(Expr::Index { base: Box::new(base), index: Box::new(index) })
+            Ok(Expr::Index {
+                base: Box::new(base),
+                index: Box::new(index),
+            })
         }
         syn::Expr::Paren(paren) => lower_expr(&paren.expr),
         syn::Expr::Unary(unary) => {
             let operand = lower_expr(&unary.expr)?;
             match unary.op {
-                syn::UnOp::Neg(_) => Ok(Expr::UnaryOp { op: crate::hir::expr::UnaryOp::Neg, operand: Box::new(operand) }),
-                syn::UnOp::Not(_) => Ok(Expr::UnaryOp { op: crate::hir::expr::UnaryOp::Not, operand: Box::new(operand) }),
-                _ => Err(CompileError::ParseError { message: "unsupported unary op".into() }),
+                syn::UnOp::Neg(_) => Ok(Expr::UnaryOp {
+                    op: crate::hir::expr::UnaryOp::Neg,
+                    operand: Box::new(operand),
+                }),
+                syn::UnOp::Not(_) => Ok(Expr::UnaryOp {
+                    op: crate::hir::expr::UnaryOp::Not,
+                    operand: Box::new(operand),
+                }),
+                _ => Err(CompileError::ParseError {
+                    message: "unsupported unary op".into(),
+                }),
             }
         }
         _ => Err(CompileError::ParseError {
