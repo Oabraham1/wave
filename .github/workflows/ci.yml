@@ -14,18 +14,43 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Check formatting
+      - name: Rust formatting
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
             (cd $crate && cargo fmt --check)
           done
 
-      - name: Run clippy
+      - name: Rust clippy
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
             (cd $crate && cargo clippy -- -D warnings)
           done
+
+      - name: Python lint
+        run: |
+          pip install ruff
+          cd sdk/python
+          ruff format --check src/ tests/
+          ruff check src/ tests/
+
+      - name: C++ format check
+        run: |
+          cd sdk/cpp
+          find include/ src/ tests/ -name '*.h' -o -name '*.cpp' | xargs clang-format --dry-run --Werror
+
+      - name: TypeScript lint
+        run: |
+          cd sdk/js
+          npm install
+          npx prettier --check "src/**/*.ts" "tests/**/*.ts"
+          npx tsc --noEmit
 
   build-and-test:
     needs: lint
@@ -33,16 +58,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Build all crates
+      - name: Build all Rust crates
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
             (cd $crate && cargo build --release)
           done
 
-      - name: Run unit tests
+      - name: Run Rust unit tests
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
             (cd $crate && cargo test)
           done
 
@@ -55,3 +86,24 @@ jobs:
         run: |
           chmod +x tests/ci/run_backend_tests.sh
           ./tests/ci/run_backend_tests.sh
+
+      - name: Run Python SDK tests
+        run: |
+          pip install pytest
+          cd sdk/python
+          PYTHONPATH=src python -m pytest tests/ -v
+
+      - name: Build and test C++ SDK
+        run: |
+          cd sdk/cpp
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make
+          ./test_vector_add
+
+      - name: Run JS/TS SDK tests
+        run: |
+          cd sdk/js
+          npm install
+          npx tsc
+          npx ts-node tests/test_vector_add.ts

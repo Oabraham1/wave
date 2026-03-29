@@ -1,0 +1,18 @@
+[project]
+name = "wave-gpu"
+version = "0.1.0"
+description = "Write GPU kernels in Python, run on any GPU"
+authors = [{name = "Ojima Abraham"}]
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/Oabraham1/wave"

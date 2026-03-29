@@ -1,0 +1,28 @@
+[package]
+name = "wave-runtime"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE runtime - shared core for all WAVE SDKs"
+license = "Apache-2.0"
+
+[dependencies]
+wave-compiler = { path = "../wave-compiler" }
+wave-decode = { path = "../wave-decode" }
+wave-emu = { path = "../wave-emu" }
+wave-metal = { path = "../wave-metal" }
+wave-ptx = { path = "../wave-ptx" }
+wave-hip = { path = "../wave-hip" }
+wave-sycl = { path = "../wave-sycl" }
+thiserror = "1"
+tempfile = "3"
+
+[dev-dependencies]
+wave-asm = { path = "../wave-asm" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

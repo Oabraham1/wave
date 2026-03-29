@@ -1,0 +1,22 @@
+[package]
+name = "wave-sdk"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ojima Abraham"]
+description = "WAVE SDK for Rust - write GPU kernels in Rust, run on any GPU"
+license = "Apache-2.0"
+
+[dependencies]
+wave-runtime = { path = "../../wave-runtime" }
+wave-compiler = { path = "../../wave-compiler" }
+thiserror = "1"
+
+[dev-dependencies]
+wave-asm = { path = "../../wave-asm" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

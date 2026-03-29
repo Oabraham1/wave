@@ -1,0 +1,25 @@
+{
+  "name": "wave-gpu",
+  "version": "0.1.0",
+  "description": "Write GPU kernels in TypeScript, run on any GPU",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "author": "Ojima Abraham",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Oabraham1/wave"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules tests/test_vector_add.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

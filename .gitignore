@@ -1,2 +1,22 @@
+# Rust
 target/
-*DS_Store
+*.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# C++
+sdk/cpp/build/
+
+# JavaScript/TypeScript
+node_modules/
+dist/
+sdk/js/dist/
+
+# Temp files
+*.wbin
+/tmp/
