@@ -189,8 +189,9 @@ impl MirInst {
             Self::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
             Self::UnaryOp { operand, .. } => vec![*operand],
             Self::Load { addr, .. } => vec![*addr],
-            Self::Store { addr, value, .. }
-            | Self::AtomicRmw { addr, value, .. } => vec![*addr, *value],
+            Self::Store { addr, value, .. } | Self::AtomicRmw { addr, value, .. } => {
+                vec![*addr, *value]
+            }
             Self::Call { args, .. } => args.clone(),
             Self::Cast { value, .. } => vec![*value],
             Self::Const { .. }

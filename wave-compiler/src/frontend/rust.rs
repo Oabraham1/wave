@@ -291,8 +291,7 @@ fn lower_call(call: &syn::ExprCall) -> Result<Expr, CompileError> {
             "wave_width" => Ok(Expr::WaveWidth),
             "barrier" => Ok(Expr::Literal(Literal::Int(0))),
             _ => {
-                let args: Vec<Expr> =
-                    call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
+                let args: Vec<Expr> = call.args.iter().map(lower_expr).collect::<Result<_, _>>()?;
                 Ok(Expr::Call {
                     func: match func_name.as_str() {
                         "sqrt" => crate::hir::expr::BuiltinFunc::Sqrt,

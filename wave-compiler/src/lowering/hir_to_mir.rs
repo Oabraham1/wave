@@ -254,16 +254,15 @@ impl HirToMirLowerer {
         });
 
         self.builder.switch_to_block(latch_block);
-        let current_var =
-            *self
-                .variables
-                .get(var)
-                .ok_or_else(|| CompileError::InternalError {
-                    message: "loop variable missing after body".into(),
-                })?;
-        let updated =
-            self.builder
-                .emit_binop(BinOp::Add, current_var, step_val, MirType::I32);
+        let current_var = *self
+            .variables
+            .get(var)
+            .ok_or_else(|| CompileError::InternalError {
+                message: "loop variable missing after body".into(),
+            })?;
+        let updated = self
+            .builder
+            .emit_binop(BinOp::Add, current_var, step_val, MirType::I32);
         self.variables.insert(var.to_string(), updated);
         self.builder.set_terminator(Terminator::Branch {
             target: header_block,
@@ -330,9 +329,9 @@ impl HirToMirLowerer {
                 ty: MirType::I32,
                 incoming: vec![(preheader_block, start_val), (latch_block, updated)],
             });
-            header_bb.instructions.retain(
-                |inst| !matches!(inst, MirInst::Const { dest, .. } if *dest == phi_dest),
-            );
+            header_bb
+                .instructions
+                .retain(|inst| !matches!(inst, MirInst::Const { dest, .. } if *dest == phi_dest));
 
             for (name, pre_val, phi, ty) in loop_carried {
                 let body_val = self.variables.get(name).copied().unwrap_or(*phi);

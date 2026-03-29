@@ -452,13 +452,7 @@ impl<'a> MirToLirLowerer<'a> {
         }
     }
 
-    fn lower_load(
-        &mut self,
-        dest: ValueId,
-        addr: ValueId,
-        space: AddressSpace,
-        ty: MirType,
-    ) {
+    fn lower_load(&mut self, dest: ValueId, addr: ValueId, space: AddressSpace, ty: MirType) {
         let dest_vreg = self.get_vreg(dest);
         let addr_vreg = self.get_vreg(addr);
         let width = type_to_mem_width(ty);
@@ -526,13 +520,7 @@ impl<'a> MirToLirLowerer<'a> {
         }
     }
 
-    fn lower_shuffle(
-        &mut self,
-        dest: ValueId,
-        value: ValueId,
-        lane: ValueId,
-        mode: ShuffleMode,
-    ) {
+    fn lower_shuffle(&mut self, dest: ValueId, value: ValueId, lane: ValueId, mode: ShuffleMode) {
         let dest_vreg = self.get_vreg(dest);
         let val_vreg = self.get_vreg(value);
         let lane_vreg = self.get_vreg(lane);
@@ -575,14 +563,7 @@ impl<'a> MirToLirLowerer<'a> {
         });
     }
 
-    fn lower_binop(
-        &mut self,
-        dest: ValueId,
-        op: BinOp,
-        lhs: ValueId,
-        rhs: ValueId,
-        ty: MirType,
-    ) {
+    fn lower_binop(&mut self, dest: ValueId, op: BinOp, lhs: ValueId, rhs: ValueId, ty: MirType) {
         let lhs_vreg = self.get_vreg(lhs);
         let rhs_vreg = self.get_vreg(rhs);
 
@@ -720,13 +701,7 @@ impl<'a> MirToLirLowerer<'a> {
         self.instructions.push(inst);
     }
 
-    fn lower_int_arithmetic(
-        &mut self,
-        dest_vreg: VReg,
-        op: BinOp,
-        lhs_vreg: VReg,
-        rhs_vreg: VReg,
-    ) {
+    fn lower_int_arithmetic(&mut self, dest_vreg: VReg, op: BinOp, lhs_vreg: VReg, rhs_vreg: VReg) {
         let inst = match op {
             BinOp::Sub => LirInst::Isub {
                 dest: dest_vreg,
@@ -782,13 +757,7 @@ impl<'a> MirToLirLowerer<'a> {
         self.instructions.push(inst);
     }
 
-    fn lower_unaryop(
-        &mut self,
-        dest: ValueId,
-        op: UnaryOp,
-        operand: ValueId,
-        ty: MirType,
-    ) {
+    fn lower_unaryop(&mut self, dest: ValueId, op: UnaryOp, operand: ValueId, ty: MirType) {
         let dest_vreg = self.get_vreg(dest);
         let src_vreg = self.get_vreg(operand);
         match (op, ty.is_float()) {
@@ -813,12 +782,7 @@ impl<'a> MirToLirLowerer<'a> {
         }
     }
 
-    fn lower_call(
-        &mut self,
-        dest: Option<ValueId>,
-        func: BuiltinFunc,
-        args: &[ValueId],
-    ) {
+    fn lower_call(&mut self, dest: Option<ValueId>, func: BuiltinFunc, args: &[ValueId]) {
         let dest_vreg = dest.map(|d| self.get_vreg(d));
         match func {
             BuiltinFunc::Sqrt => {

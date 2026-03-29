@@ -88,9 +88,9 @@ pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Sar { .. }
         | LirInst::CvtF32I32 { .. }
         | LirInst::CvtI32F32 { .. } => emit_alu(inst, reg_map),
-        LirInst::MovImm { .. }
-        | LirInst::MovReg { .. }
-        | LirInst::MovSr { .. } => emit_mov(inst, reg_map),
+        LirInst::MovImm { .. } | LirInst::MovReg { .. } | LirInst::MovSr { .. } => {
+            emit_mov(inst, reg_map)
+        }
         LirInst::LocalLoad { .. }
         | LirInst::LocalStore { .. }
         | LirInst::DeviceLoad { .. }
@@ -147,11 +147,13 @@ fn emit_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Shr { .. }
         | LirInst::Sar { .. } => emit_bitwise_alu(inst, reg_map),
         LirInst::CvtF32I32 { dest, src } => {
-            let word0 = encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 0);
+            let word0 =
+                encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 0);
             EncodedInst { word0, word1: None }
         }
         LirInst::CvtI32F32 { dest, src } => {
-            let word0 = encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 2);
+            let word0 =
+                encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 2);
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -335,14 +337,18 @@ fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
             }
         }
         LirInst::MovReg { dest, src } => {
-            let word0 =
-                encode_control_word(MiscOp::Mov as u8, reg(*dest, reg_map), reg(*src, reg_map), 0)
-                    | MISC_OP_FLAG;
+            let word0 = encode_control_word(
+                MiscOp::Mov as u8,
+                reg(*dest, reg_map),
+                reg(*src, reg_map),
+                0,
+            ) | MISC_OP_FLAG;
             EncodedInst { word0, word1: None }
         }
         LirInst::MovSr { dest, sr } => {
-            let word0 = encode_control_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index(), 0)
-                | MISC_OP_FLAG;
+            let word0 =
+                encode_control_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index(), 0)
+                    | MISC_OP_FLAG;
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -502,7 +508,10 @@ fn emit_control(inst: &LirInst, _reg_map: &RegMap) -> EncodedInst {
 }
 
 fn reg(vreg: VReg, map: &RegMap) -> u8 {
-    map.get(&vreg).map_or(u8::try_from(vreg.0).expect("vreg index exceeds u8"), |p| p.0)
+    map.get(&vreg)
+        .map_or(u8::try_from(vreg.0).expect("vreg index exceeds u8"), |p| {
+            p.0
+        })
 }
 
 fn encode_base_word(opcode: Opcode, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> u32 {

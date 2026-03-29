@@ -16,9 +16,18 @@ use super::instruction::MirInst;
 #[must_use]
 pub fn display_function(func: &MirFunction) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "function {} ({} params):", func.name, func.params.len());
+    let _ = writeln!(
+        out,
+        "function {} ({} params):",
+        func.name,
+        func.params.len()
+    );
     for param in &func.params {
-        let _ = writeln!(out, "  param {} : {} ({})", param.value, param.ty, param.name);
+        let _ = writeln!(
+            out,
+            "  param {} : {} ({})",
+            param.value, param.ty, param.name
+        );
     }
     out.push('\n');
     for block in &func.blocks {
