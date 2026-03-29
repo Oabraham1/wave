@@ -129,86 +129,115 @@ impl CodeGenerator {
             Operation::ImulHi { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)(((uint64_t){} * (uint64_t){}) >> 32);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imad { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = {} * {} + {};",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Idiv { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} / (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imod { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} % (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Ineg { rd, rs1 } => {
                 self.line(&format!(
                     "{} = (uint32_t)(-(int32_t){});",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::Iabs { rd, rs1 } => {
                 self.line(&format!(
                     "{} = (uint32_t)abs((int32_t){});",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::Imin { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)min((int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imax { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)max((int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Iclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = (uint32_t)clamp((int32_t){}, (int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
 
             Operation::Fadd { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) + rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fsub { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) - rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fmul { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) * rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fma { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = ri(fmaf(rf({}), rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Fdiv { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) / rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fneg { rd, rs1 } => {
@@ -220,19 +249,26 @@ impl CodeGenerator {
             Operation::Fmin { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(fminf(rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fmax { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(fmaxf(rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = ri(fminf(fmaxf(rf({}), rf({})), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Fsqrt { rd, rs1 } => {
@@ -242,13 +278,31 @@ impl CodeGenerator {
                 self.emit_funary(*op, *rd, *rs1);
             }
 
-            Operation::F16 { op, rd, rs1, rs2, rs3 } => {
+            Operation::F16 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
                 self.emit_f16(*op, *rd, *rs1, *rs2, *rs3);
             }
-            Operation::F16Packed { op, rd, rs1, rs2, rs3 } => {
+            Operation::F16Packed {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
                 self.emit_f16_packed(*op, *rd, *rs1, *rs2, *rs3);
             }
-            Operation::F64 { op, rd, rs1, rs2, rs3 } => {
+            Operation::F64 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
                 self.emit_f64(*op, *rd, *rs1, *rs2, *rs3);
             }
             Operation::F64DivSqrt { op, rd, rs1, rs2 } => {
@@ -270,22 +324,35 @@ impl CodeGenerator {
             Operation::Shl { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} << ({} & 0x1Fu);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Shr { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} >> ({} & 0x1Fu);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Sar { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} >> ({} & 0x1Fu));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
-            Operation::BitOp { op, rd, rs1, rs2, rs3, rs4 } => {
+            Operation::BitOp {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+                rs4,
+            } => {
                 self.emit_bitop(*op, *rd, *rs1, *rs2, *rs3, *rs4);
             }
 
@@ -302,7 +369,10 @@ impl CodeGenerator {
             Operation::Select { rd, ps, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} ? {} : {};",
-                    reg(*rd), pred(*ps), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    pred(*ps),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Cvt { cvt_type, rd, rs1 } => {
@@ -326,22 +396,42 @@ impl CodeGenerator {
                 self.lines(&stmts);
             }
 
-            Operation::LocalAtomic { op, rd, addr, value } => {
+            Operation::LocalAtomic {
+                op,
+                rd,
+                addr,
+                value,
+            } => {
                 let stmts = memory::emit_atomic("local_mem", *op, *rd, *addr, *value);
                 self.lines(&stmts);
             }
-            Operation::LocalAtomicCas { rd, addr, expected, desired } => {
-                let stmts =
-                    memory::emit_atomic_cas("local_mem", *rd, *addr, *expected, *desired);
+            Operation::LocalAtomicCas {
+                rd,
+                addr,
+                expected,
+                desired,
+            } => {
+                let stmts = memory::emit_atomic_cas("local_mem", *rd, *addr, *expected, *desired);
                 self.lines(&stmts);
             }
-            Operation::DeviceAtomic { op, rd, addr, value, .. } => {
+            Operation::DeviceAtomic {
+                op,
+                rd,
+                addr,
+                value,
+                ..
+            } => {
                 let stmts = memory::emit_atomic("device_mem", *op, *rd, *addr, *value);
                 self.lines(&stmts);
             }
-            Operation::DeviceAtomicCas { rd, addr, expected, desired, .. } => {
-                let stmts =
-                    memory::emit_atomic_cas("device_mem", *rd, *addr, *expected, *desired);
+            Operation::DeviceAtomicCas {
+                rd,
+                addr,
+                expected,
+                desired,
+                ..
+            } => {
+                let stmts = memory::emit_atomic_cas("device_mem", *rd, *addr, *expected, *desired);
                 self.lines(&stmts);
             }
 
@@ -478,14 +568,7 @@ impl CodeGenerator {
         self.line(&expr);
     }
 
-    fn emit_f16_packed(
-        &mut self,
-        op: F16PackedOp,
-        rd: u8,
-        rs1: u8,
-        rs2: u8,
-        rs3: Option<u8>,
-    ) {
+    fn emit_f16_packed(&mut self, op: F16PackedOp, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
         let r_d = reg(rd);
         let s1 = reg(rs1);
         let s2 = reg(rs2);
@@ -519,15 +602,9 @@ impl CodeGenerator {
         ));
 
         let result_expr = match op {
-            F64Op::Dadd => {
-                "__longlong_as_double(_ds1) + __longlong_as_double(_ds2)".to_string()
-            }
-            F64Op::Dsub => {
-                "__longlong_as_double(_ds1) - __longlong_as_double(_ds2)".to_string()
-            }
-            F64Op::Dmul => {
-                "__longlong_as_double(_ds1) * __longlong_as_double(_ds2)".to_string()
-            }
+            F64Op::Dadd => "__longlong_as_double(_ds1) + __longlong_as_double(_ds2)".to_string(),
+            F64Op::Dsub => "__longlong_as_double(_ds1) - __longlong_as_double(_ds2)".to_string(),
+            F64Op::Dmul => "__longlong_as_double(_ds1) * __longlong_as_double(_ds2)".to_string(),
             F64Op::Dma => {
                 let s3_lo = reg(rs3.unwrap_or(0));
                 let s3_hi = reg(rs3.unwrap_or(0) + 1);
@@ -572,9 +649,7 @@ impl CodeGenerator {
                 );
             }
             F64DivSqrtOp::Dsqrt => {
-                self.line(
-                    "uint64_t _dr = __double_as_longlong(sqrt(__longlong_as_double(_ds1)));",
-                );
+                self.line("uint64_t _dr = __double_as_longlong(sqrt(__longlong_as_double(_ds1)));");
             }
         }
 
@@ -704,9 +779,7 @@ impl CodeGenerator {
                 self.line(&format!(
                     "uint64_t _ds = ((uint64_t){s1_hi} << 32) | (uint64_t){r_s1};"
                 ));
-                self.line(&format!(
-                    "{r_d} = ri((float)__longlong_as_double(_ds));"
-                ));
+                self.line(&format!("{r_d} = ri((float)__longlong_as_double(_ds));"));
                 self.indent_level = self.indent_level.saturating_sub(1);
                 self.line("}");
                 return;

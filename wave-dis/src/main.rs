@@ -29,7 +29,10 @@ struct Args {
     #[arg(long, help = "Show raw hex encoding alongside assembly")]
     raw: bool,
 
-    #[arg(long = "no-directives", help = "Omit .kernel/.registers/.end directives")]
+    #[arg(
+        long = "no-directives",
+        help = "Omit .kernel/.registers/.end directives"
+    )]
     no_directives: bool,
 }
 

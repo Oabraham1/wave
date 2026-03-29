@@ -22,7 +22,10 @@ pub struct Parser {
 impl Parser {
     #[must_use]
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
-        Self { tokens, position: 0 }
+        Self {
+            tokens,
+            position: 0,
+        }
     }
 
     pub fn parse(&mut self) -> Result<Program, AssemblerError> {
@@ -47,9 +50,7 @@ impl Parser {
         match self.peek() {
             Some(Token::Directive(_)) => self.parse_directive(),
             Some(Token::Label(_)) => self.parse_label(),
-            Some(Token::Predicate { .. } | Token::Identifier(_)) => {
-                self.parse_instruction()
-            }
+            Some(Token::Predicate { .. } | Token::Identifier(_)) => self.parse_instruction(),
             Some(_) => Err(AssemblerError::UnexpectedToken {
                 expected: "directive, label, or instruction".into(),
                 span: start_span,
@@ -253,7 +254,10 @@ impl Parser {
             Some(Token::Integer(v)) => {
                 let v = *v;
                 self.advance();
-                Ok(Spanned::new(Operand::Immediate(Immediate::Integer(v)), span))
+                Ok(Spanned::new(
+                    Operand::Immediate(Immediate::Integer(v)),
+                    span,
+                ))
             }
             Some(Token::Float(v)) => {
                 let v = *v;
@@ -301,11 +305,7 @@ impl Parser {
         }
     }
 
-    fn parse_register_name(
-        &self,
-        name: &str,
-        span: Span,
-    ) -> Result<Register, AssemblerError> {
+    fn parse_register_name(&self, name: &str, span: Span) -> Result<Register, AssemblerError> {
         let (base, half) = if let Some(dot_pos) = name.find('.') {
             let (base, suffix) = name.split_at(dot_pos);
             let half = match &suffix[1..] {
@@ -339,11 +339,7 @@ impl Parser {
         })
     }
 
-    fn parse_identifier_operand(
-        &self,
-        name: &str,
-        _span: Span,
-    ) -> Result<Operand, AssemblerError> {
+    fn parse_identifier_operand(&self, name: &str, _span: Span) -> Result<Operand, AssemblerError> {
         match name {
             "wave" => Ok(Operand::Scope(Scope::Wave)),
             "workgroup" => Ok(Operand::Scope(Scope::Workgroup)),
@@ -590,10 +586,22 @@ isub r3, r4, r5
         .unwrap();
 
         assert_eq!(program.statements.len(), 4);
-        assert!(matches!(&program.statements[0].node, Statement::Directive(Directive::Kernel(_))));
-        assert!(matches!(&program.statements[1].node, Statement::Instruction(_)));
-        assert!(matches!(&program.statements[2].node, Statement::Instruction(_)));
-        assert!(matches!(&program.statements[3].node, Statement::Directive(Directive::End)));
+        assert!(matches!(
+            &program.statements[0].node,
+            Statement::Directive(Directive::Kernel(_))
+        ));
+        assert!(matches!(
+            &program.statements[1].node,
+            Statement::Instruction(_)
+        ));
+        assert!(matches!(
+            &program.statements[2].node,
+            Statement::Instruction(_)
+        ));
+        assert!(matches!(
+            &program.statements[3].node,
+            Statement::Directive(Directive::End)
+        ));
     }
 
     #[test]

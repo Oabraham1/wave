@@ -182,20 +182,14 @@ fn test_imod() {
 fn test_ineg() {
     let code = encode(0x07, 2, 1, 0, 0, 0);
     let msl = compile_instructions(&code);
-    assert!(
-        msl.contains("(uint32_t)(-(int32_t)r1)"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("(uint32_t)(-(int32_t)r1)"), "MSL: {msl}");
 }
 
 #[test]
 fn test_iabs() {
     let code = encode(0x08, 2, 1, 0, 0, 0);
     let msl = compile_instructions(&code);
-    assert!(
-        msl.contains("(uint32_t)abs((int32_t)r1)"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("(uint32_t)abs((int32_t)r1)"), "MSL: {msl}");
 }
 
 #[test]
@@ -473,7 +467,10 @@ fn test_local_load_u32() {
         msl.contains("r5 = (uint32_t)(*(threadgroup uint32_t*)(local_mem + r3));"),
         "MSL: {msl}"
     );
-    assert!(msl.contains("threadgroup uint8_t local_mem[4096];"), "MSL: {msl}");
+    assert!(
+        msl.contains("threadgroup uint8_t local_mem[4096];"),
+        "MSL: {msl}"
+    );
 }
 
 #[test]
@@ -596,10 +593,7 @@ fn test_select() {
 fn test_cvt_i32_f32() {
     let code = encode(0x2C, 2, 1, 0, 2, 0);
     let msl = compile_instructions(&code);
-    assert!(
-        msl.contains("r2 = ri((float)((int32_t)r1));"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("r2 = ri((float)((int32_t)r1));"), "MSL: {msl}");
 }
 
 #[test]
@@ -620,10 +614,7 @@ fn test_wave_shuffle() {
 fn test_wave_broadcast() {
     let code = encode(0x3E, 3, 1, 2, 4, 0);
     let msl = compile_instructions(&code);
-    assert!(
-        msl.contains("r3 = simd_broadcast(r1, r2);"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("r3 = simd_broadcast(r1, r2);"), "MSL: {msl}");
 }
 
 #[test]
@@ -679,12 +670,18 @@ fn test_register_declarations() {
     let code = encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG);
     let wbin = build_wbin("test_kernel", 4, 1024, &code);
     let msl = compile(&wbin).unwrap();
-    assert!(msl.contains("uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0;"), "MSL: {msl}");
+    assert!(
+        msl.contains("uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0;"),
+        "MSL: {msl}"
+    );
     assert!(
         msl.contains("bool p0 = false, p1 = false, p2 = false, p3 = false;"),
         "MSL: {msl}"
     );
-    assert!(msl.contains("threadgroup uint8_t local_mem[1024];"), "MSL: {msl}");
+    assert!(
+        msl.contains("threadgroup uint8_t local_mem[1024];"),
+        "MSL: {msl}"
+    );
 }
 
 #[test]
@@ -692,10 +689,7 @@ fn test_device_atomic_add() {
     let mut code = encode_with_scope(0x3D, 5, 3, 4, 0, 2, 0).to_vec();
     code.extend_from_slice(&[0u8; 4]);
     let msl = compile_instructions(&code);
-    assert!(
-        msl.contains("atomic_fetch_add_explicit"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("atomic_fetch_add_explicit"), "MSL: {msl}");
     assert!(
         msl.contains("(device atomic_uint*)(device_mem + r3)"),
         "MSL: {msl}"

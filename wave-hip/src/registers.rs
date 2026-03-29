@@ -68,7 +68,11 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
         }
     }
 
-    writeln!(out, "    bool p0 = false, p1 = false, p2 = false, p3 = false;").unwrap();
+    writeln!(
+        out,
+        "    bool p0 = false, p1 = false, p2 = false, p3 = false;"
+    )
+    .unwrap();
     writeln!(
         out,
         "    uint32_t wave_id = (threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y) / warpSize;"

@@ -123,7 +123,10 @@ fn test_reduction_with_barrier() {
     let ptx = compile(&wbin, 75).unwrap();
 
     assert!(ptx.contains(".visible .entry reduction("), "PTX: {ptx}");
-    assert!(ptx.contains(".shared .align 4 .b8 _shared_mem[4096];"), "PTX: {ptx}");
+    assert!(
+        ptx.contains(".shared .align 4 .b8 _shared_mem[4096];"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("bar.sync 0;"), "PTX: {ptx}");
     assert!(ptx.contains("st.shared.u32"), "PTX: {ptx}");
 }

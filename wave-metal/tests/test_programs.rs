@@ -139,7 +139,10 @@ fn test_reduction_with_barrier() {
     let msl = compile(&wbin).unwrap();
 
     assert!(msl.contains("kernel void reduction("), "MSL: {msl}");
-    assert!(msl.contains("threadgroup uint8_t local_mem[4096];"), "MSL: {msl}");
+    assert!(
+        msl.contains("threadgroup uint8_t local_mem[4096];"),
+        "MSL: {msl}"
+    );
     assert!(
         msl.contains("threadgroup_barrier(mem_flags::mem_threadgroup | mem_flags::mem_device);"),
         "MSL: {msl}"
@@ -202,14 +205,8 @@ fn test_helper_functions_present() {
         msl.contains("inline uint32_t ri(float f) { return as_type<uint32_t>(f); }"),
         "MSL: {msl}"
     );
-    assert!(
-        msl.contains("inline half rh(uint32_t r)"),
-        "MSL: {msl}"
-    );
-    assert!(
-        msl.contains("inline half2 rh2(uint32_t r)"),
-        "MSL: {msl}"
-    );
+    assert!(msl.contains("inline half rh(uint32_t r)"), "MSL: {msl}");
+    assert!(msl.contains("inline half2 rh2(uint32_t r)"), "MSL: {msl}");
 }
 
 #[test]

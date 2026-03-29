@@ -78,7 +78,11 @@ impl WbinWriter {
         let code_offset = header_size;
         let code_size = self.code.len() as u32;
 
-        let symbol_offset = if self.strip_symbols { 0 } else { code_offset + code_size };
+        let symbol_offset = if self.strip_symbols {
+            0
+        } else {
+            code_offset + code_size
+        };
         let symbol_size = if self.strip_symbols {
             0
         } else {
@@ -90,58 +94,84 @@ impl WbinWriter {
 
         writer
             .write_all(b"WAVE")
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&WBIN_VERSION.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&0u16.to_le_bytes()) // flags (reserved)
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&code_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&code_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&symbol_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&symbol_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&metadata_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&metadata_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         writer
             .write_all(&self.code)
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         if !self.strip_symbols {
             for kernel in &self.kernels {
                 writer
                     .write_all(kernel.name.as_bytes())
-                    .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                    .map_err(|e| AssemblerError::IoError {
+                        message: e.to_string(),
+                    })?;
                 writer
                     .write_all(&[0u8])
-                    .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                    .map_err(|e| AssemblerError::IoError {
+                        message: e.to_string(),
+                    })?;
             }
         }
 
         writer
             .write_all(&(self.kernels.len() as u32).to_le_bytes())
-            .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+            .map_err(|e| AssemblerError::IoError {
+                message: e.to_string(),
+            })?;
 
         for kernel in &self.kernels {
             let name_offset = if self.strip_symbols {
@@ -152,35 +182,51 @@ impl WbinWriter {
 
             writer
                 .write_all(&name_offset.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.register_count.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.local_memory_size.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.workgroup_size[0].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.workgroup_size[1].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.workgroup_size[2].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.code_offset.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
 
             writer
                 .write_all(&kernel.code_size.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError { message: e.to_string() })?;
+                .map_err(|e| AssemblerError::IoError {
+                    message: e.to_string(),
+                })?;
         }
 
         Ok(())
@@ -229,10 +275,7 @@ mod tests {
         writer.finish(&mut output).unwrap();
 
         assert_eq!(&output[0..4], b"WAVE");
-        assert_eq!(
-            u16::from_le_bytes([output[4], output[5]]),
-            WBIN_VERSION
-        );
+        assert_eq!(u16::from_le_bytes([output[4], output[5]]), WBIN_VERSION);
     }
 
     #[test]
@@ -312,10 +355,12 @@ mod tests {
         let mut output = Vec::new();
         writer.finish(&mut output).unwrap();
 
-        let symbol_offset = u32::from_le_bytes([output[0x10], output[0x11], output[0x12], output[0x13]]);
+        let symbol_offset =
+            u32::from_le_bytes([output[0x10], output[0x11], output[0x12], output[0x13]]);
         assert_eq!(symbol_offset, 0);
 
-        let symbol_size = u32::from_le_bytes([output[0x14], output[0x15], output[0x16], output[0x17]]);
+        let symbol_size =
+            u32::from_le_bytes([output[0x14], output[0x15], output[0x16], output[0x17]]);
         assert_eq!(symbol_size, 0);
     }
 }

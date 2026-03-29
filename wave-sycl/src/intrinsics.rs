@@ -53,14 +53,10 @@ pub fn emit_wave_reduce(op: WaveReduceType, rd: u8, rs1: u8) -> String {
             format!("{r_d} = reduce_over_group(sg, {r_s1}, plus<uint32_t>());")
         }
         WaveReduceType::ReduceMin => {
-            format!(
-                "{r_d} = (uint32_t)reduce_over_group(sg, (int32_t){r_s1}, minimum<int32_t>());"
-            )
+            format!("{r_d} = (uint32_t)reduce_over_group(sg, (int32_t){r_s1}, minimum<int32_t>());")
         }
         WaveReduceType::ReduceMax => {
-            format!(
-                "{r_d} = (uint32_t)reduce_over_group(sg, (int32_t){r_s1}, maximum<int32_t>());"
-            )
+            format!("{r_d} = (uint32_t)reduce_over_group(sg, (int32_t){r_s1}, maximum<int32_t>());")
         }
     }
 }

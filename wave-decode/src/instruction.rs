@@ -28,94 +28,351 @@ pub struct DecodedInstruction {
 /// All WAVE operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
-    Iadd { rd: u8, rs1: u8, rs2: u8 },
-    Isub { rd: u8, rs1: u8, rs2: u8 },
-    Imul { rd: u8, rs1: u8, rs2: u8 },
-    ImulHi { rd: u8, rs1: u8, rs2: u8 },
-    Imad { rd: u8, rs1: u8, rs2: u8, rs3: u8 },
-    Idiv { rd: u8, rs1: u8, rs2: u8 },
-    Imod { rd: u8, rs1: u8, rs2: u8 },
-    Ineg { rd: u8, rs1: u8 },
-    Iabs { rd: u8, rs1: u8 },
-    Imin { rd: u8, rs1: u8, rs2: u8 },
-    Imax { rd: u8, rs1: u8, rs2: u8 },
-    Iclamp { rd: u8, rs1: u8, rs2: u8, rs3: u8 },
+    Iadd {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Isub {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Imul {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    ImulHi {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Imad {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: u8,
+    },
+    Idiv {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Imod {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Ineg {
+        rd: u8,
+        rs1: u8,
+    },
+    Iabs {
+        rd: u8,
+        rs1: u8,
+    },
+    Imin {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Imax {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Iclamp {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: u8,
+    },
 
-    Fadd { rd: u8, rs1: u8, rs2: u8 },
-    Fsub { rd: u8, rs1: u8, rs2: u8 },
-    Fmul { rd: u8, rs1: u8, rs2: u8 },
-    Fma { rd: u8, rs1: u8, rs2: u8, rs3: u8 },
-    Fdiv { rd: u8, rs1: u8, rs2: u8 },
-    Fneg { rd: u8, rs1: u8 },
-    Fabs { rd: u8, rs1: u8 },
-    Fmin { rd: u8, rs1: u8, rs2: u8 },
-    Fmax { rd: u8, rs1: u8, rs2: u8 },
-    Fclamp { rd: u8, rs1: u8, rs2: u8, rs3: u8 },
-    Fsqrt { rd: u8, rs1: u8 },
-    FUnary { op: FUnaryOp, rd: u8, rs1: u8 },
+    Fadd {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fsub {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fmul {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fma {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: u8,
+    },
+    Fdiv {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fneg {
+        rd: u8,
+        rs1: u8,
+    },
+    Fabs {
+        rd: u8,
+        rs1: u8,
+    },
+    Fmin {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fmax {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fclamp {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: u8,
+    },
+    Fsqrt {
+        rd: u8,
+        rs1: u8,
+    },
+    FUnary {
+        op: FUnaryOp,
+        rd: u8,
+        rs1: u8,
+    },
 
-    F16 { op: F16Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
-    F16Packed { op: F16PackedOp, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
+    F16 {
+        op: F16Op,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    },
+    F16Packed {
+        op: F16PackedOp,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    },
 
-    F64 { op: F64Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8> },
-    F64DivSqrt { op: F64DivSqrtOp, rd: u8, rs1: u8, rs2: Option<u8> },
+    F64 {
+        op: F64Op,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    },
+    F64DivSqrt {
+        op: F64DivSqrtOp,
+        rd: u8,
+        rs1: u8,
+        rs2: Option<u8>,
+    },
 
-    And { rd: u8, rs1: u8, rs2: u8 },
-    Or { rd: u8, rs1: u8, rs2: u8 },
-    Xor { rd: u8, rs1: u8, rs2: u8 },
-    Not { rd: u8, rs1: u8 },
-    Shl { rd: u8, rs1: u8, rs2: u8 },
-    Shr { rd: u8, rs1: u8, rs2: u8 },
-    Sar { rd: u8, rs1: u8, rs2: u8 },
-    BitOp { op: BitOpType, rd: u8, rs1: u8, rs2: Option<u8>, rs3: Option<u8>, rs4: Option<u8> },
+    And {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Or {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Xor {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Not {
+        rd: u8,
+        rs1: u8,
+    },
+    Shl {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Shr {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Sar {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    BitOp {
+        op: BitOpType,
+        rd: u8,
+        rs1: u8,
+        rs2: Option<u8>,
+        rs3: Option<u8>,
+        rs4: Option<u8>,
+    },
 
-    Icmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
-    Ucmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
-    Fcmp { op: CmpOp, pd: u8, rs1: u8, rs2: u8 },
+    Icmp {
+        op: CmpOp,
+        pd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Ucmp {
+        op: CmpOp,
+        pd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Fcmp {
+        op: CmpOp,
+        pd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
 
-    Select { rd: u8, ps: u8, rs1: u8, rs2: u8 },
-    Cvt { cvt_type: CvtType, rd: u8, rs1: u8 },
+    Select {
+        rd: u8,
+        ps: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    Cvt {
+        cvt_type: CvtType,
+        rd: u8,
+        rs1: u8,
+    },
 
-    LocalLoad { width: MemWidth, rd: u8, addr: u8 },
-    LocalStore { width: MemWidth, addr: u8, value: u8 },
+    LocalLoad {
+        width: MemWidth,
+        rd: u8,
+        addr: u8,
+    },
+    LocalStore {
+        width: MemWidth,
+        addr: u8,
+        value: u8,
+    },
 
-    DeviceLoad { width: MemWidth, rd: u8, addr: u8 },
-    DeviceStore { width: MemWidth, addr: u8, value: u8 },
+    DeviceLoad {
+        width: MemWidth,
+        rd: u8,
+        addr: u8,
+    },
+    DeviceStore {
+        width: MemWidth,
+        addr: u8,
+        value: u8,
+    },
 
-    LocalAtomic { op: AtomicOp, rd: Option<u8>, addr: u8, value: u8 },
-    LocalAtomicCas { rd: Option<u8>, addr: u8, expected: u8, desired: u8 },
+    LocalAtomic {
+        op: AtomicOp,
+        rd: Option<u8>,
+        addr: u8,
+        value: u8,
+    },
+    LocalAtomicCas {
+        rd: Option<u8>,
+        addr: u8,
+        expected: u8,
+        desired: u8,
+    },
 
-    DeviceAtomic { op: AtomicOp, rd: Option<u8>, addr: u8, value: u8, scope: Scope },
-    DeviceAtomicCas { rd: Option<u8>, addr: u8, expected: u8, desired: u8, scope: Scope },
+    DeviceAtomic {
+        op: AtomicOp,
+        rd: Option<u8>,
+        addr: u8,
+        value: u8,
+        scope: Scope,
+    },
+    DeviceAtomicCas {
+        rd: Option<u8>,
+        addr: u8,
+        expected: u8,
+        desired: u8,
+        scope: Scope,
+    },
 
-    WaveOp { op: WaveOpType, rd: u8, rs1: u8, rs2: Option<u8> },
-    WaveReduce { op: WaveReduceType, rd: u8, rs1: u8 },
-    WaveBallot { rd: u8, ps: u8 },
-    WaveVote { op: WaveOpType, pd: u8, ps: u8 },
+    WaveOp {
+        op: WaveOpType,
+        rd: u8,
+        rs1: u8,
+        rs2: Option<u8>,
+    },
+    WaveReduce {
+        op: WaveReduceType,
+        rd: u8,
+        rs1: u8,
+    },
+    WaveBallot {
+        rd: u8,
+        ps: u8,
+    },
+    WaveVote {
+        op: WaveOpType,
+        pd: u8,
+        ps: u8,
+    },
 
-    If { ps: u8 },
+    If {
+        ps: u8,
+    },
     Else,
     Endif,
     Loop,
-    Break { ps: u8 },
-    Continue { ps: u8 },
+    Break {
+        ps: u8,
+    },
+    Continue {
+        ps: u8,
+    },
     Endloop,
-    Call { target: u32 },
+    Call {
+        target: u32,
+    },
 
     Return,
     Halt,
     Barrier,
-    FenceAcquire { scope: Scope },
-    FenceRelease { scope: Scope },
-    FenceAcqRel { scope: Scope },
+    FenceAcquire {
+        scope: Scope,
+    },
+    FenceRelease {
+        scope: Scope,
+    },
+    FenceAcqRel {
+        scope: Scope,
+    },
     Wait,
     Nop,
 
-    Mov { rd: u8, rs1: u8 },
-    MovImm { rd: u8, imm: u32 },
-    MovSr { rd: u8, sr_index: u8 },
+    Mov {
+        rd: u8,
+        rs1: u8,
+    },
+    MovImm {
+        rd: u8,
+        imm: u32,
+    },
+    MovSr {
+        rd: u8,
+        sr_index: u8,
+    },
 
-    Unknown { opcode: u8, word0: u32, word1: Option<u32> },
+    Unknown {
+        opcode: u8,
+        word0: u32,
+        word1: Option<u32>,
+    },
 }
 
 impl DecodedInstruction {

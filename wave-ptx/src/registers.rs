@@ -85,7 +85,11 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
     writeln!(out, "    .reg .pred %pt<2>;").unwrap();
 
     if local_mem_size > 0 {
-        writeln!(out, "    .shared .align 4 .b8 _shared_mem[{local_mem_size}];").unwrap();
+        writeln!(
+            out,
+            "    .shared .align 4 .b8 _shared_mem[{local_mem_size}];"
+        )
+        .unwrap();
     }
 
     writeln!(out).unwrap();

@@ -119,7 +119,10 @@ pub struct DiagnosticEmitter<'a> {
 impl<'a> DiagnosticEmitter<'a> {
     #[must_use]
     pub fn new(source_name: &'a str, source: &'a str) -> Self {
-        Self { source_name, source }
+        Self {
+            source_name,
+            source,
+        }
     }
 
     pub fn emit_error<W: Write>(&self, error: &AssemblerError, writer: &mut W) {
@@ -143,17 +146,16 @@ impl<'a> DiagnosticEmitter<'a> {
     pub fn emit_warning<W: Write>(&self, warning: &AssemblerWarning, writer: &mut W) {
         match warning {
             AssemblerWarning::RegisterCountExceeds32 { count, span } => {
-                let report =
-                    Report::build(ReportKind::Warning, self.source_name, span.start)
-                        .with_message(format!(
-                            "register count {count} exceeds 5-bit encoding limit (32)"
-                        ))
-                        .with_label(
-                            Label::new((self.source_name, span.start..span.end))
-                                .with_color(Color::Yellow)
-                                .with_message("capped to 32 for v0.1"),
-                        )
-                        .finish();
+                let report = Report::build(ReportKind::Warning, self.source_name, span.start)
+                    .with_message(format!(
+                        "register count {count} exceeds 5-bit encoding limit (32)"
+                    ))
+                    .with_label(
+                        Label::new((self.source_name, span.start..span.end))
+                            .with_color(Color::Yellow)
+                            .with_message("capped to 32 for v0.1"),
+                    )
+                    .finish();
 
                 let _ = report.write((self.source_name, Source::from(self.source)), writer);
             }
@@ -166,9 +168,7 @@ impl<'a> DiagnosticEmitter<'a> {
                 format!("unexpected '{char}'")
             }
             AssemblerError::InvalidDirective { .. } => "invalid directive".into(),
-            AssemblerError::InvalidPredicate { .. } => {
-                "expected @pN or @!pN".into()
-            }
+            AssemblerError::InvalidPredicate { .. } => "expected @pN or @!pN".into(),
             AssemblerError::InvalidSpecialRegister { name, .. } => {
                 format!("unknown special register '{name}'")
             }

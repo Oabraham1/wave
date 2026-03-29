@@ -18,11 +18,7 @@ pub fn emit_header(sm_version: u32) -> String {
 
 #[must_use]
 pub fn emit_entry_start(name: &str) -> String {
-    let kernel_name = if name.is_empty() {
-        "wave_kernel"
-    } else {
-        name
-    };
+    let kernel_name = if name.is_empty() { "wave_kernel" } else { name };
 
     format!(
         ".visible .entry {kernel_name}(\n\

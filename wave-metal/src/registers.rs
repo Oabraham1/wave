@@ -64,8 +64,16 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
         }
     }
 
-    writeln!(out, "    bool p0 = false, p1 = false, p2 = false, p3 = false;").unwrap();
-    writeln!(out, "    uint wave_count = (tsize.x * tsize.y * tsize.z + 31u) / 32u;").unwrap();
+    writeln!(
+        out,
+        "    bool p0 = false, p1 = false, p2 = false, p3 = false;"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "    uint wave_count = (tsize.x * tsize.y * tsize.z + 31u) / 32u;"
+    )
+    .unwrap();
 
     if local_mem_size > 0 {
         writeln!(out, "    threadgroup uint8_t local_mem[{local_mem_size}];").unwrap();

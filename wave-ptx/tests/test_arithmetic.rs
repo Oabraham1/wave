@@ -30,7 +30,14 @@ fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8;
 }
 
 fn encode_predicated(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8, pred: u8, negated: bool,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    flags: u8,
+    pred: u8,
+    negated: bool,
 ) -> [u8; 4] {
     let mut word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -357,7 +364,10 @@ fn test_kernel_header() {
     assert!(ptx.contains(".reg .b32 %r<4>;"), "PTX: {ptx}");
     assert!(ptx.contains(".reg .f32 %f<4>;"), "PTX: {ptx}");
     assert!(ptx.contains(".reg .pred %p<4>;"), "PTX: {ptx}");
-    assert!(ptx.contains("ld.param.u64 %rd0, [_device_mem_ptr];"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("ld.param.u64 %rd0, [_device_mem_ptr];"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("ret;"), "PTX: {ptx}");
 }
 
@@ -374,7 +384,10 @@ fn test_shared_mem_declaration() {
     let code = halt();
     let wbin = build_wbin("test", 4, 4096, &code);
     let ptx = compile(&wbin, 75).unwrap();
-    assert!(ptx.contains(".shared .align 4 .b8 _shared_mem[4096];"), "PTX: {ptx}");
+    assert!(
+        ptx.contains(".shared .align 4 .b8 _shared_mem[4096];"),
+        "PTX: {ptx}"
+    );
 }
 
 #[test]

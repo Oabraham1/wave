@@ -197,12 +197,7 @@ impl CodeGenerator {
                     reg(*rs2)
                 ));
             }
-            Operation::Iclamp {
-                rd,
-                rs1,
-                rs2,
-                rs3,
-            } => {
+            Operation::Iclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = (uint32_t)clamp((int32_t){}, (int32_t){}, (int32_t){});",
                     reg(*rd),
@@ -275,12 +270,7 @@ impl CodeGenerator {
                     reg(*rs2)
                 ));
             }
-            Operation::Fclamp {
-                rd,
-                rs1,
-                rs2,
-                rs3,
-            } => {
+            Operation::Fclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = ri(clamp(rf({}), rf({}), rf({})));",
                     reg(*rd),
@@ -401,11 +391,7 @@ impl CodeGenerator {
                 let stmts = memory::emit_load("threadgroup", "local_mem", *width, *rd, *addr);
                 self.lines(&stmts);
             }
-            Operation::LocalStore {
-                width,
-                addr,
-                value,
-            } => {
+            Operation::LocalStore { width, addr, value } => {
                 let stmts = memory::emit_store("threadgroup", "local_mem", *width, *addr, *value);
                 self.lines(&stmts);
             }
@@ -413,13 +399,8 @@ impl CodeGenerator {
                 let stmts = memory::emit_load("device", "device_mem", *width, *rd, *addr);
                 self.lines(&stmts);
             }
-            Operation::DeviceStore {
-                width,
-                addr,
-                value,
-            } => {
-                let stmts =
-                    memory::emit_store("device", "device_mem", *width, *addr, *value);
+            Operation::DeviceStore { width, addr, value } => {
+                let stmts = memory::emit_store("device", "device_mem", *width, *addr, *value);
                 self.lines(&stmts);
             }
 
@@ -456,8 +437,7 @@ impl CodeGenerator {
                 value,
                 ..
             } => {
-                let stmts =
-                    memory::emit_atomic("device", "device_mem", *op, *rd, *addr, *value);
+                let stmts = memory::emit_atomic("device", "device_mem", *op, *rd, *addr, *value);
                 self.lines(&stmts);
             }
             Operation::DeviceAtomicCas {
@@ -538,7 +518,9 @@ impl CodeGenerator {
                     "threadgroup_barrier(mem_flags::mem_threadgroup | mem_flags::mem_device);",
                 );
             }
-            Operation::FenceAcquire { .. } | Operation::FenceRelease { .. } | Operation::FenceAcqRel { .. } => {
+            Operation::FenceAcquire { .. }
+            | Operation::FenceRelease { .. }
+            | Operation::FenceAcqRel { .. } => {
                 self.line("threadgroup_barrier(mem_flags::mem_threadgroup);");
             }
             Operation::Wait | Operation::Nop => {}
@@ -603,14 +585,7 @@ impl CodeGenerator {
         self.line(&expr);
     }
 
-    fn emit_f16_packed(
-        &mut self,
-        op: F16PackedOp,
-        rd: u8,
-        rs1: u8,
-        rs2: u8,
-        rs3: Option<u8>,
-    ) {
+    fn emit_f16_packed(&mut self, op: F16PackedOp, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
         let r_d = reg(rd);
         let h1 = format!("rh2({})", reg(rs1));
         let h2 = format!("rh2({})", reg(rs2));
@@ -727,9 +702,7 @@ impl CodeGenerator {
             BitOpType::Bfe => {
                 let r_s2 = reg(rs2.unwrap_or(0));
                 let r_s3 = reg(rs3.unwrap_or(0));
-                self.line(&format!(
-                    "{r_d} = extract_bits({r_s1}, {r_s2}, {r_s3});"
-                ));
+                self.line(&format!("{r_d} = extract_bits({r_s1}, {r_s2}, {r_s3});"));
             }
             BitOpType::Bfi => {
                 let r_s2 = reg(rs2.unwrap_or(0));
@@ -822,9 +795,7 @@ impl CodeGenerator {
                 self.line(&format!(
                     "ulong d_s1 = ((ulong){s1_hi} << 32) | (ulong){r_s1};"
                 ));
-                self.line(&format!(
-                    "{r_d} = ri((float)as_type<double>(d_s1));"
-                ));
+                self.line(&format!("{r_d} = ri((float)as_type<double>(d_s1));"));
                 self.dedent();
                 self.line("}");
                 return;

@@ -31,7 +31,13 @@ fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8;
 }
 
 fn encode_with_scope(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8, flags: u8,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    scope: u8,
+    flags: u8,
 ) -> [u8; 4] {
     let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -44,7 +50,14 @@ fn encode_with_scope(
 }
 
 fn encode_predicated(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8, pred: u8, negated: bool,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    flags: u8,
+    pred: u8,
+    negated: bool,
 ) -> [u8; 4] {
     let mut word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -143,7 +156,10 @@ fn test_iabs() {
 #[test]
 fn test_imin() {
     let s = compile_instrs(&encode(0x09, 3, 1, 2, 0, 0));
-    assert!(s.contains("sycl::min((int32_t)r1, (int32_t)r2)"), "SYCL: {s}");
+    assert!(
+        s.contains("sycl::min((int32_t)r1, (int32_t)r2)"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
@@ -221,13 +237,19 @@ fn test_mov_imm() {
 #[test]
 fn test_mov_sr_thread_id() {
     let s = compile_instrs(&encode(0x3F, 5, 0, 0, 2, MISC_OP_FLAG));
-    assert!(s.contains("r5 = (uint32_t)it.get_local_id(0);"), "SYCL: {s}");
+    assert!(
+        s.contains("r5 = (uint32_t)it.get_local_id(0);"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
 fn test_mov_sr_lane_id() {
     let s = compile_instrs(&encode(0x3F, 5, 4, 0, 2, MISC_OP_FLAG));
-    assert!(s.contains("r5 = (uint32_t)sg.get_local_id()[0];"), "SYCL: {s}");
+    assert!(
+        s.contains("r5 = (uint32_t)sg.get_local_id()[0];"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
@@ -239,7 +261,10 @@ fn test_mov_sr_workgroup_id() {
 #[test]
 fn test_mov_sr_wave_width() {
     let s = compile_instrs(&encode(0x3F, 5, 14, 0, 2, MISC_OP_FLAG));
-    assert!(s.contains("r5 = (uint32_t)sg.get_max_local_range()[0];"), "SYCL: {s}");
+    assert!(
+        s.contains("r5 = (uint32_t)sg.get_max_local_range()[0];"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
@@ -263,7 +288,10 @@ fn test_device_store_u32() {
 #[test]
 fn test_shared_load_u32() {
     let s = compile_instrs_with_slm(&encode(0x30, 5, 3, 0, 2, 0), 4096);
-    assert!(s.contains("r5 = (uint32_t)(*(uint32_t*)(lm + r3));"), "SYCL: {s}");
+    assert!(
+        s.contains("r5 = (uint32_t)(*(uint32_t*)(lm + r3));"),
+        "SYCL: {s}"
+    );
     assert!(s.contains("local_accessor"), "SYCL: {s}");
 }
 
@@ -356,19 +384,28 @@ fn test_wave_all() {
 #[test]
 fn test_wave_reduce_add() {
     let s = compile_instrs(&encode(0x3E, 3, 1, 0, 9, 0));
-    assert!(s.contains("reduce_over_group(sg, r1, plus<uint32_t>())"), "SYCL: {s}");
+    assert!(
+        s.contains("reduce_over_group(sg, r1, plus<uint32_t>())"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
 fn test_wave_reduce_min() {
     let s = compile_instrs(&encode(0x3E, 3, 1, 0, 10, 0));
-    assert!(s.contains("reduce_over_group(sg, (int32_t)r1, minimum<int32_t>())"), "SYCL: {s}");
+    assert!(
+        s.contains("reduce_over_group(sg, (int32_t)r1, minimum<int32_t>())"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
 fn test_wave_prefix_sum() {
     let s = compile_instrs(&encode(0x3E, 3, 1, 0, 8, 0));
-    assert!(s.contains("exclusive_scan_over_group(sg, r1, plus<uint32_t>())"), "SYCL: {s}");
+    assert!(
+        s.contains("exclusive_scan_over_group(sg, r1, plus<uint32_t>())"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]

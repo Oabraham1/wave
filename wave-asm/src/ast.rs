@@ -116,9 +116,9 @@ impl Immediate {
     #[allow(clippy::checked_conversions)]
     pub fn as_u32(self) -> Option<u32> {
         match self {
-            Self::Integer(v) => u32::try_from(v).ok().or_else(|| {
-                i32::try_from(v).ok().map(|i| i as u32)
-            }),
+            Self::Integer(v) => u32::try_from(v)
+                .ok()
+                .or_else(|| i32::try_from(v).ok().map(|i| i as u32)),
             Self::Float(f) => Some(f.to_bits() as u32),
         }
     }

@@ -85,9 +85,8 @@ impl<'a> Decoder<'a> {
             offset,
         })?;
 
-        let operation = self.decode_operation(
-            opcode, rd, rs1, rs2, modifier, scope, flags, offset,
-        )?;
+        let operation =
+            self.decode_operation(opcode, rd, rs1, rs2, modifier, scope, flags, offset)?;
 
         let size = if self.offset > offset + 4 { 8 } else { 4 };
 
@@ -130,7 +129,6 @@ impl<'a> Decoder<'a> {
         offset: u32,
     ) -> Result<Operation, DecodeError> {
         let op = match opcode {
-
             Opcode::Iadd => Operation::Iadd { rd, rs1, rs2 },
             Opcode::Isub => Operation::Isub { rd, rs1, rs2 },
             Opcode::Imul => Operation::Imul { rd, rs1, rs2 },
@@ -192,7 +190,13 @@ impl<'a> Decoder<'a> {
                 } else {
                     None
                 };
-                Operation::F16 { op, rd, rs1, rs2, rs3 }
+                Operation::F16 {
+                    op,
+                    rd,
+                    rs1,
+                    rs2,
+                    rs3,
+                }
             }
 
             Opcode::F16PackedOps => {
@@ -207,7 +211,13 @@ impl<'a> Decoder<'a> {
                 } else {
                     None
                 };
-                Operation::F16Packed { op, rd, rs1, rs2, rs3 }
+                Operation::F16Packed {
+                    op,
+                    rd,
+                    rs1,
+                    rs2,
+                    rs3,
+                }
             }
 
             Opcode::F64Ops => {
@@ -222,7 +232,13 @@ impl<'a> Decoder<'a> {
                 } else {
                     None
                 };
-                Operation::F64 { op, rd, rs1, rs2, rs3 }
+                Operation::F64 {
+                    op,
+                    rd,
+                    rs1,
+                    rs2,
+                    rs3,
+                }
             }
 
             Opcode::F64DivSqrt => {
@@ -236,7 +252,12 @@ impl<'a> Decoder<'a> {
                 } else {
                     None
                 };
-                Operation::F64DivSqrt { op, rd, rs1, rs2: rs2_opt }
+                Operation::F64DivSqrt {
+                    op,
+                    rd,
+                    rs1,
+                    rs2: rs2_opt,
+                }
             }
 
             Opcode::And => Operation::And { rd, rs1, rs2 },
@@ -297,7 +318,12 @@ impl<'a> Decoder<'a> {
                     modifier,
                     offset,
                 })?;
-                Operation::Icmp { op, pd: rd, rs1, rs2 }
+                Operation::Icmp {
+                    op,
+                    pd: rd,
+                    rs1,
+                    rs2,
+                }
             }
             Opcode::Ucmp => {
                 let op = CmpOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -305,7 +331,12 @@ impl<'a> Decoder<'a> {
                     modifier,
                     offset,
                 })?;
-                Operation::Ucmp { op, pd: rd, rs1, rs2 }
+                Operation::Ucmp {
+                    op,
+                    pd: rd,
+                    rs1,
+                    rs2,
+                }
             }
             Opcode::Fcmp => {
                 let op = CmpOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -313,7 +344,12 @@ impl<'a> Decoder<'a> {
                     modifier,
                     offset,
                 })?;
-                Operation::Fcmp { op, pd: rd, rs1, rs2 }
+                Operation::Fcmp {
+                    op,
+                    pd: rd,
+                    rs1,
+                    rs2,
+                }
             }
 
             Opcode::Select => Operation::Select {
@@ -337,7 +373,11 @@ impl<'a> Decoder<'a> {
                     modifier,
                     offset,
                 })?;
-                Operation::LocalLoad { width, rd, addr: rs1 }
+                Operation::LocalLoad {
+                    width,
+                    rd,
+                    addr: rs1,
+                }
             }
             Opcode::LocalStore => {
                 let width = MemWidth::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -358,7 +398,11 @@ impl<'a> Decoder<'a> {
                     modifier,
                     offset,
                 })?;
-                Operation::DeviceLoad { width, rd, addr: rs1 }
+                Operation::DeviceLoad {
+                    width,
+                    rd,
+                    addr: rs1,
+                }
             }
             Opcode::DeviceStore => {
                 let width = MemWidth::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -401,12 +445,11 @@ impl<'a> Decoder<'a> {
             }
 
             Opcode::DeviceAtomic => {
-                let scope_val =
-                    Scope::from_u8(scope).ok_or(DecodeError::InvalidModifier {
-                        opcode,
-                        modifier: scope,
-                        offset,
-                    })?;
+                let scope_val = Scope::from_u8(scope).ok_or(DecodeError::InvalidModifier {
+                    opcode,
+                    modifier: scope,
+                    offset,
+                })?;
 
                 if modifier == 8 && self.peek_u32().is_some() {
                     let word1 = self.read_u32();
@@ -438,12 +481,13 @@ impl<'a> Decoder<'a> {
 
             Opcode::WaveOp => {
                 if modifier >= 8 {
-                    let op =
-                        WaveReduceType::from_u8(modifier - 8).ok_or(DecodeError::InvalidModifier {
+                    let op = WaveReduceType::from_u8(modifier - 8).ok_or(
+                        DecodeError::InvalidModifier {
                             opcode,
                             modifier,
                             offset,
-                        })?;
+                        },
+                    )?;
                     Operation::WaveReduce { op, rd, rs1 }
                 } else {
                     let op = WaveOpType::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
@@ -453,9 +497,11 @@ impl<'a> Decoder<'a> {
                     })?;
                     match op {
                         WaveOpType::Ballot => Operation::WaveBallot { rd, ps: rs1 },
-                        WaveOpType::Any | WaveOpType::All => {
-                            Operation::WaveVote { op, pd: rd, ps: rs1 }
-                        }
+                        WaveOpType::Any | WaveOpType::All => Operation::WaveVote {
+                            op,
+                            pd: rd,
+                            ps: rs1,
+                        },
                         _ => Operation::WaveOp {
                             op,
                             rd,
@@ -628,13 +674,7 @@ mod tests {
     fn test_decode_mov_sr() {
         let code = encode_base(0x3F, 5, 4, 0, MiscOp::MovSr as u8, MISC_OP_FLAG);
         let instr = decode_at(&code, 0).unwrap();
-        assert_eq!(
-            instr.operation,
-            Operation::MovSr {
-                rd: 5,
-                sr_index: 4
-            }
-        );
+        assert_eq!(instr.operation, Operation::MovSr { rd: 5, sr_index: 4 });
     }
 
     #[test]
@@ -654,7 +694,14 @@ mod tests {
     #[test]
     fn test_decode_all() {
         let mut code = encode_base(0x00, 5, 3, 4, 0, 0).to_vec(); // iadd
-        code.extend_from_slice(&encode_base(0x3F, 0, 0, 0, SyncOp::Halt as u8, SYNC_OP_FLAG)); // halt
+        code.extend_from_slice(&encode_base(
+            0x3F,
+            0,
+            0,
+            0,
+            SyncOp::Halt as u8,
+            SYNC_OP_FLAG,
+        )); // halt
 
         let instructions = decode_all(&code).unwrap();
         assert_eq!(instructions.len(), 2);

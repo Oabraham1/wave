@@ -31,10 +31,7 @@ impl SymbolTable {
 
     pub fn define(&mut self, name: String, offset: u32, span: Span) -> Result<(), AssemblerError> {
         if self.symbols.contains_key(&name) {
-            return Err(AssemblerError::DuplicateLabel {
-                label: name,
-                span,
-            });
+            return Err(AssemblerError::DuplicateLabel { label: name, span });
         }
         self.symbols.insert(name, Symbol { offset, span });
         Ok(())
@@ -187,9 +184,6 @@ return",
         let symbols = build_symbol_table(&program).unwrap();
         let result = validate_label_references(&program, &symbols);
 
-        assert!(matches!(
-            result,
-            Err(AssemblerError::UndefinedLabel { .. })
-        ));
+        assert!(matches!(result, Err(AssemblerError::UndefinedLabel { .. })));
     }
 }

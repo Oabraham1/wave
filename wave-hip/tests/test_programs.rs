@@ -104,7 +104,10 @@ fn test_vector_add_program() {
     assert!(hip.contains("r3 = r1 * r2;"), "HIP: {hip}");
     assert!(hip.contains("r4 = r3 + r0;"), "HIP: {hip}");
     assert!(hip.contains("r11 = ri(rf(r7) + rf(r10));"), "HIP: {hip}");
-    assert!(hip.contains("*(uint32_t*)(device_mem + r13) = (uint32_t)r11;"), "HIP: {hip}");
+    assert!(
+        hip.contains("*(uint32_t*)(device_mem + r13) = (uint32_t)r11;"),
+        "HIP: {hip}"
+    );
 }
 
 #[test]
@@ -122,7 +125,10 @@ fn test_reduction_with_barrier() {
     let hip = compile(&wbin).unwrap();
 
     assert!(hip.contains("__global__ void reduction("), "HIP: {hip}");
-    assert!(hip.contains("extern __shared__ uint8_t local_mem[];"), "HIP: {hip}");
+    assert!(
+        hip.contains("extern __shared__ uint8_t local_mem[];"),
+        "HIP: {hip}"
+    );
     assert!(hip.contains("__syncthreads();"), "HIP: {hip}");
 }
 
@@ -149,5 +155,8 @@ fn test_warp_size_used_not_hardcoded() {
     let hip = compile(&wbin).unwrap();
     assert!(hip.contains("warpSize"), "HIP: {hip}");
     let wave_count_line = hip.lines().find(|l| l.contains("wave_count")).unwrap();
-    assert!(wave_count_line.contains("warpSize"), "wave_count should use warpSize: {wave_count_line}");
+    assert!(
+        wave_count_line.contains("warpSize"),
+        "wave_count should use warpSize: {wave_count_line}"
+    );
 }

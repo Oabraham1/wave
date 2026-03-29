@@ -31,7 +31,13 @@ fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8;
 }
 
 fn encode_with_scope(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8, flags: u8,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    scope: u8,
+    flags: u8,
 ) -> [u8; 4] {
     let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -44,7 +50,14 @@ fn encode_with_scope(
 }
 
 fn encode_predicated(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8, pred: u8, negated: bool,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    flags: u8,
+    pred: u8,
+    negated: bool,
 ) -> [u8; 4] {
     let mut word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -299,7 +312,10 @@ fn test_shared_load_u32() {
         hip.contains("r5 = (uint32_t)(*(uint32_t*)(local_mem + r3));"),
         "HIP: {hip}"
     );
-    assert!(hip.contains("extern __shared__ uint8_t local_mem[];"), "HIP: {hip}");
+    assert!(
+        hip.contains("extern __shared__ uint8_t local_mem[];"),
+        "HIP: {hip}"
+    );
 }
 
 #[test]
@@ -323,7 +339,10 @@ fn test_fence_device() {
 #[test]
 fn test_icmp_eq() {
     let hip = compile_instructions(&encode(0x28, 1, 3, 4, 0, 0));
-    assert!(hip.contains("p1 = (int32_t)r3 == (int32_t)r4;"), "HIP: {hip}");
+    assert!(
+        hip.contains("p1 = (int32_t)r3 == (int32_t)r4;"),
+        "HIP: {hip}"
+    );
 }
 
 #[test]
@@ -430,7 +449,10 @@ fn test_kernel_header() {
     assert!(hip.contains("#include <hip/hip_runtime.h>"), "HIP: {hip}");
     assert!(hip.contains("__global__ void my_kernel("), "HIP: {hip}");
     assert!(hip.contains("uint8_t* device_mem"), "HIP: {hip}");
-    assert!(hip.contains("__device__ inline float rf(uint32_t r)"), "HIP: {hip}");
+    assert!(
+        hip.contains("__device__ inline float rf(uint32_t r)"),
+        "HIP: {hip}"
+    );
     assert!(hip.contains("__uint_as_float"), "HIP: {hip}");
     assert!(hip.contains("__float_as_uint"), "HIP: {hip}");
 }
@@ -440,9 +462,18 @@ fn test_register_declarations() {
     let code = halt_instruction();
     let wbin = build_wbin("test_kernel", 4, 1024, &code);
     let hip = compile(&wbin).unwrap();
-    assert!(hip.contains("uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0;"), "HIP: {hip}");
-    assert!(hip.contains("bool p0 = false, p1 = false, p2 = false, p3 = false;"), "HIP: {hip}");
-    assert!(hip.contains("extern __shared__ uint8_t local_mem[];"), "HIP: {hip}");
+    assert!(
+        hip.contains("uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0;"),
+        "HIP: {hip}"
+    );
+    assert!(
+        hip.contains("bool p0 = false, p1 = false, p2 = false, p3 = false;"),
+        "HIP: {hip}"
+    );
+    assert!(
+        hip.contains("extern __shared__ uint8_t local_mem[];"),
+        "HIP: {hip}"
+    );
     assert!(hip.contains("wave_count"), "HIP: {hip}");
     assert!(hip.contains("warpSize"), "HIP: {hip}");
 }

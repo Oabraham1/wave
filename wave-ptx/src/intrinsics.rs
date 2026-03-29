@@ -52,12 +52,8 @@ pub fn emit_wave_vote(op: WaveOpType, pd: u8, ps: u8) -> Vec<String> {
     let p_s = pred(ps);
 
     match op {
-        WaveOpType::Any => vec![format!(
-            "vote.sync.any.pred {p_d}, {p_s}, {FULL_MASK};"
-        )],
-        WaveOpType::All => vec![format!(
-            "vote.sync.all.pred {p_d}, {p_s}, {FULL_MASK};"
-        )],
+        WaveOpType::Any => vec![format!("vote.sync.any.pred {p_d}, {p_s}, {FULL_MASK};")],
+        WaveOpType::All => vec![format!("vote.sync.all.pred {p_d}, {p_s}, {FULL_MASK};")],
         _ => Vec::new(),
     }
 }

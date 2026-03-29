@@ -98,12 +98,21 @@ fn test_vector_add_program() {
     let s = compile(&wbin).unwrap();
 
     assert!(s.contains("void vector_add_launch(queue& q"), "SYCL: {s}");
-    assert!(s.contains("r0 = (uint32_t)it.get_local_id(0);"), "SYCL: {s}");
+    assert!(
+        s.contains("r0 = (uint32_t)it.get_local_id(0);"),
+        "SYCL: {s}"
+    );
     assert!(s.contains("r1 = (uint32_t)it.get_group(0);"), "SYCL: {s}");
-    assert!(s.contains("r2 = (uint32_t)it.get_local_range(0);"), "SYCL: {s}");
+    assert!(
+        s.contains("r2 = (uint32_t)it.get_local_range(0);"),
+        "SYCL: {s}"
+    );
     assert!(s.contains("r3 = r1 * r2;"), "SYCL: {s}");
     assert!(s.contains("r11 = ri(rf(r7) + rf(r10));"), "SYCL: {s}");
-    assert!(s.contains("*(uint32_t*)(device_mem_usm + r13) = (uint32_t)r11;"), "SYCL: {s}");
+    assert!(
+        s.contains("*(uint32_t*)(device_mem_usm + r13) = (uint32_t)r11;"),
+        "SYCL: {s}"
+    );
 }
 
 #[test]
@@ -146,6 +155,9 @@ fn test_sub_group_width_not_hardcoded() {
     let code = halt();
     let wbin = build_wbin("test", 4, 0, &code);
     let s = compile(&wbin).unwrap();
-    assert!(!s.contains("warpSize"), "should use sub_group accessors, not warpSize: {s}");
+    assert!(
+        !s.contains("warpSize"),
+        "should use sub_group accessors, not warpSize: {s}"
+    );
     assert!(s.contains("get_sub_group()"), "SYCL: {s}");
 }

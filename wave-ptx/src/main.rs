@@ -13,7 +13,9 @@ use std::process;
 
 #[derive(Parser)]
 #[command(name = "wave-ptx")]
-#[command(about = "WAVE PTX backend - translates WAVE binary (.wbin) to NVIDIA PTX assembly (.ptx)")]
+#[command(
+    about = "WAVE PTX backend - translates WAVE binary (.wbin) to NVIDIA PTX assembly (.ptx)"
+)]
 #[command(version)]
 struct Cli {
     input: PathBuf,

@@ -126,86 +126,115 @@ impl CodeGenerator {
             Operation::ImulHi { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)(((uint64_t){} * (uint64_t){}) >> 32);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imad { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = {} * {} + {};",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Idiv { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} / (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imod { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} % (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Ineg { rd, rs1 } => {
                 self.line(&format!(
                     "{} = (uint32_t)(-(int32_t){});",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::Iabs { rd, rs1 } => {
                 self.line(&format!(
                     "{} = (uint32_t)sycl::abs((int32_t){});",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::Imin { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)sycl::min((int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Imax { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)sycl::max((int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Iclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = (uint32_t)sycl::clamp((int32_t){}, (int32_t){}, (int32_t){});",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
 
             Operation::Fadd { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) + rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fsub { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) - rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fmul { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) * rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fma { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = ri(sycl::fma(rf({}), rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Fdiv { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(rf({}) / rf({}));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fneg { rd, rs1 } => {
@@ -214,44 +243,67 @@ impl CodeGenerator {
             Operation::Fabs { rd, rs1 } => {
                 self.line(&format!(
                     "{} = ri(sycl::fabs(rf({})));",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::Fmin { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(sycl::fmin(rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fmax { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = ri(sycl::fmax(rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Fclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!(
                     "{} = ri(sycl::clamp(rf({}), rf({}), rf({})));",
-                    reg(*rd), reg(*rs1), reg(*rs2), reg(*rs3)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2),
+                    reg(*rs3)
                 ));
             }
             Operation::Fsqrt { rd, rs1 } => {
                 self.line(&format!(
                     "{} = ri(sycl::sqrt(rf({})));",
-                    reg(*rd), reg(*rs1)
+                    reg(*rd),
+                    reg(*rs1)
                 ));
             }
             Operation::FUnary { op, rd, rs1 } => {
                 self.emit_funary(*op, *rd, *rs1);
             }
 
-            Operation::F16 { op, rd, rs1, rs2, rs3 } => {
+            Operation::F16 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
                 self.emit_f16(*op, *rd, *rs1, *rs2, *rs3);
             }
-            Operation::F16Packed { op, rd, rs1, rs2, .. } => {
+            Operation::F16Packed {
+                op, rd, rs1, rs2, ..
+            } => {
                 self.emit_f16_packed(*op, *rd, *rs1, *rs2);
             }
-            Operation::F64 { op, rd, rs1, rs2, rs3 } => {
+            Operation::F64 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
                 self.emit_f64(*op, *rd, *rs1, *rs2, *rs3);
             }
             Operation::F64DivSqrt { op, rd, rs1, rs2 } => {
@@ -273,22 +325,35 @@ impl CodeGenerator {
             Operation::Shl { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} << ({} & 0x1Fu);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Shr { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} >> ({} & 0x1Fu);",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Sar { rd, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = (uint32_t)((int32_t){} >> ({} & 0x1Fu));",
-                    reg(*rd), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
-            Operation::BitOp { op, rd, rs1, rs2, rs3, rs4 } => {
+            Operation::BitOp {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+                rs4,
+            } => {
                 self.emit_bitop(*op, *rd, *rs1, *rs2, *rs3, *rs4);
             }
 
@@ -305,7 +370,10 @@ impl CodeGenerator {
             Operation::Select { rd, ps, rs1, rs2 } => {
                 self.line(&format!(
                     "{} = {} ? {} : {};",
-                    reg(*rd), pred(*ps), reg(*rs1), reg(*rs2)
+                    reg(*rd),
+                    pred(*ps),
+                    reg(*rs1),
+                    reg(*rs2)
                 ));
             }
             Operation::Cvt { cvt_type, rd, rs1 } => {
@@ -329,27 +397,43 @@ impl CodeGenerator {
                 self.lines(&stmts);
             }
 
-            Operation::LocalAtomic { op, rd, addr, value } => {
+            Operation::LocalAtomic {
+                op,
+                rd,
+                addr,
+                value,
+            } => {
                 let stmts = memory::emit_atomic("lm", *op, *rd, *addr, *value);
                 self.lines(&stmts);
             }
-            Operation::LocalAtomicCas { rd, addr, expected, desired } => {
+            Operation::LocalAtomicCas {
+                rd,
+                addr,
+                expected,
+                desired,
+            } => {
                 let stmts = memory::emit_atomic_cas("lm", *rd, *addr, *expected, *desired);
                 self.lines(&stmts);
             }
-            Operation::DeviceAtomic { op, rd, addr, value, .. } => {
-                let stmts =
-                    memory::emit_atomic("device_mem_usm", *op, *rd, *addr, *value);
+            Operation::DeviceAtomic {
+                op,
+                rd,
+                addr,
+                value,
+                ..
+            } => {
+                let stmts = memory::emit_atomic("device_mem_usm", *op, *rd, *addr, *value);
                 self.lines(&stmts);
             }
-            Operation::DeviceAtomicCas { rd, addr, expected, desired, .. } => {
-                let stmts = memory::emit_atomic_cas(
-                    "device_mem_usm",
-                    *rd,
-                    *addr,
-                    *expected,
-                    *desired,
-                );
+            Operation::DeviceAtomicCas {
+                rd,
+                addr,
+                expected,
+                desired,
+                ..
+            } => {
+                let stmts =
+                    memory::emit_atomic_cas("device_mem_usm", *rd, *addr, *expected, *desired);
                 self.lines(&stmts);
             }
 
@@ -452,9 +536,7 @@ impl CodeGenerator {
             wave_decode::Scope::Device => "memory_scope::device",
             wave_decode::Scope::System => "memory_scope::system",
         };
-        self.line(&format!(
-            "atomic_fence({order}, {sycl_scope});"
-        ));
+        self.line(&format!("atomic_fence({order}, {sycl_scope});"));
     }
 
     fn emit_funary(&mut self, op: FUnaryOp, rd: u8, rs1: u8) {
@@ -498,12 +580,8 @@ impl CodeGenerator {
         let r_s1 = reg(rs1);
         let r_s2 = reg(rs2);
         let expr = match op {
-            F16PackedOp::Hadd2 => format!(
-                "{r_d} = ri(rf({r_s1}) + rf({r_s2}));"
-            ),
-            F16PackedOp::Hmul2 => format!(
-                "{r_d} = ri(rf({r_s1}) * rf({r_s2}));"
-            ),
+            F16PackedOp::Hadd2 => format!("{r_d} = ri(rf({r_s1}) + rf({r_s2}));"),
+            F16PackedOp::Hmul2 => format!("{r_d} = ri(rf({r_s1}) * rf({r_s2}));"),
             F16PackedOp::Hma2 => format!(
                 "{r_d} = ri(sycl::fma(rf({r_s1}), rf({r_s2}), rf({})));",
                 reg(0)
@@ -573,9 +651,7 @@ impl CodeGenerator {
                 );
             }
             F64DivSqrtOp::Dsqrt => {
-                self.line(
-                    "uint64_t _dr = bit_cast<uint64_t>(sycl::sqrt(bit_cast<double>(_ds1)));",
-                );
+                self.line("uint64_t _dr = bit_cast<uint64_t>(sycl::sqrt(bit_cast<double>(_ds1)));");
             }
         }
         self.line(&format!("{r_d_lo} = (uint32_t)_dr;"));
@@ -608,18 +684,10 @@ impl CodeGenerator {
                 self.line("{");
                 self.indent_level += 1;
                 self.line(&format!("uint32_t _v = {r_s1};"));
-                self.line(
-                    "_v = ((_v >> 1) & 0x55555555u) | ((_v & 0x55555555u) << 1);",
-                );
-                self.line(
-                    "_v = ((_v >> 2) & 0x33333333u) | ((_v & 0x33333333u) << 2);",
-                );
-                self.line(
-                    "_v = ((_v >> 4) & 0x0F0F0F0Fu) | ((_v & 0x0F0F0F0Fu) << 4);",
-                );
-                self.line(
-                    "_v = ((_v >> 8) & 0x00FF00FFu) | ((_v & 0x00FF00FFu) << 8);",
-                );
+                self.line("_v = ((_v >> 1) & 0x55555555u) | ((_v & 0x55555555u) << 1);");
+                self.line("_v = ((_v >> 2) & 0x33333333u) | ((_v & 0x33333333u) << 2);");
+                self.line("_v = ((_v >> 4) & 0x0F0F0F0Fu) | ((_v & 0x0F0F0F0Fu) << 4);");
+                self.line("_v = ((_v >> 8) & 0x00FF00FFu) | ((_v & 0x00FF00FFu) << 8);");
                 self.line(&format!("{r_d} = (_v >> 16) | (_v << 16);"));
                 self.indent_level = self.indent_level.saturating_sub(1);
                 self.line("}");
@@ -716,9 +784,7 @@ impl CodeGenerator {
                 self.line(&format!(
                     "uint64_t _ds = ((uint64_t){s1_hi} << 32) | (uint64_t){r_s1};"
                 ));
-                self.line(&format!(
-                    "{r_d} = ri((float)bit_cast<double>(_ds));"
-                ));
+                self.line(&format!("{r_d} = ri((float)bit_cast<double>(_ds));"));
                 self.indent_level = self.indent_level.saturating_sub(1);
                 self.line("}");
                 return;

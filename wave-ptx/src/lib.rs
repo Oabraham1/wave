@@ -50,9 +50,7 @@ pub fn compile(wbin_data: &[u8], sm_version: u32) -> Result<String, CompileError
     let mut output = kernel::emit_header(sm_version);
 
     for (i, kernel_info) in wbin.kernels.iter().enumerate() {
-        let code = wbin
-            .kernel_code(i)
-            .ok_or(CompileError::InvalidKernel(i))?;
+        let code = wbin.kernel_code(i).ok_or(CompileError::InvalidKernel(i))?;
         let instructions = wave_decode::decode_all(code)?;
 
         let mut gen = codegen::CodeGenerator::new();

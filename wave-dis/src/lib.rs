@@ -48,7 +48,10 @@ pub struct DisassembledLine {
 /// # Errors
 ///
 /// Returns `DisassembleError` if the WBIN parsing or instruction decoding fails.
-pub fn disassemble_wbin(data: &[u8], options: &DisassemblyOptions) -> Result<Vec<String>, DisassembleError> {
+pub fn disassemble_wbin(
+    data: &[u8],
+    options: &DisassemblyOptions,
+) -> Result<Vec<String>, DisassembleError> {
     let wbin = WbinFile::parse(data)?;
     let code = wbin.code();
     let code_base = wbin.header.code_offset;
@@ -94,7 +97,10 @@ pub fn disassemble_wbin(data: &[u8], options: &DisassemblyOptions) -> Result<Vec
 /// # Errors
 ///
 /// Returns `DisassembleError` if instruction decoding fails.
-pub fn disassemble_code(code: &[u8], options: &DisassemblyOptions) -> Result<Vec<String>, DisassembleError> {
+pub fn disassemble_code(
+    code: &[u8],
+    options: &DisassemblyOptions,
+) -> Result<Vec<String>, DisassembleError> {
     let instructions = decode_all(code)?;
     let mut lines = Vec::new();
 

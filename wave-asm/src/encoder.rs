@@ -6,7 +6,9 @@
 //! Handles operand encoding, predication bits, and resolves label references via
 //! the symbol table. Returns EncodedInstruction (single or extended format).
 
-use crate::ast::{Immediate, Instruction, Operand, Predicate, Register, RegisterKind, Span, Spanned};
+use crate::ast::{
+    Immediate, Instruction, Operand, Predicate, Register, RegisterKind, Span, Spanned,
+};
 use crate::diagnostics::AssemblerError;
 use crate::opcodes::{
     lookup_mnemonic, ControlOp, InstructionSignature, MiscOp, Opcode, OperandKind, Scope, SyncOp,
@@ -42,7 +44,11 @@ impl EncodedInstruction {
 
     #[must_use]
     pub fn size_bytes(&self) -> usize {
-        if self.word1.is_some() { 8 } else { 4 }
+        if self.word1.is_some() {
+            8
+        } else {
+            4
+        }
     }
 }
 
@@ -65,12 +71,11 @@ impl<'a> Encoder<'a> {
         inst: &Instruction,
         span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
-        let sig = lookup_mnemonic(&inst.mnemonic).ok_or_else(|| {
-            AssemblerError::UnknownInstruction {
+        let sig =
+            lookup_mnemonic(&inst.mnemonic).ok_or_else(|| AssemblerError::UnknownInstruction {
                 mnemonic: inst.mnemonic.clone(),
                 span,
-            }
-        })?;
+            })?;
 
         self.validate_operand_count(inst, sig, span)?;
 
@@ -88,7 +93,10 @@ impl<'a> Encoder<'a> {
         let expected = sig.operands.len();
         let got = inst.operands.len();
 
-        let has_optional = sig.operands.iter().any(|o| matches!(o, OperandKind::OptionalRd));
+        let has_optional = sig
+            .operands
+            .iter()
+            .any(|o| matches!(o, OperandKind::OptionalRd));
 
         if has_optional {
             if got < expected - 1 || got > expected {
@@ -265,7 +273,10 @@ impl<'a> Encoder<'a> {
         mut word0: u32,
         span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
-        let has_optional = sig.operands.iter().any(|o| matches!(o, OperandKind::OptionalRd));
+        let has_optional = sig
+            .operands
+            .iter()
+            .any(|o| matches!(o, OperandKind::OptionalRd));
         let expected_with_rd = sig.operands.len();
         let is_non_returning = has_optional && inst.operands.len() < expected_with_rd;
 
@@ -293,10 +304,7 @@ impl<'a> Encoder<'a> {
                 }
                 OperandKind::Rs3 if is_cas => {
                     let reg = self.expect_register(&inst.operands[operand_idx])?;
-                    return Ok(EncodedInstruction::extended(
-                        word0,
-                        u32::from(reg) << 27,
-                    ));
+                    return Ok(EncodedInstruction::extended(word0, u32::from(reg) << 27));
                 }
                 OperandKind::Scope => {
                     let scope = self.expect_scope(&inst.operands[operand_idx])?;
@@ -343,13 +351,12 @@ impl<'a> Encoder<'a> {
                 }
                 op if op == ControlOp::Call as u8 => {
                     let label = self.expect_label(&inst.operands[0])?;
-                    let target = self
-                        .symbols
-                        .resolve(&label)
-                        .ok_or_else(|| AssemblerError::UndefinedLabel {
+                    let target = self.symbols.resolve(&label).ok_or_else(|| {
+                        AssemblerError::UndefinedLabel {
                             label: label.clone(),
                             span,
-                        })?;
+                        }
+                    })?;
                     Ok(EncodedInstruction::extended(word0, target))
                 }
                 _ => Ok(EncodedInstruction::single(word0)),
@@ -374,7 +381,14 @@ impl<'a> Encoder<'a> {
     fn is_sync_op(mnemonic: &str) -> bool {
         matches!(
             mnemonic,
-            "return" | "halt" | "barrier" | "fence_acquire" | "fence_release" | "fence_acq_rel" | "wait" | "nop"
+            "return"
+                | "halt"
+                | "barrier"
+                | "fence_acquire"
+                | "fence_release"
+                | "fence_acq_rel"
+                | "wait"
+                | "nop"
         )
     }
 
@@ -444,7 +458,11 @@ impl<'a> Encoder<'a> {
         let modifier = sig.modifier.unwrap_or(0);
 
         let effective_modifier = if modifier == MiscOp::Mov as u8 && inst.operands.len() > 1 {
-            if let Operand::Register(Register { kind: RegisterKind::Special, .. }) = &inst.operands[1].node {
+            if let Operand::Register(Register {
+                kind: RegisterKind::Special,
+                ..
+            }) = &inst.operands[1].node
+            {
                 MiscOp::MovSr as u8
             } else {
                 modifier

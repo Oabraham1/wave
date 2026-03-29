@@ -13,7 +13,9 @@ use std::process;
 
 #[derive(Parser)]
 #[command(name = "wave-sycl")]
-#[command(about = "WAVE SYCL backend - translates WAVE binary (.wbin) to Intel SYCL kernel source (.cpp)")]
+#[command(
+    about = "WAVE SYCL backend - translates WAVE binary (.wbin) to Intel SYCL kernel source (.cpp)"
+)]
 #[command(version)]
 struct Cli {
     input: PathBuf,

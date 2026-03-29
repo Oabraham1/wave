@@ -13,7 +13,9 @@ use std::process;
 
 #[derive(Parser)]
 #[command(name = "wave-metal")]
-#[command(about = "WAVE Metal backend - translates WAVE binary (.wbin) to Metal Shading Language (.metal)")]
+#[command(
+    about = "WAVE Metal backend - translates WAVE binary (.wbin) to Metal Shading Language (.metal)"
+)]
 #[command(version)]
 struct Cli {
     input: PathBuf,

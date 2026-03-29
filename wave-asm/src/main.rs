@@ -31,7 +31,11 @@ struct Args {
     #[arg(help = "Input .wave assembly file")]
     input: PathBuf,
 
-    #[arg(short, long, help = "Output .wbin file (default: input with .wbin extension)")]
+    #[arg(
+        short,
+        long,
+        help = "Output .wbin file (default: input with .wbin extension)"
+    )]
     output: Option<PathBuf>,
 
     #[arg(long, help = "Print encoded instructions to stdout")]
@@ -46,7 +50,13 @@ struct Args {
     #[arg(long, help = "Strip symbol table from output")]
     no_symbols: bool,
 
-    #[arg(short = 'W', long = "warn", value_enum, default_value = "all", help = "Warning level")]
+    #[arg(
+        short = 'W',
+        long = "warn",
+        value_enum,
+        default_value = "all",
+        help = "Warning level"
+    )]
     warn_level: WarnLevel,
 }
 
@@ -120,7 +130,9 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
 
-            let output_path = args.output.unwrap_or_else(|| args.input.with_extension("wbin"));
+            let output_path = args
+                .output
+                .unwrap_or_else(|| args.input.with_extension("wbin"));
 
             if let Err(e) = fs::write(&output_path, &result.binary) {
                 eprintln!("error: failed to write {}: {}", output_path.display(), e);

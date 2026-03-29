@@ -29,11 +29,7 @@ pub fn emit_file_header() -> String {
 
 #[must_use]
 pub fn emit_launch_start(name: &str, local_mem_size: u32) -> String {
-    let kernel_name = if name.is_empty() {
-        "wave_kernel"
-    } else {
-        name
-    };
+    let kernel_name = if name.is_empty() { "wave_kernel" } else { name };
 
     let mut out = String::new();
 
@@ -42,16 +38,8 @@ pub fn emit_launch_start(name: &str, local_mem_size: u32) -> String {
         "void {kernel_name}_launch(queue& q, uint8_t* device_mem_usm,"
     )
     .unwrap();
-    writeln!(
-        out,
-        "        size_t grid_x, size_t grid_y, size_t grid_z,"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "        size_t wg_x, size_t wg_y, size_t wg_z) {{"
-    )
-    .unwrap();
+    writeln!(out, "        size_t grid_x, size_t grid_y, size_t grid_z,").unwrap();
+    writeln!(out, "        size_t wg_x, size_t wg_y, size_t wg_z) {{").unwrap();
     writeln!(out, "    q.submit([&](handler& h) {{").unwrap();
 
     if local_mem_size > 0 {
@@ -68,11 +56,7 @@ pub fn emit_launch_start(name: &str, local_mem_size: u32) -> String {
         "            nd_range<3>(range<3>(grid_x * wg_x, grid_y * wg_y, grid_z * wg_z),"
     )
     .unwrap();
-    writeln!(
-        out,
-        "                        range<3>(wg_x, wg_y, wg_z)),"
-    )
-    .unwrap();
+    writeln!(out, "                        range<3>(wg_x, wg_y, wg_z)),").unwrap();
     writeln!(out, "            [=](nd_item<3> it) {{").unwrap();
     writeln!(out, "                auto sg = it.get_sub_group();").unwrap();
 

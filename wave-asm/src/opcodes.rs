@@ -306,51 +306,63 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
 
     macro_rules! base {
         ($name:expr, $op:expr, $operands:expr) => {
-            m.insert($name, InstructionSignature {
-                opcode: $op,
-                operands: $operands,
-                modifier: None,
-                extended: false,
-                is_sync: false,
-                is_misc: false,
-                wave_reduce: false,
-            });
+            m.insert(
+                $name,
+                InstructionSignature {
+                    opcode: $op,
+                    operands: $operands,
+                    modifier: None,
+                    extended: false,
+                    is_sync: false,
+                    is_misc: false,
+                    wave_reduce: false,
+                },
+            );
         };
         ($name:expr, $op:expr, $operands:expr, $mod:expr) => {
-            m.insert($name, InstructionSignature {
-                opcode: $op,
-                operands: $operands,
-                modifier: Some($mod),
-                extended: false,
-                is_sync: false,
-                is_misc: false,
-                wave_reduce: false,
-            });
+            m.insert(
+                $name,
+                InstructionSignature {
+                    opcode: $op,
+                    operands: $operands,
+                    modifier: Some($mod),
+                    extended: false,
+                    is_sync: false,
+                    is_misc: false,
+                    wave_reduce: false,
+                },
+            );
         };
     }
 
     macro_rules! extended {
         ($name:expr, $op:expr, $operands:expr) => {
-            m.insert($name, InstructionSignature {
-                opcode: $op,
-                operands: $operands,
-                modifier: None,
-                extended: true,
-                is_sync: false,
-                is_misc: false,
-                wave_reduce: false,
-            });
+            m.insert(
+                $name,
+                InstructionSignature {
+                    opcode: $op,
+                    operands: $operands,
+                    modifier: None,
+                    extended: true,
+                    is_sync: false,
+                    is_misc: false,
+                    wave_reduce: false,
+                },
+            );
         };
         ($name:expr, $op:expr, $operands:expr, $mod:expr) => {
-            m.insert($name, InstructionSignature {
-                opcode: $op,
-                operands: $operands,
-                modifier: Some($mod),
-                extended: true,
-                is_sync: false,
-                is_misc: false,
-                wave_reduce: false,
-            });
+            m.insert(
+                $name,
+                InstructionSignature {
+                    opcode: $op,
+                    operands: $operands,
+                    modifier: Some($mod),
+                    extended: true,
+                    is_sync: false,
+                    is_misc: false,
+                    wave_reduce: false,
+                },
+            );
         };
     }
 
@@ -388,42 +400,54 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("ffract", Opcode::FUnaryOps, rr, FUnaryOp::Ffract as u8);
     base!("fsat", Opcode::FUnaryOps, rr, FUnaryOp::Fsat as u8);
 
-    m.insert("fsin", InstructionSignature {
-        opcode: Opcode::FUnaryOps,
-        operands: rr,
-        modifier: Some(8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("fcos", InstructionSignature {
-        opcode: Opcode::FUnaryOps,
-        operands: rr,
-        modifier: Some(9),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("fexp2", InstructionSignature {
-        opcode: Opcode::FUnaryOps,
-        operands: rr,
-        modifier: Some(10),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("flog2", InstructionSignature {
-        opcode: Opcode::FUnaryOps,
-        operands: rr,
-        modifier: Some(11),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "fsin",
+        InstructionSignature {
+            opcode: Opcode::FUnaryOps,
+            operands: rr,
+            modifier: Some(8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "fcos",
+        InstructionSignature {
+            opcode: Opcode::FUnaryOps,
+            operands: rr,
+            modifier: Some(9),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "fexp2",
+        InstructionSignature {
+            opcode: Opcode::FUnaryOps,
+            operands: rr,
+            modifier: Some(10),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "flog2",
+        InstructionSignature {
+            opcode: Opcode::FUnaryOps,
+            operands: rr,
+            modifier: Some(11),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
     base!("hadd", Opcode::F16Ops, rrr, F16Op::Hadd as u8);
     base!("hsub", Opcode::F16Ops, rrr, F16Op::Hsub as u8);
@@ -453,15 +477,18 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("bitfind", Opcode::BitOps, rr, BitOpType::Bitfind as u8);
     base!("bitrev", Opcode::BitOps, rr, BitOpType::Bitrev as u8);
     extended!("bfe", Opcode::BitOps, rrrr, BitOpType::Bfe as u8);
-    m.insert("bfi", InstructionSignature {
-        opcode: Opcode::BitOps,
-        operands: &[Rd, Rs1, Rs2, Rs3, Rs4],
-        modifier: Some(BitOpType::Bfi as u8),
-        extended: true,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "bfi",
+        InstructionSignature {
+            opcode: Opcode::BitOps,
+            operands: &[Rd, Rs1, Rs2, Rs3, Rs4],
+            modifier: Some(BitOpType::Bfi as u8),
+            extended: true,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
     base!("icmp_eq", Opcode::Icmp, &[Pd, Rs1, Rs2], CmpOp::Eq as u8);
     base!("icmp_ne", Opcode::Icmp, &[Pd, Rs1, Rs2], CmpOp::Ne as u8);
@@ -479,7 +506,12 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("fcmp_le", Opcode::Fcmp, &[Pd, Rs1, Rs2], CmpOp::Le as u8);
     base!("fcmp_gt", Opcode::Fcmp, &[Pd, Rs1, Rs2], CmpOp::Gt as u8);
     base!("fcmp_ord", Opcode::Fcmp, &[Pd, Rs1, Rs2], CmpOp::Ord as u8);
-    base!("fcmp_unord", Opcode::Fcmp, &[Pd, Rs1, Rs2], CmpOp::Unord as u8);
+    base!(
+        "fcmp_unord",
+        Opcode::Fcmp,
+        &[Pd, Rs1, Rs2],
+        CmpOp::Unord as u8
+    );
 
     base!("select", Opcode::Select, &[Rd, PdSrc, Rs1, Rs2]);
 
@@ -497,432 +529,659 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("local_load_u32", Opcode::LocalLoad, rr, MemWidth::U32 as u8);
     base!("local_load_u64", Opcode::LocalLoad, rr, MemWidth::U64 as u8);
 
-    base!("local_store_u8", Opcode::LocalStore, &[Rs1, Rs2], MemWidth::U8 as u8);
-    base!("local_store_u16", Opcode::LocalStore, &[Rs1, Rs2], MemWidth::U16 as u8);
-    base!("local_store_u32", Opcode::LocalStore, &[Rs1, Rs2], MemWidth::U32 as u8);
-    base!("local_store_u64", Opcode::LocalStore, &[Rs1, Rs2], MemWidth::U64 as u8);
+    base!(
+        "local_store_u8",
+        Opcode::LocalStore,
+        &[Rs1, Rs2],
+        MemWidth::U8 as u8
+    );
+    base!(
+        "local_store_u16",
+        Opcode::LocalStore,
+        &[Rs1, Rs2],
+        MemWidth::U16 as u8
+    );
+    base!(
+        "local_store_u32",
+        Opcode::LocalStore,
+        &[Rs1, Rs2],
+        MemWidth::U32 as u8
+    );
+    base!(
+        "local_store_u64",
+        Opcode::LocalStore,
+        &[Rs1, Rs2],
+        MemWidth::U64 as u8
+    );
 
     base!("device_load_u8", Opcode::DeviceLoad, rr, MemWidth::U8 as u8);
-    base!("device_load_u16", Opcode::DeviceLoad, rr, MemWidth::U16 as u8);
-    base!("device_load_u32", Opcode::DeviceLoad, rr, MemWidth::U32 as u8);
-    base!("device_load_u64", Opcode::DeviceLoad, rr, MemWidth::U64 as u8);
-    base!("device_load_u128", Opcode::DeviceLoad, rr, MemWidth::U128 as u8);
+    base!(
+        "device_load_u16",
+        Opcode::DeviceLoad,
+        rr,
+        MemWidth::U16 as u8
+    );
+    base!(
+        "device_load_u32",
+        Opcode::DeviceLoad,
+        rr,
+        MemWidth::U32 as u8
+    );
+    base!(
+        "device_load_u64",
+        Opcode::DeviceLoad,
+        rr,
+        MemWidth::U64 as u8
+    );
+    base!(
+        "device_load_u128",
+        Opcode::DeviceLoad,
+        rr,
+        MemWidth::U128 as u8
+    );
 
-    base!("device_store_u8", Opcode::DeviceStore, &[Rs1, Rs2], MemWidth::U8 as u8);
-    base!("device_store_u16", Opcode::DeviceStore, &[Rs1, Rs2], MemWidth::U16 as u8);
-    base!("device_store_u32", Opcode::DeviceStore, &[Rs1, Rs2], MemWidth::U32 as u8);
-    base!("device_store_u64", Opcode::DeviceStore, &[Rs1, Rs2], MemWidth::U64 as u8);
-    base!("device_store_u128", Opcode::DeviceStore, &[Rs1, Rs2], MemWidth::U128 as u8);
+    base!(
+        "device_store_u8",
+        Opcode::DeviceStore,
+        &[Rs1, Rs2],
+        MemWidth::U8 as u8
+    );
+    base!(
+        "device_store_u16",
+        Opcode::DeviceStore,
+        &[Rs1, Rs2],
+        MemWidth::U16 as u8
+    );
+    base!(
+        "device_store_u32",
+        Opcode::DeviceStore,
+        &[Rs1, Rs2],
+        MemWidth::U32 as u8
+    );
+    base!(
+        "device_store_u64",
+        Opcode::DeviceStore,
+        &[Rs1, Rs2],
+        MemWidth::U64 as u8
+    );
+    base!(
+        "device_store_u128",
+        Opcode::DeviceStore,
+        &[Rs1, Rs2],
+        MemWidth::U128 as u8
+    );
 
-    m.insert("local_atomic_add", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Add as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_sub", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Sub as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_min", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Min as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_max", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Max as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_and", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::And as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_or", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Or as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_xor", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Xor as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_exchange", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2],
-        modifier: Some(AtomicOp::Exchange as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("local_atomic_cas", InstructionSignature {
-        opcode: Opcode::LocalAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, Rs3],
-        modifier: None,
-        extended: true,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "local_atomic_add",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Add as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_sub",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Sub as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_min",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Min as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_max",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Max as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_and",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::And as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_or",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Or as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_xor",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Xor as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_exchange",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2],
+            modifier: Some(AtomicOp::Exchange as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "local_atomic_cas",
+        InstructionSignature {
+            opcode: Opcode::LocalAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, Rs3],
+            modifier: None,
+            extended: true,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
-    m.insert("atomic_add", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Add as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_sub", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Sub as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_min", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Min as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_max", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Max as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_and", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::And as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_or", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Or as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_xor", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Xor as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_exchange", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
-        modifier: Some(AtomicOp::Exchange as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("atomic_cas", InstructionSignature {
-        opcode: Opcode::DeviceAtomic,
-        operands: &[OptionalRd, Rs1, Rs2, Rs3, OperandKind::Scope],
-        modifier: None,
-        extended: true,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "atomic_add",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Add as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_sub",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Sub as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_min",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Min as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_max",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Max as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_and",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::And as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_or",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Or as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_xor",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Xor as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_exchange",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
+            modifier: Some(AtomicOp::Exchange as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "atomic_cas",
+        InstructionSignature {
+            opcode: Opcode::DeviceAtomic,
+            operands: &[OptionalRd, Rs1, Rs2, Rs3, OperandKind::Scope],
+            modifier: None,
+            extended: true,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
-    base!("wave_shuffle", Opcode::WaveOp, rrr, WaveOpType::Shuffle as u8);
-    base!("wave_shuffle_up", Opcode::WaveOp, rrr, WaveOpType::ShuffleUp as u8);
-    base!("wave_shuffle_down", Opcode::WaveOp, rrr, WaveOpType::ShuffleDown as u8);
-    base!("wave_shuffle_xor", Opcode::WaveOp, rrr, WaveOpType::ShuffleXor as u8);
-    base!("wave_broadcast", Opcode::WaveOp, rrr, WaveOpType::Broadcast as u8);
-    base!("wave_ballot", Opcode::WaveOp, &[Rd, PdSrc], WaveOpType::Ballot as u8);
-    base!("wave_any", Opcode::WaveOp, &[Pd, PdSrc], WaveOpType::Any as u8);
-    base!("wave_all", Opcode::WaveOp, &[Pd, PdSrc], WaveOpType::All as u8);
+    base!(
+        "wave_shuffle",
+        Opcode::WaveOp,
+        rrr,
+        WaveOpType::Shuffle as u8
+    );
+    base!(
+        "wave_shuffle_up",
+        Opcode::WaveOp,
+        rrr,
+        WaveOpType::ShuffleUp as u8
+    );
+    base!(
+        "wave_shuffle_down",
+        Opcode::WaveOp,
+        rrr,
+        WaveOpType::ShuffleDown as u8
+    );
+    base!(
+        "wave_shuffle_xor",
+        Opcode::WaveOp,
+        rrr,
+        WaveOpType::ShuffleXor as u8
+    );
+    base!(
+        "wave_broadcast",
+        Opcode::WaveOp,
+        rrr,
+        WaveOpType::Broadcast as u8
+    );
+    base!(
+        "wave_ballot",
+        Opcode::WaveOp,
+        &[Rd, PdSrc],
+        WaveOpType::Ballot as u8
+    );
+    base!(
+        "wave_any",
+        Opcode::WaveOp,
+        &[Pd, PdSrc],
+        WaveOpType::Any as u8
+    );
+    base!(
+        "wave_all",
+        Opcode::WaveOp,
+        &[Pd, PdSrc],
+        WaveOpType::All as u8
+    );
 
-    m.insert("wave_prefix_sum", InstructionSignature {
-        opcode: Opcode::WaveOp,
-        operands: rr,
-        modifier: Some(WaveReduceType::PrefixSum as u8 + 8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("wave_reduce_add", InstructionSignature {
-        opcode: Opcode::WaveOp,
-        operands: rr,
-        modifier: Some(WaveReduceType::ReduceAdd as u8 + 8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("wave_reduce_min", InstructionSignature {
-        opcode: Opcode::WaveOp,
-        operands: rr,
-        modifier: Some(WaveReduceType::ReduceMin as u8 + 8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("wave_reduce_max", InstructionSignature {
-        opcode: Opcode::WaveOp,
-        operands: rr,
-        modifier: Some(WaveReduceType::ReduceMax as u8 + 8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "wave_prefix_sum",
+        InstructionSignature {
+            opcode: Opcode::WaveOp,
+            operands: rr,
+            modifier: Some(WaveReduceType::PrefixSum as u8 + 8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "wave_reduce_add",
+        InstructionSignature {
+            opcode: Opcode::WaveOp,
+            operands: rr,
+            modifier: Some(WaveReduceType::ReduceAdd as u8 + 8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "wave_reduce_min",
+        InstructionSignature {
+            opcode: Opcode::WaveOp,
+            operands: rr,
+            modifier: Some(WaveReduceType::ReduceMin as u8 + 8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "wave_reduce_max",
+        InstructionSignature {
+            opcode: Opcode::WaveOp,
+            operands: rr,
+            modifier: Some(WaveReduceType::ReduceMax as u8 + 8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
-    m.insert("if", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[PdSrc],
-        modifier: Some(ControlOp::If as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("else", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(ControlOp::Else as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("endif", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(ControlOp::Endif as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("loop", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(ControlOp::Loop as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("break", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[PdSrc],
-        modifier: Some(ControlOp::Break as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("continue", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[PdSrc],
-        modifier: Some(ControlOp::Continue as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("endloop", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(ControlOp::Endloop as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("call", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[Label],
-        modifier: Some(ControlOp::Call as u8),
-        extended: true,
-        is_sync: false,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "if",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[PdSrc],
+            modifier: Some(ControlOp::If as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "else",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(ControlOp::Else as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "endif",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(ControlOp::Endif as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "loop",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(ControlOp::Loop as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "break",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[PdSrc],
+            modifier: Some(ControlOp::Break as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "continue",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[PdSrc],
+            modifier: Some(ControlOp::Continue as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "endloop",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(ControlOp::Endloop as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "call",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[Label],
+            modifier: Some(ControlOp::Call as u8),
+            extended: true,
+            is_sync: false,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
-    m.insert("return", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(SyncOp::Return as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("halt", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(SyncOp::Halt as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("barrier", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(SyncOp::Barrier as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("fence_acquire", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[OperandKind::Scope],
-        modifier: Some(SyncOp::FenceAcquire as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("fence_release", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[OperandKind::Scope],
-        modifier: Some(SyncOp::FenceRelease as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("fence_acq_rel", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[OperandKind::Scope],
-        modifier: Some(SyncOp::FenceAcqRel as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("wait", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(SyncOp::Wait as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
-    m.insert("nop", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[],
-        modifier: Some(SyncOp::Nop as u8),
-        extended: false,
-        is_sync: true,
-        is_misc: false,
-        wave_reduce: false,
-    });
+    m.insert(
+        "return",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(SyncOp::Return as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "halt",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(SyncOp::Halt as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "barrier",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(SyncOp::Barrier as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "fence_acquire",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[OperandKind::Scope],
+            modifier: Some(SyncOp::FenceAcquire as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "fence_release",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[OperandKind::Scope],
+            modifier: Some(SyncOp::FenceRelease as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "fence_acq_rel",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[OperandKind::Scope],
+            modifier: Some(SyncOp::FenceAcqRel as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "wait",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(SyncOp::Wait as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "nop",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[],
+            modifier: Some(SyncOp::Nop as u8),
+            extended: false,
+            is_sync: true,
+            is_misc: false,
+            wave_reduce: false,
+        },
+    );
 
-    m.insert("mov", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[Rd, Rs1],
-        modifier: Some(MiscOp::Mov as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: true,
-        wave_reduce: false,
-    });
-    m.insert("mov_imm", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[Rd, Imm32],
-        modifier: Some(MiscOp::MovImm as u8),
-        extended: true,
-        is_sync: false,
-        is_misc: true,
-        wave_reduce: false,
-    });
+    m.insert(
+        "mov",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[Rd, Rs1],
+            modifier: Some(MiscOp::Mov as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: true,
+            wave_reduce: false,
+        },
+    );
+    m.insert(
+        "mov_imm",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[Rd, Imm32],
+            modifier: Some(MiscOp::MovImm as u8),
+            extended: true,
+            is_sync: false,
+            is_misc: true,
+            wave_reduce: false,
+        },
+    );
 
-    m.insert("mov_sr", InstructionSignature {
-        opcode: Opcode::Control,
-        operands: &[Rd, SpecialReg],
-        modifier: Some(MiscOp::MovSr as u8),
-        extended: false,
-        is_sync: false,
-        is_misc: true,
-        wave_reduce: false,
-    });
+    m.insert(
+        "mov_sr",
+        InstructionSignature {
+            opcode: Opcode::Control,
+            operands: &[Rd, SpecialReg],
+            modifier: Some(MiscOp::MovSr as u8),
+            extended: false,
+            is_sync: false,
+            is_misc: true,
+            wave_reduce: false,
+        },
+    );
 
     m
 }
 
-pub static SPECIAL_REGISTERS: LazyLock<HashMap<&'static str, u8>> =
-    LazyLock::new(|| {
-        let mut m = HashMap::new();
-        m.insert("sr_thread_id_x", 0);
-        m.insert("sr_thread_id_y", 1);
-        m.insert("sr_thread_id_z", 2);
-        m.insert("sr_wave_id", 3);
-        m.insert("sr_lane_id", 4);
-        m.insert("sr_workgroup_id_x", 5);
-        m.insert("sr_workgroup_id_y", 6);
-        m.insert("sr_workgroup_id_z", 7);
-        m.insert("sr_workgroup_size_x", 8);
-        m.insert("sr_workgroup_size_y", 9);
-        m.insert("sr_workgroup_size_z", 10);
-        m.insert("sr_grid_size_x", 11);
-        m.insert("sr_grid_size_y", 12);
-        m.insert("sr_grid_size_z", 13);
-        m.insert("sr_wave_width", 14);
-        m.insert("sr_num_waves", 15);
-        m
-    });
+pub static SPECIAL_REGISTERS: LazyLock<HashMap<&'static str, u8>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    m.insert("sr_thread_id_x", 0);
+    m.insert("sr_thread_id_y", 1);
+    m.insert("sr_thread_id_z", 2);
+    m.insert("sr_wave_id", 3);
+    m.insert("sr_lane_id", 4);
+    m.insert("sr_workgroup_id_x", 5);
+    m.insert("sr_workgroup_id_y", 6);
+    m.insert("sr_workgroup_id_z", 7);
+    m.insert("sr_workgroup_size_x", 8);
+    m.insert("sr_workgroup_size_y", 9);
+    m.insert("sr_workgroup_size_z", 10);
+    m.insert("sr_grid_size_x", 11);
+    m.insert("sr_grid_size_y", 12);
+    m.insert("sr_grid_size_z", 13);
+    m.insert("sr_wave_width", 14);
+    m.insert("sr_num_waves", 15);
+    m
+});
 
 #[must_use]
 pub fn lookup_mnemonic(name: &str) -> Option<&'static InstructionSignature> {

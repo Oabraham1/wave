@@ -27,7 +27,13 @@ fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8;
 }
 
 fn encode_with_scope(
-    opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8, flags: u8,
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    scope: u8,
+    flags: u8,
 ) -> [u8; 4] {
     let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
         | ((u32::from(rd) & 0x1F) << RD_SHIFT)
@@ -131,7 +137,10 @@ fn test_device_atomic_add() {
     let mut code = encode_with_scope(0x3D, 5, 3, 4, 0, 2, 0).to_vec();
     code.extend_from_slice(&[0u8; 4]);
     let ptx = compile_instrs(&code);
-    assert!(ptx.contains("atom.global.add.u32 %r5, [%rd1], %r4;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("atom.global.add.u32 %r5, [%rd1], %r4;"),
+        "PTX: {ptx}"
+    );
 }
 
 #[test]

@@ -122,8 +122,7 @@ impl CodeGenerator {
 
         if is_control_flow && instr.predicate != 0 {
             return Err(CompileError::UnsupportedOperation(
-                "predicated control flow instructions are not supported in PTX backend"
-                    .to_string(),
+                "predicated control flow instructions are not supported in PTX backend".to_string(),
             ));
         }
 
@@ -214,17 +213,8 @@ impl CodeGenerator {
                     reg(*rs2)
                 ));
             }
-            Operation::Iclamp {
-                rd,
-                rs1,
-                rs2,
-                rs3,
-            } => {
-                self.line(&format!(
-                    "{pp}max.s32 %t0, {}, {};",
-                    reg(*rs1),
-                    reg(*rs2)
-                ));
+            Operation::Iclamp { rd, rs1, rs2, rs3 } => {
+                self.line(&format!("{pp}max.s32 %t0, {}, {};", reg(*rs1), reg(*rs2)));
                 self.line(&format!("{pp}min.s32 {}, %t0, {};", reg(*rd), reg(*rs3)));
             }
 
@@ -265,12 +255,7 @@ impl CodeGenerator {
             Operation::Fmax { rd, rs1, rs2 } => {
                 self.emit_float_binop(&pp, "max.f32", *rd, *rs1, *rs2);
             }
-            Operation::Fclamp {
-                rd,
-                rs1,
-                rs2,
-                rs3,
-            } => {
+            Operation::Fclamp { rd, rs1, rs2, rs3 } => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(*rs1), reg(*rs1)));
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(*rs2), reg(*rs2)));
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(*rs3), reg(*rs3)));
@@ -279,11 +264,7 @@ impl CodeGenerator {
                     freg(*rs1),
                     freg(*rs2)
                 ));
-                self.line(&format!(
-                    "{pp}min.f32 {}, %ft0, {};",
-                    freg(*rd),
-                    freg(*rs3)
-                ));
+                self.line(&format!("{pp}min.f32 {}, %ft0, {};", freg(*rd), freg(*rs3)));
                 self.line(&format!("{pp}mov.b32 {}, {};", reg(*rd), freg(*rd)));
             }
             Operation::Fsqrt { rd, rs1 } => {
@@ -413,11 +394,7 @@ impl CodeGenerator {
                 let stmts = memory::emit_shared_load(*width, *rd, *addr);
                 self.lines(&stmts);
             }
-            Operation::LocalStore {
-                width,
-                addr,
-                value,
-            } => {
+            Operation::LocalStore { width, addr, value } => {
                 let stmts = memory::emit_shared_store(*width, *addr, *value);
                 self.lines(&stmts);
             }
@@ -425,11 +402,7 @@ impl CodeGenerator {
                 let stmts = memory::emit_global_load(*width, *rd, *addr);
                 self.lines(&stmts);
             }
-            Operation::DeviceStore {
-                width,
-                addr,
-                value,
-            } => {
+            Operation::DeviceStore { width, addr, value } => {
                 let stmts = memory::emit_global_store(*width, *addr, *value);
                 self.lines(&stmts);
             }
@@ -530,7 +503,9 @@ impl CodeGenerator {
             Operation::Barrier => {
                 self.line(&format!("{pp}bar.sync 0;"));
             }
-            Operation::FenceAcquire { scope } | Operation::FenceRelease { scope } | Operation::FenceAcqRel { scope } => {
+            Operation::FenceAcquire { scope }
+            | Operation::FenceRelease { scope }
+            | Operation::FenceAcqRel { scope } => {
                 let fence = match scope {
                     wave_decode::Scope::Wave | wave_decode::Scope::Workgroup => "membar.cta;",
                     wave_decode::Scope::Device => "membar.gl;",
@@ -604,21 +579,11 @@ impl CodeGenerator {
         self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
         match op {
             FUnaryOp::Ffract => {
-                self.line(&format!(
-                    "{pp}cvt.rmi.f32.f32 %ft0, {};",
-                    freg(rs1)
-                ));
-                self.line(&format!(
-                    "{pp}sub.f32 {}, {}, %ft0;",
-                    freg(rd),
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rmi.f32.f32 %ft0, {};", freg(rs1)));
+                self.line(&format!("{pp}sub.f32 {}, {}, %ft0;", freg(rd), freg(rs1)));
             }
             FUnaryOp::Fsat => {
-                self.line(&format!(
-                    "{pp}max.f32 %ft0, {}, 0f00000000;",
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}max.f32 %ft0, {}, 0f00000000;", freg(rs1)));
                 self.line(&format!("{pp}min.f32 {}, %ft0, 0f3F800000;", freg(rd)));
             }
             _ => {}
@@ -635,10 +600,7 @@ impl CodeGenerator {
             F16Op::Hsub => "sub.f16",
             F16Op::Hmul => "mul.f16",
             F16Op::Hma => {
-                self.line(&format!(
-                    "{pp}cvt.u16.u32 %t2, {};",
-                    reg(rs3.unwrap_or(0))
-                ));
+                self.line(&format!("{pp}cvt.u16.u32 %t2, {};", reg(rs3.unwrap_or(0))));
                 self.line(&format!("{pp}fma.rn.f16 %t0, %t0, %t1, %t2;"));
                 self.line(&format!("{pp}cvt.u32.u16 {}, %t0;", reg(rd)));
                 return;
@@ -722,14 +684,7 @@ impl CodeGenerator {
         ));
     }
 
-    fn emit_f64_div_sqrt(
-        &mut self,
-        pp: &str,
-        op: F64DivSqrtOp,
-        rd: u8,
-        rs1: u8,
-        rs2: Option<u8>,
-    ) {
+    fn emit_f64_div_sqrt(&mut self, pp: &str, op: F64DivSqrtOp, rd: u8, rs1: u8, rs2: Option<u8>) {
         self.line(&format!(
             "{pp}mov.b64 %rd2, {{{}, {}}};",
             reg(rs1),
@@ -852,42 +807,23 @@ impl CodeGenerator {
         match cvt_type {
             CvtType::F32I32 => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
-                self.line(&format!(
-                    "{pp}cvt.rzi.s32.f32 {}, {};",
-                    reg(rd),
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rzi.s32.f32 {}, {};", reg(rd), freg(rs1)));
             }
             CvtType::F32U32 => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
-                self.line(&format!(
-                    "{pp}cvt.rzi.u32.f32 {}, {};",
-                    reg(rd),
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rzi.u32.f32 {}, {};", reg(rd), freg(rs1)));
             }
             CvtType::I32F32 => {
-                self.line(&format!(
-                    "{pp}cvt.rn.f32.s32 {}, {};",
-                    freg(rd),
-                    reg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rn.f32.s32 {}, {};", freg(rd), reg(rs1)));
                 self.line(&format!("{pp}mov.b32 {}, {};", reg(rd), freg(rd)));
             }
             CvtType::U32F32 => {
-                self.line(&format!(
-                    "{pp}cvt.rn.f32.u32 {}, {};",
-                    freg(rd),
-                    reg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rn.f32.u32 {}, {};", freg(rd), reg(rs1)));
                 self.line(&format!("{pp}mov.b32 {}, {};", reg(rd), freg(rd)));
             }
             CvtType::F32F16 => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
-                self.line(&format!(
-                    "{pp}cvt.rn.f16.f32 %t0, {};",
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.rn.f16.f32 %t0, {};", freg(rs1)));
                 self.line(&format!("{pp}cvt.u32.u16 {}, %t0;", reg(rd)));
             }
             CvtType::F16F32 => {
@@ -897,10 +833,7 @@ impl CodeGenerator {
             }
             CvtType::F32F64 => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
-                self.line(&format!(
-                    "{pp}cvt.f64.f32 %rd2, {};",
-                    freg(rs1)
-                ));
+                self.line(&format!("{pp}cvt.f64.f32 %rd2, {};", freg(rs1)));
                 self.line(&format!(
                     "{pp}mov.b64 {{{}, {}}}, %rd2;",
                     reg(rd),

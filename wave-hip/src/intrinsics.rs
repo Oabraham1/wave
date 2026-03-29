@@ -51,11 +51,7 @@ pub fn emit_wave_reduce(op: WaveReduceType, rd: u8, rs1: u8) -> Vec<String> {
 
 #[must_use]
 pub fn emit_wave_ballot(rd: u8, ps: u8) -> String {
-    format!(
-        "{} = (uint32_t)__ballot((int){});",
-        reg(rd),
-        pred(ps)
-    )
+    format!("{} = (uint32_t)__ballot((int){});", reg(rd), pred(ps))
 }
 
 #[must_use]

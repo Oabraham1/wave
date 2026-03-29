@@ -153,9 +153,7 @@ pub fn emit_shared_store(w: MemWidth, addr: u8, value: u8) -> Vec<String> {
             vec![
                 "mov.u32 %t0, _shared_mem;".to_string(),
                 format!("add.u32 %t0, %t0, {r_addr};"),
-                format!(
-                    "st.shared.v4.u32 [%t0], {{{r_val}, {r_v1}, {r_v2}, {r_v3}}};"
-                ),
+                format!("st.shared.v4.u32 [%t0], {{{r_val}, {r_v1}, {r_v2}, {r_v3}}};"),
             ]
         }
     }
@@ -175,12 +173,7 @@ fn atom_op_name(op: AtomicOp) -> &'static str {
 }
 
 #[must_use]
-pub fn emit_global_atomic(
-    op: AtomicOp,
-    rd: Option<u8>,
-    addr: u8,
-    value: u8,
-) -> Vec<String> {
+pub fn emit_global_atomic(op: AtomicOp, rd: Option<u8>, addr: u8, value: u8) -> Vec<String> {
     let r_addr = reg(addr);
     let r_val = reg(value);
     let dest = rd.map_or_else(|| "%t1".to_string(), reg);
@@ -195,19 +188,16 @@ pub fn emit_global_atomic(
         lines.push(format!("neg.s32 %t0, {r_val};"));
         lines.push(format!("atom.global.{op_name}.u32 {dest}, [%rd1], %t0;"));
     } else {
-        lines.push(format!("atom.global.{op_name}.u32 {dest}, [%rd1], {r_val};"));
+        lines.push(format!(
+            "atom.global.{op_name}.u32 {dest}, [%rd1], {r_val};"
+        ));
     }
 
     lines
 }
 
 #[must_use]
-pub fn emit_shared_atomic(
-    op: AtomicOp,
-    rd: Option<u8>,
-    addr: u8,
-    value: u8,
-) -> Vec<String> {
+pub fn emit_shared_atomic(op: AtomicOp, rd: Option<u8>, addr: u8, value: u8) -> Vec<String> {
     let r_addr = reg(addr);
     let r_val = reg(value);
     let dest = rd.map_or_else(|| "%t1".to_string(), reg);
@@ -229,12 +219,7 @@ pub fn emit_shared_atomic(
 }
 
 #[must_use]
-pub fn emit_global_atomic_cas(
-    rd: Option<u8>,
-    addr: u8,
-    expected: u8,
-    desired: u8,
-) -> Vec<String> {
+pub fn emit_global_atomic_cas(rd: Option<u8>, addr: u8, expected: u8, desired: u8) -> Vec<String> {
     let r_addr = reg(addr);
     let r_exp = reg(expected);
     let r_des = reg(desired);
@@ -248,12 +233,7 @@ pub fn emit_global_atomic_cas(
 }
 
 #[must_use]
-pub fn emit_shared_atomic_cas(
-    rd: Option<u8>,
-    addr: u8,
-    expected: u8,
-    desired: u8,
-) -> Vec<String> {
+pub fn emit_shared_atomic_cas(rd: Option<u8>, addr: u8, expected: u8, desired: u8) -> Vec<String> {
     let r_addr = reg(addr);
     let r_exp = reg(expected);
     let r_des = reg(desired);

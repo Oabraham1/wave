@@ -30,7 +30,9 @@ pub enum WbinError {
         file_size: usize,
     },
 
-    #[error("invalid size: {field} at offset {offset} with size {size} exceeds file size {file_size}")]
+    #[error(
+        "invalid size: {field} at offset {offset} with size {size} exceeds file size {file_size}"
+    )]
     InvalidSize {
         field: &'static str,
         offset: u32,
@@ -158,8 +160,12 @@ impl<'a> WbinFile<'a> {
         }
 
         let meta_start = header.metadata_offset as usize;
-        let kernel_count =
-            u32::from_le_bytes([data[meta_start], data[meta_start + 1], data[meta_start + 2], data[meta_start + 3]]);
+        let kernel_count = u32::from_le_bytes([
+            data[meta_start],
+            data[meta_start + 1],
+            data[meta_start + 2],
+            data[meta_start + 3],
+        ]);
 
         #[allow(clippy::cast_possible_truncation)]
         let expected_size = 4 + kernel_count * (KERNEL_METADATA_SIZE as u32);
@@ -174,14 +180,54 @@ impl<'a> WbinFile<'a> {
         let mut offset = meta_start + 4;
 
         for _ in 0..kernel_count {
-            let name_offset = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
-            let register_count = u32::from_le_bytes([data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]]);
-            let local_memory_size = u32::from_le_bytes([data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11]]);
-            let ws_x = u32::from_le_bytes([data[offset + 12], data[offset + 13], data[offset + 14], data[offset + 15]]);
-            let ws_y = u32::from_le_bytes([data[offset + 16], data[offset + 17], data[offset + 18], data[offset + 19]]);
-            let ws_z = u32::from_le_bytes([data[offset + 20], data[offset + 21], data[offset + 22], data[offset + 23]]);
-            let code_offset = u32::from_le_bytes([data[offset + 24], data[offset + 25], data[offset + 26], data[offset + 27]]);
-            let code_size = u32::from_le_bytes([data[offset + 28], data[offset + 29], data[offset + 30], data[offset + 31]]);
+            let name_offset = u32::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
+            let register_count = u32::from_le_bytes([
+                data[offset + 4],
+                data[offset + 5],
+                data[offset + 6],
+                data[offset + 7],
+            ]);
+            let local_memory_size = u32::from_le_bytes([
+                data[offset + 8],
+                data[offset + 9],
+                data[offset + 10],
+                data[offset + 11],
+            ]);
+            let ws_x = u32::from_le_bytes([
+                data[offset + 12],
+                data[offset + 13],
+                data[offset + 14],
+                data[offset + 15],
+            ]);
+            let ws_y = u32::from_le_bytes([
+                data[offset + 16],
+                data[offset + 17],
+                data[offset + 18],
+                data[offset + 19],
+            ]);
+            let ws_z = u32::from_le_bytes([
+                data[offset + 20],
+                data[offset + 21],
+                data[offset + 22],
+                data[offset + 23],
+            ]);
+            let code_offset = u32::from_le_bytes([
+                data[offset + 24],
+                data[offset + 25],
+                data[offset + 26],
+                data[offset + 27],
+            ]);
+            let code_size = u32::from_le_bytes([
+                data[offset + 28],
+                data[offset + 29],
+                data[offset + 30],
+                data[offset + 31],
+            ]);
 
             let name = if name_offset != 0 && header.symbol_size > 0 {
                 Self::read_string(data, name_offset as usize)?

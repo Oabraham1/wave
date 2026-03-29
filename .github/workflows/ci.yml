@@ -18,13 +18,13 @@ jobs:
       - name: Check formatting
         run: |
           for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
-            cd $crate && cargo fmt --check && cd ..
+            (cd $crate && cargo fmt --check)
           done
 
       - name: Run clippy
         run: |
           for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
-            cd $crate && cargo clippy -- -D warnings && cd ..
+            (cd $crate && cargo clippy -- -D warnings)
           done
 
   build-and-test:
@@ -37,13 +37,13 @@ jobs:
       - name: Build all crates
         run: |
           for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
-            cd $crate && cargo build --release && cd ..
+            (cd $crate && cargo build --release)
           done
 
       - name: Run unit tests
         run: |
           for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl; do
-            cd $crate && cargo test && cd ..
+            (cd $crate && cargo test)
           done
 
       - name: Run emulator integration tests

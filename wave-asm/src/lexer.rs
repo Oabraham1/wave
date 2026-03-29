@@ -97,15 +97,11 @@ impl<'a> Lexer<'a> {
                 self.scan_predicate_register(start)
             }
 
-            's' if self.peek_char() == Some('r') => {
-                self.scan_special_register(start)?
-            }
+            's' if self.peek_char() == Some('r') => self.scan_special_register(start)?,
 
             '-' | '0'..='9' => self.scan_number(start, ch)?,
 
-            _ if ch.is_alphabetic() || ch == '_' => {
-                self.scan_identifier_or_label(start)
-            }
+            _ if ch.is_alphabetic() || ch == '_' => self.scan_identifier_or_label(start),
 
             _ => {
                 return Err(AssemblerError::UnexpectedCharacter {
@@ -397,7 +393,10 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::Predicate { register: "p0".into(), negated: false },
+                Token::Predicate {
+                    register: "p0".into(),
+                    negated: false
+                },
                 Token::Identifier("iadd".into()),
                 Token::Register("r0".into()),
                 Token::Comma,
@@ -415,7 +414,10 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::Predicate { register: "p1".into(), negated: true },
+                Token::Predicate {
+                    register: "p1".into(),
+                    negated: true
+                },
                 Token::Identifier("fadd".into()),
                 Token::Register("r0".into()),
                 Token::Comma,
@@ -445,11 +447,7 @@ mod tests {
         let tokens = tokenize("loop_start:");
         assert_eq!(
             tokens,
-            vec![
-                Token::Label("loop_start".into()),
-                Token::Colon,
-                Token::Eof,
-            ]
+            vec![Token::Label("loop_start".into()), Token::Colon, Token::Eof,]
         );
     }
 

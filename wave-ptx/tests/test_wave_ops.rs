@@ -144,9 +144,15 @@ fn test_wave_all() {
 #[test]
 fn test_wave_reduce_add() {
     let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 9, 0));
-    assert!(ptx.contains("shfl.sync.bfly.b32 %t0, %r3, 16, 31, 0xFFFFFFFF;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("shfl.sync.bfly.b32 %t0, %r3, 16, 31, 0xFFFFFFFF;"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("add.s32 %r3, %r3, %t0;"), "PTX: {ptx}");
-    assert!(ptx.contains("shfl.sync.bfly.b32 %t0, %r3, 1, 31, 0xFFFFFFFF;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("shfl.sync.bfly.b32 %t0, %r3, 1, 31, 0xFFFFFFFF;"),
+        "PTX: {ptx}"
+    );
 }
 
 #[test]
@@ -164,8 +170,14 @@ fn test_wave_reduce_max() {
 #[test]
 fn test_wave_prefix_sum() {
     let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 8, 0));
-    assert!(ptx.contains("shfl.sync.up.b32 %t0|%pt0, %r3, 1, 0, 0xFFFFFFFF;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("shfl.sync.up.b32 %t0|%pt0, %r3, 1, 0, 0xFFFFFFFF;"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("@%pt0 add.s32 %r3, %r3, %t0;"), "PTX: {ptx}");
-    assert!(ptx.contains("shfl.sync.up.b32 %t0|%pt0, %r3, 16, 0, 0xFFFFFFFF;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("shfl.sync.up.b32 %t0|%pt0, %r3, 16, 0, 0xFFFFFFFF;"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("@!%pt0 mov.b32 %r3, 0;"), "PTX: {ptx}");
 }

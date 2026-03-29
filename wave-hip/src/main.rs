@@ -13,7 +13,9 @@ use std::process;
 
 #[derive(Parser)]
 #[command(name = "wave-hip")]
-#[command(about = "WAVE HIP backend - translates WAVE binary (.wbin) to AMD HIP kernel source (.hip)")]
+#[command(
+    about = "WAVE HIP backend - translates WAVE binary (.wbin) to AMD HIP kernel source (.hip)"
+)]
 #[command(version)]
 struct Cli {
     input: PathBuf,

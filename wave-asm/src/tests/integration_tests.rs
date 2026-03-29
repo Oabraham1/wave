@@ -372,7 +372,8 @@ fn test_integration_all_special_registers() {
     assert!(result.is_ok());
 
     let binary = result.unwrap();
-    let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+    let code_offset =
+        u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
 
     for i in 0..16 {
         let inst_offset = code_offset + i * 4;
@@ -389,11 +390,20 @@ fn test_integration_all_special_registers() {
         let modifier = (word >> 7) & 0x0F;
         let flags = word & 0x03;
 
-        assert_eq!(opcode, 0x3F, "instruction {i}: expected Control opcode (0x3F)");
+        assert_eq!(
+            opcode, 0x3F,
+            "instruction {i}: expected Control opcode (0x3F)"
+        );
         assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
         assert_eq!(rs1, i as u32, "instruction {i}: expected sr index {i}");
-        assert_eq!(modifier, 2, "instruction {i}: expected MovSr modifier (2), got {modifier}");
-        assert_eq!(flags, 2, "instruction {i}: expected MISC_OP_FLAG (2), got {flags}");
+        assert_eq!(
+            modifier, 2,
+            "instruction {i}: expected MovSr modifier (2), got {modifier}"
+        );
+        assert_eq!(
+            flags, 2,
+            "instruction {i}: expected MISC_OP_FLAG (2), got {flags}"
+        );
     }
 }
 
@@ -413,7 +423,8 @@ fn test_integration_mov_sr_explicit_syntax() {
     assert!(result.is_ok());
 
     let binary = result.unwrap();
-    let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+    let code_offset =
+        u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
 
     for i in 0..4 {
         let inst_offset = code_offset + i * 4;
@@ -425,7 +436,10 @@ fn test_integration_mov_sr_explicit_syntax() {
         ]);
 
         let modifier = (word >> 7) & 0x0F;
-        assert_eq!(modifier, 2, "instruction {i}: expected MovSr modifier (2), got {modifier}");
+        assert_eq!(
+            modifier, 2,
+            "instruction {i}: expected MovSr modifier (2), got {modifier}"
+        );
     }
 }
 
@@ -464,7 +478,8 @@ fn test_integration_special_register_encoding_correctness() {
         assert!(result.is_ok(), "Failed to assemble mov r0, {sr_name}");
 
         let binary = result.unwrap();
-        let code_offset = u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
+        let code_offset =
+            u32::from_le_bytes([binary[0x08], binary[0x09], binary[0x0A], binary[0x0B]]) as usize;
 
         let word = u32::from_le_bytes([
             binary[code_offset],

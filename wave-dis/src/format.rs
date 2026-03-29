@@ -68,21 +68,39 @@ fn format_operation(op: &Operation) -> String {
         Operation::Fsqrt { rd, rs1 } => format!("fsqrt r{rd}, r{rs1}"),
         Operation::FUnary { op, rd, rs1 } => format!("{} r{rd}, r{rs1}", funary_mnemonic(*op)),
 
-        Operation::F16 { op, rd, rs1, rs2, rs3 } => {
+        Operation::F16 {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => {
             if let Some(rs3) = rs3 {
                 format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", f16_mnemonic(*op))
             } else {
                 format!("{} r{rd}, r{rs1}, r{rs2}", f16_mnemonic(*op))
             }
         }
-        Operation::F16Packed { op, rd, rs1, rs2, rs3 } => {
+        Operation::F16Packed {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => {
             if let Some(rs3) = rs3 {
                 format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", f16_packed_mnemonic(*op))
             } else {
                 format!("{} r{rd}, r{rs1}, r{rs2}", f16_packed_mnemonic(*op))
             }
         }
-        Operation::F64 { op, rd, rs1, rs2, rs3 } => {
+        Operation::F64 {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => {
             if let Some(rs3) = rs3 {
                 format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", f64_mnemonic(*op))
             } else {
@@ -104,7 +122,14 @@ fn format_operation(op: &Operation) -> String {
         Operation::Shl { rd, rs1, rs2 } => format!("shl r{rd}, r{rs1}, r{rs2}"),
         Operation::Shr { rd, rs1, rs2 } => format!("shr r{rd}, r{rs1}, r{rs2}"),
         Operation::Sar { rd, rs1, rs2 } => format!("sar r{rd}, r{rs1}, r{rs2}"),
-        Operation::BitOp { op, rd, rs1, rs2, rs3, rs4 } => format_bitop(*op, *rd, *rs1, *rs2, *rs3, *rs4),
+        Operation::BitOp {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+            rs4,
+        } => format_bitop(*op, *rd, *rs1, *rs2, *rs3, *rs4),
 
         Operation::Icmp { op, pd, rs1, rs2 } => {
             format!("icmp_{} p{pd}, r{rs1}, r{rs2}", cmp_suffix(*op))
@@ -117,7 +142,9 @@ fn format_operation(op: &Operation) -> String {
         }
 
         Operation::Select { rd, ps, rs1, rs2 } => format!("select r{rd}, p{ps}, r{rs1}, r{rs2}"),
-        Operation::Cvt { cvt_type, rd, rs1 } => format!("{} r{rd}, r{rs1}", cvt_mnemonic(*cvt_type)),
+        Operation::Cvt { cvt_type, rd, rs1 } => {
+            format!("{} r{rd}, r{rs1}", cvt_mnemonic(*cvt_type))
+        }
 
         Operation::LocalLoad { width, rd, addr } => {
             format!("local_load_{} r{rd}, r{addr}", width_suffix(*width))
@@ -132,29 +159,60 @@ fn format_operation(op: &Operation) -> String {
             format!("device_store_{} r{addr}, r{value}", width_suffix(*width))
         }
 
-        Operation::LocalAtomic { op, rd, addr, value } => {
+        Operation::LocalAtomic {
+            op,
+            rd,
+            addr,
+            value,
+        } => {
             if let Some(rd) = rd {
-                format!("local_atomic_{} r{rd}, r{addr}, r{value}", atomic_suffix(*op))
+                format!(
+                    "local_atomic_{} r{rd}, r{addr}, r{value}",
+                    atomic_suffix(*op)
+                )
             } else {
                 format!("local_atomic_{} r{addr}, r{value}", atomic_suffix(*op))
             }
         }
-        Operation::LocalAtomicCas { rd, addr, expected, desired } => {
+        Operation::LocalAtomicCas {
+            rd,
+            addr,
+            expected,
+            desired,
+        } => {
             if let Some(rd) = rd {
                 format!("local_atomic_cas r{rd}, r{addr}, r{expected}, r{desired}")
             } else {
                 format!("local_atomic_cas r{addr}, r{expected}, r{desired}")
             }
         }
-        Operation::DeviceAtomic { op, rd, addr, value, scope } => {
+        Operation::DeviceAtomic {
+            op,
+            rd,
+            addr,
+            value,
+            scope,
+        } => {
             let scope_str = scope_suffix(*scope);
             if let Some(rd) = rd {
-                format!("atomic_{}.{scope_str} r{rd}, r{addr}, r{value}", atomic_suffix(*op))
+                format!(
+                    "atomic_{}.{scope_str} r{rd}, r{addr}, r{value}",
+                    atomic_suffix(*op)
+                )
             } else {
-                format!("atomic_{}.{scope_str} r{addr}, r{value}", atomic_suffix(*op))
+                format!(
+                    "atomic_{}.{scope_str} r{addr}, r{value}",
+                    atomic_suffix(*op)
+                )
             }
         }
-        Operation::DeviceAtomicCas { rd, addr, expected, desired, scope } => {
+        Operation::DeviceAtomicCas {
+            rd,
+            addr,
+            expected,
+            desired,
+            scope,
+        } => {
             let scope_str = scope_suffix(*scope);
             if let Some(rd) = rd {
                 format!("atomic_cas.{scope_str} r{rd}, r{addr}, r{expected}, r{desired}")
@@ -207,7 +265,11 @@ fn format_operation(op: &Operation) -> String {
             format!("mov r{rd}, {sr_name}")
         }
 
-        Operation::Unknown { opcode, word0, word1 } => {
+        Operation::Unknown {
+            opcode,
+            word0,
+            word1,
+        } => {
             if let Some(w1) = word1 {
                 format!(".unknown 0x{opcode:02X} ; {word0:08X} {w1:08X}")
             } else {
@@ -267,7 +329,14 @@ fn f64_divsqrt_mnemonic(op: F64DivSqrtOp) -> &'static str {
     }
 }
 
-fn format_bitop(op: BitOpType, rd: u8, rs1: u8, rs2: Option<u8>, rs3: Option<u8>, rs4: Option<u8>) -> String {
+fn format_bitop(
+    op: BitOpType,
+    rd: u8,
+    rs1: u8,
+    rs2: Option<u8>,
+    rs3: Option<u8>,
+    rs4: Option<u8>,
+) -> String {
     match op {
         BitOpType::Bitcount => format!("bitcount r{rd}, r{rs1}"),
         BitOpType::Bitfind => format!("bitfind r{rd}, r{rs1}"),
@@ -404,7 +473,11 @@ mod tests {
         let inst = DecodedInstruction {
             offset: 0,
             size: 4,
-            operation: Operation::Iadd { rd: 3, rs1: 1, rs2: 2 },
+            operation: Operation::Iadd {
+                rd: 3,
+                rs1: 1,
+                rs2: 2,
+            },
             predicate: 0,
             predicate_negated: false,
         };
@@ -428,7 +501,10 @@ mod tests {
         let inst = DecodedInstruction {
             offset: 0,
             size: 8,
-            operation: Operation::MovImm { rd: 7, imm: 0xDEADBEEF },
+            operation: Operation::MovImm {
+                rd: 7,
+                imm: 0xDEADBEEF,
+            },
             predicate: 0,
             predicate_negated: false,
         };
@@ -440,7 +516,11 @@ mod tests {
         let inst = DecodedInstruction {
             offset: 0,
             size: 4,
-            operation: Operation::Iadd { rd: 3, rs1: 1, rs2: 2 },
+            operation: Operation::Iadd {
+                rd: 3,
+                rs1: 1,
+                rs2: 2,
+            },
             predicate: 1,
             predicate_negated: false,
         };
@@ -452,7 +532,11 @@ mod tests {
         let inst = DecodedInstruction {
             offset: 0,
             size: 4,
-            operation: Operation::Fadd { rd: 0, rs1: 1, rs2: 2 },
+            operation: Operation::Fadd {
+                rd: 0,
+                rs1: 1,
+                rs2: 2,
+            },
             predicate: 1,
             predicate_negated: true,
         };
@@ -518,7 +602,9 @@ mod tests {
         let inst = DecodedInstruction {
             offset: 0,
             size: 4,
-            operation: Operation::FenceRelease { scope: Scope::Workgroup },
+            operation: Operation::FenceRelease {
+                scope: Scope::Workgroup,
+            },
             predicate: 0,
             predicate_negated: false,
         };
