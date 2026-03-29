@@ -11,6 +11,7 @@
 pub fn emit_file_header() -> String {
     [
         "#include <hip/hip_runtime.h>",
+        "#include <hip/hip_fp16.h>",
         "#include <cstdint>",
         "",
         "__device__ inline float rf(uint32_t r) { return __uint_as_float(r); }",
@@ -24,15 +25,9 @@ pub fn emit_file_header() -> String {
 
 #[must_use]
 pub fn emit_kernel_signature(name: &str) -> String {
-    let kernel_name = if name.is_empty() {
-        "wave_kernel"
-    } else {
-        name
-    };
+    let kernel_name = if name.is_empty() { "wave_kernel" } else { name };
 
-    format!(
-        "__global__ void {kernel_name}(uint8_t* device_mem) {{\n"
-    )
+    format!("__global__ void {kernel_name}(uint8_t* device_mem) {{\n")
 }
 
 #[must_use]
