@@ -5,9 +5,9 @@ edition = "2021"
 publish = false
 
 [dependencies]
-wave-asm = { path = "../../wave-asm" }
-wave-emu = { path = "../../wave-emu" }
-wave-decode = { path = "../../wave-decode" }
+wave-asm = { version = "0.1.0", path = "../../wave-asm" }
+wave-emu = { version = "0.1.0", path = "../../wave-emu" }
+wave-decode = { version = "0.1.0", path = "../../wave-decode" }
 thiserror = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

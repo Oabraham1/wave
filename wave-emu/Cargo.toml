@@ -5,16 +5,18 @@ edition = "2021"
 authors = ["Ojima Abraham"]
 description = "WAVE emulator - reference implementation of the WAVE ISA"
 license = "Apache-2.0"
+repository = "https://github.com/Oabraham1/wave"
+homepage = "https://wave.ojima.me"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 thiserror = "1"
 half = "2"
 byteorder = "1"
-wave-decode = { path = "../wave-decode" }
+wave-decode = { version = "0.1.0", path = "../wave-decode" }
 
 [dev-dependencies]
-wave-asm = { path = "../wave-asm" }
+wave-asm = { version = "0.1.0", path = "../wave-asm" }
 
 [lints.rust]
 unsafe_code = "forbid"

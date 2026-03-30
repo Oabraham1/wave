@@ -5,7 +5,14 @@ description = "Write GPU kernels in Python, run on any GPU"
 authors = [{name = "Ojima Abraham"}]
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
+readme = "README.md"
 dependencies = []
+keywords = ["gpu", "cuda", "metal", "hip", "sycl", "compute"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+]
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -15,4 +22,5 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [project.urls]
-Homepage = "https://github.com/Oabraham1/wave"
+Homepage = "https://wave.ojima.me"
+Repository = "https://github.com/Oabraham1/wave"

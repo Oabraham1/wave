@@ -3,7 +3,7 @@
 
 //! Integration tests for the WAVE Rust SDK.
 
-use wave_sdk::{array, device, kernel};
+use wave_gpu::{array, device, kernel};
 
 #[test]
 fn test_device_detection() {

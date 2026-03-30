@@ -7,16 +7,18 @@ description = "WAVE compiler - compiles high-level kernel code to WAVE ISA binar
 license = "Apache-2.0"
 # examples/ contains kernel source files for multiple languages, not Cargo examples
 autoexamples = false
+repository = "https://github.com/Oabraham1/wave"
+homepage = "https://wave.ojima.me"
 
 [dependencies]
-wave-decode = { path = "../wave-decode" }
+wave-decode = { version = "0.1.0", path = "../wave-decode" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "1"
 ariadne = "0.4"
 syn = { version = "2", features = ["full", "parsing"] }
 
 [dev-dependencies]
-wave-asm = { path = "../wave-asm" }
+wave-asm = { version = "0.1.0", path = "../wave-asm" }
 
 [lints.rust]
 unsafe_code = "forbid"

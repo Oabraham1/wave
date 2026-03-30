@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build Python package
+        run: |
+          pip install build
+          cd sdk/python
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: sdk/python/dist/
+
+  publish-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cd wave-decode && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-asm && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-compiler && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-emu && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-metal && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-ptx && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-hip && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-sycl && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd wave-runtime && cargo publish --allow-dirty && cd ..
+          sleep 30
+          cd sdk/rust && cargo publish --allow-dirty && cd ../..
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build and publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd sdk/js
+          npm install
+          npx tsc
+          npm publish --provenance --access public
+
+  build-release-binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            suffix: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binaries
+        run: |
+          for crate in wave-asm wave-dis wave-emu wave-compiler; do
+            (cd $crate && cargo build --release)
+          done
+
+      - name: Package binaries
+        run: |
+          mkdir -p release
+          for bin in wave-asm wave-dis wave-emu wave-compiler; do
+            cp $bin/target/release/$bin release/ 2>/dev/null || true
+          done
+          tar -czf wave-${{ matrix.suffix }}.tar.gz -C release .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wave-${{ matrix.suffix }}
+          path: wave-${{ matrix.suffix }}.tar.gz
+
+  create-github-release:
+    needs: [publish-python, publish-rust, publish-npm, build-release-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.tar.gz
+          generate_release_notes: true
+
+      - name: Package C++ SDK
+        run: |
+          cd sdk/cpp
+          tar -czf ../../artifacts/wave-sdk-cpp.tar.gz include/ src/ CMakeLists.txt README.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/wave-sdk-cpp.tar.gz

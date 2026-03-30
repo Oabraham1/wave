@@ -10,6 +10,8 @@
     "type": "git",
     "url": "https://github.com/Oabraham1/wave"
   },
+  "homepage": "https://wave.ojima.me",
+  "keywords": ["gpu", "cuda", "metal", "hip", "sycl", "compute", "kernel"],
   "scripts": {
     "build": "tsc",
     "test": "node --experimental-vm-modules tests/test_vector_add.js"

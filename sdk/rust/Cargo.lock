@@ -544,6 +544,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wave-gpu"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "wave-asm",
+ "wave-compiler",
+ "wave-runtime",
+]
+
+[[package]]
 name = "wave-hip"
 version = "0.1.0"
 dependencies = [
@@ -583,16 +593,6 @@ dependencies = [
  "wave-metal",
  "wave-ptx",
  "wave-sycl",
-]
-
-[[package]]
-name = "wave-sdk"
-version = "0.1.0"
-dependencies = [
- "thiserror",
- "wave-asm",
- "wave-compiler",
- "wave-runtime",
 ]
 
 [[package]]

@@ -5,20 +5,22 @@ edition = "2021"
 authors = ["Ojima Abraham"]
 description = "WAVE runtime - shared core for all WAVE SDKs"
 license = "Apache-2.0"
+repository = "https://github.com/Oabraham1/wave"
+homepage = "https://wave.ojima.me"
 
 [dependencies]
-wave-compiler = { path = "../wave-compiler" }
-wave-decode = { path = "../wave-decode" }
-wave-emu = { path = "../wave-emu" }
-wave-metal = { path = "../wave-metal" }
-wave-ptx = { path = "../wave-ptx" }
-wave-hip = { path = "../wave-hip" }
-wave-sycl = { path = "../wave-sycl" }
+wave-compiler = { version = "0.1.0", path = "../wave-compiler" }
+wave-decode = { version = "0.1.0", path = "../wave-decode" }
+wave-emu = { version = "0.1.0", path = "../wave-emu" }
+wave-metal = { version = "0.1.0", path = "../wave-metal" }
+wave-ptx = { version = "0.1.0", path = "../wave-ptx" }
+wave-hip = { version = "0.1.0", path = "../wave-hip" }
+wave-sycl = { version = "0.1.0", path = "../wave-sycl" }
 thiserror = "1"
 tempfile = "3"
 
 [dev-dependencies]
-wave-asm = { path = "../wave-asm" }
+wave-asm = { version = "0.1.0", path = "../wave-asm" }
 
 [lints.rust]
 unsafe_code = "forbid"

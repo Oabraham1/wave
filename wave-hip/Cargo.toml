@@ -5,9 +5,11 @@ edition = "2021"
 authors = ["Ojima Abraham"]
 description = "WAVE HIP backend - translates WAVE binary to AMD HIP kernel source"
 license = "Apache-2.0"
+repository = "https://github.com/Oabraham1/wave"
+homepage = "https://wave.ojima.me"
 
 [dependencies]
-wave-decode = { path = "../wave-decode" }
+wave-decode = { version = "0.1.0", path = "../wave-decode" }
 clap = { version = "4", features = ["derive"] }
 thiserror = "1"
 
