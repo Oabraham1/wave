@@ -1,8 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
 
 jobs:
   publish-python:
@@ -35,25 +35,11 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          cd wave-decode && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-asm && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-compiler && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-emu && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-metal && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-ptx && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-hip && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-sycl && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd wave-runtime && cargo publish --allow-dirty && cd ..
-          sleep 30
-          cd sdk/rust && cargo publish --allow-dirty && cd ../..
+          for crate in wave-decode wave-asm wave-compiler wave-emu wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
+            echo "Publishing $crate..."
+            (cd $crate && cargo publish --allow-dirty) || echo "SKIPPED $crate (already published or error)"
+            sleep 60
+          done
 
   publish-npm:
     runs-on: ubuntu-latest

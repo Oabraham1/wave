@@ -1,6 +1,6 @@
 {
   "name": "wave-gpu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Write GPU kernels in TypeScript, run on any GPU",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
