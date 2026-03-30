@@ -39,6 +39,9 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'WAVE Spec', slug: 'reference/spec' },
+					{ label: 'Spec v0.3', slug: 'reference/spec-v03' },
+					{ label: 'Spec v0.2', slug: 'reference/spec-v02' },
+					{ label: 'Spec v0.1', slug: 'reference/spec-v01' },
 						{ label: 'Python API', slug: 'reference/python-api' },
 						{ label: 'Rust API', slug: 'reference/rust-api' },
 						{ label: 'C/C++ API', slug: 'reference/cpp-api' },

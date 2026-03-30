@@ -1,17 +1,17 @@
 ---
 title: WAVE Specification
-description: The complete WAVE ISA specification.
+description: The complete WAVE ISA specification — all versions.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, LinkCard, CardGrid } from '@astrojs/starlight/components';
 
-The WAVE specification defines the instruction set architecture, binary encoding format, memory model, and execution semantics for the WAVE GPU compute model. Each version of the specification is documented below with a summary of changes and a link to the full interactive reference.
+The WAVE specification defines the instruction set architecture, binary encoding format, memory model, and execution semantics for the WAVE GPU compute model.
 
 ## Specification Versions
 
 <Tabs>
   <TabItem label="v0.3 (Current)">
-    ### v0.3 - Current
+    ### v0.3 — Current
 
     The v0.3 specification is the current stable version of the WAVE ISA. It resolves encoding issues present in earlier versions and establishes the canonical instruction format used by all WAVE tooling.
 
@@ -19,8 +19,8 @@ The WAVE specification defines the instruction set architecture, binary encoding
 
     - **Modifier field widened to 4 bits.** The 3-bit modifier field from v0.2 was insufficient to encode all instruction variants. v0.3 expands it to 4 bits, supporting up to 16 modifier values per opcode.
     - **Flags field reduced from 3 bits to 2 bits.** Two flags were removed:
-      - `WAVE_REDUCE_FLAG` - previously used to signal wave-level reduction semantics; now handled by dedicated wave operation opcodes.
-      - `NON_RETURNING_ATOMIC_FLAG` - previously used to indicate fire-and-forget atomics; now encoded via the modifier field on atomic instructions.
+      - `WAVE_REDUCE_FLAG` — now handled by dedicated wave operation opcodes.
+      - `NON_RETURNING_ATOMIC_FLAG` — now encoded via the modifier field on atomic instructions.
     - **Canonical register encoding:** 5-bit register fields encoding 32 general-purpose registers (`r0`–`r31`).
     - **4-bit modifier** enables fine-grained instruction variants (e.g., memory ordering, rounding mode, comparison predicate).
 
@@ -38,21 +38,13 @@ The WAVE specification defines the instruction set architecture, binary encoding
 
     Extended format instructions append a second 32-bit immediate word.
 
-    **Full interactive specification:**
-
-    <iframe
-      src="https://ojima.me/spec.html"
-      width="100%"
-      height="700"
-      style="border: 1px solid var(--sl-color-gray-5); border-radius: 8px;"
-      title="WAVE v0.3 Specification"
-    />
+    <LinkCard title="Read the full v0.3 specification →" href="/reference/spec-v03/" />
   </TabItem>
 
   <TabItem label="v0.2">
     ### v0.2
 
-    v0.2 fixed the most critical encoding bug from v0.1 - register fields - but still carried an undersized modifier field.
+    v0.2 fixed the most critical encoding bug from v0.1 — register fields — but still carried an undersized modifier field.
 
     **Key changes from v0.1:**
 
@@ -64,11 +56,13 @@ The WAVE specification defines the instruction set architecture, binary encoding
 
     - The 3-bit modifier field could only encode 8 variants, which was insufficient for memory ordering modes, comparison predicates, and rounding modes.
     - `WAVE_REDUCE_FLAG` and `NON_RETURNING_ATOMIC_FLAG` consumed flag bits that could be better allocated.
-    - 8-bit register fields were unnecessarily wide - no real workload needed more than 32 registers per thread.
+    - 8-bit register fields were unnecessarily wide — no real workload needed more than 32 registers per thread.
+
+    <LinkCard title="Read the full v0.2 specification →" href="/reference/spec-v02/" />
   </TabItem>
 
   <TabItem label="v0.1">
-    ### v0.1 - Initial Draft
+    ### v0.1 — Initial Draft
 
     The initial specification established the core instruction set and execution model. It was a proof-of-concept encoding that validated the overall architecture but contained several encoding issues.
 
@@ -83,17 +77,21 @@ The WAVE specification defines the instruction set architecture, binary encoding
 
     - Shared control flow prevented efficient SIMT divergence handling.
     - Register encoding was correct at 5 bits, but v0.2 mistakenly widened it to 8 bits before v0.3 restored the 5-bit width.
+
+    <LinkCard title="Read the full v0.1 specification →" href="/reference/spec-v01/" />
   </TabItem>
 </Tabs>
 
-## Specification Format
+## Specification Contents
 
-The specification document covers the following sections:
+Each version of the specification covers the following sections:
 
-1. **Instruction Encoding** - base and extended instruction formats, field layout, and encoding rules.
-2. **Register File** - general-purpose registers, special registers (program counter, exec mask), and register conventions.
-3. **Memory Model** - address spaces (private, local, global, constant), alignment requirements, and coherence guarantees.
-4. **Execution Model** - waves, workgroups, grid dispatch, SIMT divergence and reconvergence.
-5. **Instruction Reference** - per-opcode semantics, operand constraints, and modifier definitions.
-
-For the complete specification, visit [https://ojima.me/spec.html](https://ojima.me/spec.html).
+1. **Introduction** — purpose, scope, design principles, and relationship to other standards.
+2. **Execution Model** — thread hierarchy, identifiers, core resources, execution guarantees, and dispatch.
+3. **Register Model** — general-purpose registers, sub-register access, register pairs, special registers, and predicate registers.
+4. **Memory Model** — memory spaces, local/device memory details, memory ordering, and atomic operations.
+5. **Control Flow** — structured control flow, uniform branches, divergence/reconvergence, and per-wave state.
+6. **Instruction Set** — integer, bitwise, floating-point, type conversion, comparison, memory, atomic, wave, synchronization, control flow, and MMA instructions.
+7. **Capability System** — required constants, optional capabilities, MMA parameters, and query mechanism.
+8. **Binary Encoding** — base and extended instruction formats, opcode map.
+9. **Conformance** — required behavior, implementation-defined behavior, undefined behavior, and conformance testing.

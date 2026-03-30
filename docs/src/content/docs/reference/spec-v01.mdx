@@ -1,0 +1,639 @@
+---
+title: "WAVE Specification v0.1"
+description: "WAVE ISA Specification v0.1 — Working Draft (March 22, 2026)"
+---
+
+**Version:** 0.1 (Working Draft)
+**Authors:** Ojima Abraham, Onyinye Okoli
+**Date:** March 22, 2026
+**Status:** Working Draft
+
+## 0. Conformance Language
+
+The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED**, **MAY**, and **OPTIONAL** in this document are to be interpreted as described in RFC 2119.
+
+## 1. Introduction
+
+### 1.1 Purpose
+
+This specification defines WAVE (Wide Architecture Virtual Encoding), a vendor-neutral instruction set architecture for general-purpose GPU computation. It specifies an abstract execution model, a register model, a memory model, structured control flow semantics, an instruction set, and a capability query system.
+
+The specification follows the thin abstraction principle: it defines what a compliant implementation **MUST** be able to do, not how it must do it. Implementations **MAY** use any microarchitectural technique to achieve compliance.
+
+### 1.2 Scope
+
+This specification covers general-purpose compute workloads. Graphics pipeline operations (rasterization, tessellation, pixel export, ray tracing) are out of scope and **MAY** be addressed by future extensions.
+
+### 1.3 Design Principles
+
+1. **Thin abstraction.** Every requirement traces to a hardware-invariant primitive observed across all four major GPU vendors. No requirement is imposed for software convenience alone.
+2. **Queryable parameters.** Values that differ across implementations (wave width, register count, scratchpad size) are exposed as queryable constants, not fixed in the specification.
+3. **Structured divergence.** The specification defines control flow semantics but not divergence mechanisms. Implementations are free to use any technique (execution masks, predication, hardware stacks, per-thread program counters) to achieve the specified behavior.
+4. **Mandatory minimums.** Every queryable parameter has a minimum value. A compliant implementation **MUST** meet or exceed all minimums.
+
+### 1.4 Relationship to Other Standards
+
+This specification is complementary to existing standards. SPIR-V **MAY** be used as a distribution format for programs targeting this ISA. OpenCL and Vulkan **MAY** serve as host APIs for dispatching workloads. The distinction is that this specification defines the hardware execution model, while existing standards define host-device interaction.
+
+## 2. Execution Model
+
+### 2.1 Overview
+
+A compliant processor consists of one or more Cores. Each Core is an independent compute unit capable of executing multiple Workgroups concurrently. Cores are not addressable by software. The hardware assigns Workgroups to Cores, and the programmer **MUST NOT** assume any particular mapping.
+
+### 2.2 Thread Hierarchy
+
+The execution model defines four levels, three mandatory and one optional:
+
+**Level 0: Thread.** The smallest unit of execution. A Thread has a private register file, a scalar program counter, and a position within the hierarchy identified by hardware-populated identity values. A Thread executes a sequential stream of instructions.
+
+**Level 1: Wave.** A group of exactly W Threads that execute a single instruction simultaneously, where W is a hardware constant queryable at compile time (see Section 7). All Threads in a Wave share a program counter for the purpose of instruction fetch. When Threads in a Wave disagree on a branch condition, the implementation **MUST** ensure that both paths execute with inactive Threads producing no architectural side effects. The mechanism by which this is achieved is not specified.
+
+A Wave is the fundamental scheduling unit. The hardware scheduler operates on Waves, not individual Threads.
+
+**Level 2: Workgroup.** A group of one or more Waves, containing up to MAX_WORKGROUP_SIZE Threads. All Waves in a Workgroup execute on the same Core, share access to Local Memory, and may synchronize via Barriers.
+
+The number of Waves per Workgroup is `ceil(workgroup_thread_count / W)`.
+
+Workgroup dimensions are specified at dispatch time as a 3-dimensional size (x, y, z) where `x * y * z <= MAX_WORKGROUP_SIZE`.
+
+**Level 3: Grid.** The complete dispatch of Workgroups. A Grid is specified as a 3-dimensional count of Workgroups. Workgroups within a Grid **MAY** execute in any order, on any Core, at any time. No synchronization is available between Workgroups within a single Grid dispatch.
+
+**Level 2.5 (Optional): Cluster.** A group of Workgroups guaranteed to execute concurrently on adjacent Cores with access to each other's Local Memory. The Cluster size is queryable via CLUSTER_SIZE. If the implementation does not support Clusters, CLUSTER_SIZE is 1 and Cluster-scope operations behave identically to Workgroup-scope operations.
+
+### 2.3 Thread Identifiers
+
+Every Thread has the following hardware-populated, read-only values available as special registers:
+
+| Identifier | Type | Description |
+|---|---|---|
+| `thread_id.{x,y,z}` | uint32 | Thread position within Workgroup (3D) |
+| `wave_id` | uint32 | Wave index within Workgroup |
+| `lane_id` | uint32 | Thread position within Wave (0 to W-1) |
+| `workgroup_id.{x,y,z}` | uint32 | Workgroup position within Grid (3D) |
+| `workgroup_size.{x,y,z}` | uint32 | Workgroup dimensions |
+| `grid_size.{x,y,z}` | uint32 | Grid dimensions (in Workgroups) |
+| `num_waves` | uint32 | Number of Waves in this Workgroup |
+
+### 2.4 Core Resources
+
+Each Core provides the following resources:
+
+**Register File.** A fixed-size on-chip storage of F bytes, partitioned among all simultaneously resident Threads. Each Thread receives R registers (declared at compile time). The maximum number of simultaneously resident Waves is bounded by:
+
+```
+max_resident_waves = floor(F / (R * W * 4))
+```
+
+where 4 is the register width in bytes (32 bits). This is the occupancy equation. Implementations **MUST** support at least MIN_MAX_REGISTERS registers per Thread.
+
+**Local Memory.** A fixed-size on-chip scratchpad of S bytes, shared among all Waves in the same Workgroup. Local Memory is explicitly addressed via load and store instructions. There is no automatic caching or data placement. Local Memory contents are undefined at Workgroup start and are not preserved across Workgroup boundaries. Implementations **MUST** provide at least MIN_LOCAL_MEMORY_SIZE bytes.
+
+**Hardware Scheduler.** Selects a ready Wave for execution each cycle. When a Wave stalls on a memory access, barrier, or other long-latency operation, the scheduler **MUST** be able to select another resident Wave without software-visible overhead. The scheduling policy is implementation-defined.
+
+### 2.5 Execution Guarantees
+
+1. All Threads in a Wave execute the same instruction in the same cycle, or appear to from the programmer's perspective.
+2. Inactive Threads (those on the non-taken path of a divergent branch) produce no architectural side effects (no memory writes, no register updates visible to other Threads).
+3. All Threads in a Workgroup that reach a Barrier will synchronize at that Barrier before any proceeds past it.
+4. Memory operations to Local Memory are visible to all Threads in the Workgroup after a Barrier.
+5. Memory operations to Device Memory are visible according to the memory ordering rules (Section 4).
+6. Wave-level operations (reductions, broadcasts, shuffles) operate only on active Threads.
+7. A compliant implementation **MUST** eventually make progress on at least one Wave per Core.
+
+### 2.6 Dispatch
+
+A dispatch consists of specifying:
+
+1. A program (compiled binary containing instructions for this ISA)
+2. Grid dimensions (number of Workgroups in x, y, z)
+3. Workgroup dimensions (number of Threads in x, y, z)
+4. Kernel arguments (Device Memory pointers, constants)
+
+The implementation distributes Workgroups to Cores and creates Waves within each Workgroup. The distribution policy is implementation-defined.
+
+## 3. Register Model
+
+### 3.1 General-Purpose Registers
+
+Each Thread has access to R general-purpose registers, where R is declared at compile time and **MUST** be at least MIN_MAX_REGISTERS. Registers are 32 bits wide and are denoted `r0`, `r1`, ..., `r(R-1)`. Register contents are undefined at Thread start unless explicitly initialized.
+
+### 3.2 Sub-Register Access
+
+A 32-bit register may be accessed as two 16-bit halves:
+
+- `r0.lo` -- bits [15:0]
+- `r0.hi` -- bits [31:16]
+
+Or as four 8-bit bytes (optional capability):
+
+- `r0.b0` -- bits [7:0]
+- `r0.b1` -- bits [15:8]
+- `r0.b2` -- bits [23:16]
+- `r0.b3` -- bits [31:24]
+
+### 3.3 Register Pairs
+
+64-bit operations use register pairs. The notation `r0:r1` denotes a 64-bit value where `r0` holds the low 32 bits and `r1` holds the high 32 bits. Register pairs **MUST** use adjacent even-odd register numbers (e.g., `r0:r1`, `r2:r3`, but not `r1:r2`).
+
+### 3.4 Special Registers
+
+The following read-only registers are populated by hardware:
+
+- `%tid.x`, `%tid.y`, `%tid.z` -- Thread ID within Workgroup
+- `%wid` -- Wave ID within Workgroup
+- `%lid` -- Lane ID within Wave
+- `%ctaid.x`, `%ctaid.y`, `%ctaid.z` -- Workgroup ID within Grid
+- `%ntid.x`, `%ntid.y`, `%ntid.z` -- Workgroup dimensions
+- `%nctaid.x`, `%nctaid.y`, `%nctaid.z` -- Grid dimensions
+- `%nwaves` -- Number of Waves in this Workgroup
+- `%clock` -- Cycle counter (implementation-defined resolution)
+
+### 3.5 Predicate Registers
+
+Implementations **MUST** provide at least 8 predicate registers, denoted `p0` through `p7`. Each predicate register holds a boolean value (1 bit per Thread). Predicate registers are used for conditional execution and branch conditions.
+
+### 3.6 Allocation and Occupancy
+
+Compilers declare the number of registers required by a kernel. The runtime uses this to compute occupancy:
+
+```
+occupancy = min(
+    max_waves_per_core,
+    floor(register_file_size / (registers_per_thread * wave_width * 4)),
+    floor(local_memory_size / local_memory_per_workgroup)
+)
+```
+
+Higher occupancy generally improves latency hiding but reduces registers and Local Memory available per Thread.
+
+## 4. Memory Model
+
+### 4.1 Memory Spaces
+
+The specification defines four memory spaces:
+
+| Space | Scope | Lifetime | Typical Implementation |
+|---|---|---|---|
+| Private | Single Thread | Thread lifetime | Registers or stack |
+| Local | Workgroup | Workgroup lifetime | On-chip SRAM |
+| Device | All Threads | Kernel lifetime (at least) | VRAM |
+| Constant | All Threads | Kernel lifetime | Cached read-only |
+
+### 4.2 Local Memory Details
+
+Local Memory **MUST** support atomic operations. Access latency is implementation-defined but **SHOULD** be significantly lower than Device Memory. Bank conflicts **MAY** increase access latency but **MUST NOT** affect correctness. The implementation **MUST** provide at least MIN_LOCAL_MEMORY_SIZE bytes per Workgroup.
+
+### 4.3 Device Memory Details
+
+Device Memory is the largest but slowest memory space. It persists across kernel launches (until explicitly deallocated by the host). Device Memory **MUST** support atomic operations. Coalescing (combining multiple Thread accesses into fewer memory transactions) is implementation-defined but strongly encouraged.
+
+### 4.4 Memory Ordering
+
+Within a single Thread, memory operations appear to execute in program order. Across Threads, the ordering is relaxed by default. Explicit ordering is achieved via:
+
+**Fences.** A fence instruction establishes ordering between memory operations before and after the fence. Fences are parameterized by scope:
+
+- `fence.wave` -- ordering visible to all Threads in the Wave
+- `fence.workgroup` -- ordering visible to all Threads in the Workgroup
+- `fence.device` -- ordering visible to all Threads on the device
+
+**Barriers.** A Barrier (`barrier`) implies a Workgroup-scope fence. All memory operations before the Barrier are visible to all Threads in the Workgroup after the Barrier.
+
+### 4.5 Atomic Operations
+
+Atomic operations are indivisible read-modify-write operations. Implementations **MUST** support the following atomic operations on both Local and Device Memory:
+
+- `atom.add`, `atom.sub` -- addition/subtraction
+- `atom.min`, `atom.max` -- minimum/maximum (signed and unsigned)
+- `atom.and`, `atom.or`, `atom.xor` -- bitwise operations
+- `atom.exch` -- exchange
+- `atom.cas` -- compare-and-swap
+
+64-bit atomics are an optional capability.
+
+## 5. Control Flow
+
+### 5.1 Structured Control Flow
+
+All control flow **MUST** be structured. The specification defines the following control flow primitives:
+
+- `if pd, label_else, label_endif` -- conditional branch based on predicate pd
+- `else` -- marks the start of the else block
+- `endif` -- marks the end of the if/else construct
+- `loop label_end` -- begins a loop, label_end marks the end
+- `endloop` -- marks the end of a loop
+- `break pd` -- exits the innermost loop if predicate is true
+- `continue pd` -- jumps to the next iteration of the innermost loop
+
+Arbitrary `goto` is not supported. All control flow graphs **MUST** be reducible.
+
+### 5.2 Uniform Branches
+
+A branch is uniform if all active Threads in a Wave take the same direction. Uniform branches have no divergence overhead. Compilers **SHOULD** annotate branches as uniform when known, allowing optimizations.
+
+The syntax for annotating a branch as uniform is `@uniform if pd, ...`. If a branch annotated as uniform diverges at runtime, behavior is undefined.
+
+### 5.3 Divergence and Reconvergence
+
+When Threads in a Wave disagree on a branch condition, the Wave is divergent. The implementation **MUST** execute both paths, but the order and mechanism are implementation-defined. Possible mechanisms include:
+
+- Execution masks (execute both paths with some Threads inactive)
+- Stack-based reconvergence
+- Per-Thread program counters
+
+The specification only requires that:
+
+1. All Threads reconverge after structured control flow constructs (at `endif`, `endloop`).
+2. Inactive Threads produce no side effects.
+3. Wave-level operations operate only on active Threads.
+
+## 6. Instruction Set
+
+### 6.1 Instruction Format
+
+All instructions follow the format:
+
+```asm
+[predicate] opcode[.modifiers] destination, source1, source2, ...
+```
+
+Where:
+
+- `predicate` (optional): `@p0`...`@p7` for conditional execution
+- `opcode`: instruction mnemonic
+- `modifiers`: type suffixes, rounding modes, etc.
+- `destination`: target register
+- `source`: source operands (registers, immediates)
+
+### 6.2 Integer Arithmetic
+
+| Instruction | Description | Operation |
+|---|---|---|
+| `add.s32 rd, ra, rb` | Signed 32-bit add | rd = ra + rb |
+| `add.u32 rd, ra, rb` | Unsigned 32-bit add | rd = ra + rb |
+| `sub.s32 rd, ra, rb` | Signed 32-bit subtract | rd = ra - rb |
+| `mul.lo.s32 rd, ra, rb` | Signed multiply (low 32 bits) | rd = (ra * rb)[31:0] |
+| `mul.hi.s32 rd, ra, rb` | Signed multiply (high 32 bits) | rd = (ra * rb)[63:32] |
+| `mul.wide.s32 rd:rd+1, ra, rb` | Signed 32x32->64 multiply | rd:rd+1 = ra * rb |
+| `mad.lo.s32 rd, ra, rb, rc` | Multiply-add (low bits) | rd = (ra * rb)[31:0] + rc |
+| `div.s32 rd, ra, rb` | Signed division | rd = ra / rb |
+| `rem.s32 rd, ra, rb` | Signed remainder | rd = ra % rb |
+| `neg.s32 rd, ra` | Negate | rd = -ra |
+| `abs.s32 rd, ra` | Absolute value | rd = \|ra\| |
+| `min.s32 rd, ra, rb` | Minimum | rd = min(ra, rb) |
+| `max.s32 rd, ra, rb` | Maximum | rd = max(ra, rb) |
+
+### 6.3 Bitwise Operations
+
+| Instruction | Description | Operation |
+|---|---|---|
+| `and.b32 rd, ra, rb` | Bitwise AND | rd = ra & rb |
+| `or.b32 rd, ra, rb` | Bitwise OR | rd = ra \| rb |
+| `xor.b32 rd, ra, rb` | Bitwise XOR | rd = ra ^ rb |
+| `not.b32 rd, ra` | Bitwise NOT | rd = ~ra |
+| `shl.b32 rd, ra, rb` | Shift left | `rd = ra << rb` |
+| `shr.u32 rd, ra, rb` | Logical shift right | `rd = ra >>> rb` |
+| `shr.s32 rd, ra, rb` | Arithmetic shift right | `rd = ra >> rb` |
+| `popc.b32 rd, ra` | Population count | rd = popcount(ra) |
+| `clz.b32 rd, ra` | Count leading zeros | rd = clz(ra) |
+| `brev.b32 rd, ra` | Bit reverse | rd = reverse_bits(ra) |
+| `bfe.u32 rd, ra, rb, rc` | Bit field extract | `rd = (ra >> rb) & mask(rc)` |
+| `bfi.b32 rd, ra, rb, rc, re` | Bit field insert | Insert rc bits of ra at position rb into re |
+
+### 6.4 Floating-Point (F32)
+
+All implementations **MUST** support IEEE 754-2008 single-precision (binary32) with the following exceptions:
+
+- Denormal inputs **MAY** be flushed to zero.
+- Denormal outputs **MAY** be flushed to zero.
+- NaN payloads are implementation-defined.
+
+| Instruction | Description |
+|---|---|
+| `add.f32 rd, ra, rb` | Addition |
+| `sub.f32 rd, ra, rb` | Subtraction |
+| `mul.f32 rd, ra, rb` | Multiplication |
+| `fma.f32 rd, ra, rb, rc` | Fused multiply-add (rd = ra*rb + rc) |
+| `div.f32 rd, ra, rb` | Division |
+| `rcp.f32 rd, ra` | Reciprocal (approximate, 1 ULP) |
+| `sqrt.f32 rd, ra` | Square root |
+| `rsqrt.f32 rd, ra` | Reciprocal square root (approximate) |
+| `neg.f32 rd, ra` | Negate |
+| `abs.f32 rd, ra` | Absolute value |
+| `min.f32 rd, ra, rb` | Minimum (IEEE semantics) |
+| `max.f32 rd, ra, rb` | Maximum (IEEE semantics) |
+| `sin.f32 rd, ra` | Sine (approximate) |
+| `cos.f32 rd, ra` | Cosine (approximate) |
+| `exp2.f32 rd, ra` | 2^x (approximate) |
+| `log2.f32 rd, ra` | log2(x) (approximate) |
+
+### 6.5 Floating-Point (F16)
+
+Half-precision support is an optional capability. When present:
+
+- Two f16 values are packed into a single 32-bit register.
+- Operations operate on pairs (vec2) or scalars.
+
+| Instruction | Description |
+|---|---|
+| `add.f16x2 rd, ra, rb` | Packed f16 addition |
+| `mul.f16x2 rd, ra, rb` | Packed f16 multiplication |
+| `fma.f16x2 rd, ra, rb, rc` | Packed f16 FMA |
+
+### 6.6 Floating-Point (F64)
+
+Double-precision support is an optional capability. When present, operations use register pairs.
+
+| Instruction | Description |
+|---|---|
+| `add.f64 rd:rd+1, ra:ra+1, rb:rb+1` | f64 addition |
+| `mul.f64 rd:rd+1, ra:ra+1, rb:rb+1` | f64 multiplication |
+| `fma.f64 rd:rd+1, ra:ra+1, rb:rb+1, rc:rc+1` | f64 FMA |
+| `div.f64 rd:rd+1, ra:ra+1, rb:rb+1` | f64 division |
+
+### 6.7 Type Conversion
+
+| Instruction | Description |
+|---|---|
+| `cvt.f32.s32 rd, ra` | Signed int to float |
+| `cvt.f32.u32 rd, ra` | Unsigned int to float |
+| `cvt.s32.f32 rd, ra` | Float to signed int (truncate) |
+| `cvt.rni.s32.f32 rd, ra` | Float to signed int (round nearest) |
+| `cvt.f16.f32 rd, ra` | f32 to f16 (packed) |
+| `cvt.f32.f16 rd, ra` | f16 to f32 (unpacked) |
+| `cvt.f64.f32 rd:rd+1, ra` | f32 to f64 |
+| `cvt.f32.f64 rd, ra:ra+1` | f64 to f32 |
+
+### 6.8 Comparison and Select
+
+| Instruction | Description |
+|---|---|
+| `setp.eq.s32 pd, ra, rb` | Set predicate if equal |
+| `setp.ne.s32 pd, ra, rb` | Set predicate if not equal |
+| `setp.lt.s32 pd, ra, rb` | Set predicate if less than |
+| `setp.le.s32 pd, ra, rb` | Set predicate if less or equal |
+| `setp.gt.s32 pd, ra, rb` | Set predicate if greater than |
+| `setp.ge.s32 pd, ra, rb` | Set predicate if greater or equal |
+| `selp.s32 rd, ra, rb, pd` | Select: rd = pd ? ra : rb |
+| `slct.s32.f32 rd, ra, rb, rc` | Select based on sign: rd = (rc >= 0) ? ra : rb |
+
+Floating-point comparisons include special handling for NaN:
+
+- `setp.eq.f32`: false if either operand is NaN
+- `setp.neu.f32`: true if either operand is NaN (unordered not-equal)
+
+### 6.9 Memory Operations
+
+| Instruction | Description |
+|---|---|
+| `ld.local.b32 rd, [ra]` | Load 32 bits from Local Memory |
+| `ld.local.b64 rd:rd+1, [ra]` | Load 64 bits from Local Memory |
+| `ld.global.b32 rd, [ra]` | Load 32 bits from Device Memory |
+| `ld.const.b32 rd, [ra]` | Load 32 bits from Constant Memory |
+| `st.local.b32 [ra], rb` | Store 32 bits to Local Memory |
+| `st.global.b32 [ra], rb` | Store 32 bits to Device Memory |
+
+Vector loads/stores are supported for efficiency:
+
+- `ld.global.v2.b32 {rd, rd+1}, [ra]` -- load 2x32 bits
+- `ld.global.v4.b32 {rd, rd+1, rd+2, rd+3}, [ra]` -- load 4x32 bits
+
+### 6.10 Atomic Operations
+
+| Instruction | Description |
+|---|---|
+| `atom.local.add.u32 rd, [ra], rb` | Atomic add to Local Memory |
+| `atom.global.add.u32 rd, [ra], rb` | Atomic add to Device Memory |
+| `atom.global.cas.b32 rd, [ra], rb, rc` | Compare-and-swap |
+| `atom.global.exch.b32 rd, [ra], rb` | Exchange |
+| `atom.global.min.s32 rd, [ra], rb` | Atomic minimum |
+| `atom.global.max.s32 rd, [ra], rb` | Atomic maximum |
+
+All atomic operations return the value before the operation was applied.
+
+### 6.11 Wave Operations
+
+Wave operations perform computation across all active Threads in a Wave.
+
+| Instruction | Description |
+|---|---|
+| `wave.reduce.add.u32 rd, ra` | Sum of ra across all active lanes |
+| `wave.reduce.min.s32 rd, ra` | Minimum of ra across all active lanes |
+| `wave.reduce.max.s32 rd, ra` | Maximum of ra across all active lanes |
+| `wave.reduce.and.b32 rd, ra` | Bitwise AND across all active lanes |
+| `wave.reduce.or.b32 rd, ra` | Bitwise OR across all active lanes |
+| `wave.broadcast.b32 rd, ra, rb` | Broadcast ra from lane rb to all lanes |
+| `wave.shuffle.b32 rd, ra, rb` | rd = ra from lane rb |
+| `wave.shuffle.xor.b32 rd, ra, rb` | rd = ra from lane (lane_id ^ rb) |
+| `wave.shuffle.up.b32 rd, ra, rb` | rd = ra from lane (lane_id - rb) |
+| `wave.shuffle.down.b32 rd, ra, rb` | rd = ra from lane (lane_id + rb) |
+| `wave.prefix.add.u32 rd, ra` | Exclusive prefix sum |
+| `wave.ballot.b32 rd, pd` | rd = bitmask of pd across all lanes |
+| `wave.any pd, ps` | pd = true if any active lane has ps=true |
+| `wave.all pd, ps` | pd = true if all active lanes have ps=true |
+
+### 6.12 Synchronization
+
+| Instruction | Description |
+|---|---|
+| `barrier` | Workgroup barrier + memory fence |
+| `fence.wave` | Memory fence, Wave scope |
+| `fence.workgroup` | Memory fence, Workgroup scope |
+| `fence.device` | Memory fence, Device scope |
+
+### 6.13 Control Flow Instructions
+
+| Instruction | Description |
+|---|---|
+| `if pd` | Begin if block |
+| `else` | Begin else block |
+| `endif` | End if/else block |
+| `loop` | Begin loop |
+| `endloop` | End loop |
+| `break pd` | Break from loop if predicate true |
+| `continue pd` | Continue to next iteration if predicate true |
+| `ret` | Return from kernel |
+
+### 6.14 Matrix MMA (Optional)
+
+Matrix multiply-accumulate (MMA) operations are an optional capability. When present, implementations support tensor core-style operations:
+
+```asm
+mma.m16n8k8.f32.f16 {d0,d1,d2,d3}, {a0,a1}, {b0}, {c0,c1,c2,c3}
+```
+
+The exact shapes and data types are queryable via the capability system (see Section 7).
+
+## 7. Capability System
+
+### 7.1 Required Constants
+
+Every implementation **MUST** provide the following queryable constants:
+
+| Constant | Minimum | Description |
+|---|---|---|
+| `WAVE_WIDTH` | 16 | Number of Threads per Wave |
+| `MAX_WORKGROUP_SIZE` | 256 | Maximum Threads per Workgroup |
+| `MAX_REGISTERS` | 64 | Maximum registers per Thread |
+| `LOCAL_MEMORY_SIZE` | 16384 | Bytes of Local Memory per Workgroup |
+| `MAX_WAVES_PER_CORE` | 16 | Maximum resident Waves per Core |
+| `PREDICATE_REGISTERS` | 8 | Number of predicate registers |
+| `CLUSTER_SIZE` | 1 | Workgroups per Cluster (1 = no clusters) |
+
+### 7.2 Optional Capabilities
+
+Implementations **MAY** support the following optional features:
+
+| Capability | Description |
+|---|---|
+| `CAP_F16` | Half-precision floating-point |
+| `CAP_F64` | Double-precision floating-point |
+| `CAP_ATOMIC64` | 64-bit atomic operations |
+| `CAP_MMA` | Matrix multiply-accumulate |
+| `CAP_DP4A` | 4-element dot product (int8) |
+| `CAP_SUBGROUPS` | Subgroup operations (partial wave) |
+| `CAP_CLUSTER` | Cluster-scope operations |
+
+### 7.3 MMA Parameters
+
+If `CAP_MMA` is present, the following constants define supported MMA shapes:
+
+| Constant | Description |
+|---|---|
+| `MMA_M` | M dimension (rows of output) |
+| `MMA_N` | N dimension (columns of output) |
+| `MMA_K` | K dimension (inner dimension) |
+| `MMA_INPUT_TYPES` | Bitmask of supported input types |
+| `MMA_OUTPUT_TYPES` | Bitmask of supported output types |
+
+### 7.4 Query Mechanism
+
+The host runtime provides a query function:
+
+```c
+wave_result wave_get_capability(wave_device device, wave_capability cap, void* value, size_t size);
+```
+
+Where `cap` is an enumeration of all queryable constants and capabilities. The function writes the value to the provided buffer and returns a success/error code.
+
+Example usage:
+
+```c
+uint32_t wave_width;
+wave_get_capability(device, WAVE_CAP_WAVE_WIDTH, &wave_width, sizeof(wave_width));
+```
+
+## 8. Binary Encoding
+
+### 8.1 Overview
+
+Instructions are encoded in either a 32-bit base format or a 64-bit extended format. The base format accommodates common operations with register operands. The extended format adds support for immediate values, additional operands, and modifiers.
+
+### 8.2 Base Format (32-bit)
+
+```
+31      26 25    21 20    16 15    11 10     6 5       0
++---------+--------+--------+--------+--------+---------+
+| opcode  |   rd   |   ra   |   rb   |  pred  |  flags  |
+| (6 bits)|(5 bits)|(5 bits)|(5 bits)|(5 bits)| (6 bits)|
++---------+--------+--------+--------+--------+---------+
+```
+
+- **opcode**: Primary operation code (64 base opcodes)
+- **rd**: Destination register
+- **ra, rb**: Source registers
+- **pred**: Predicate register (0 = unconditional, 1-7 = p1-p7, 8-15 = !p0-!p7)
+- **flags**: Operation-specific flags (saturation, rounding, etc.)
+
+### 8.3 Extended Format (64-bit)
+
+```
+63      58 57    53 52    48 47    43 42    38 37    32
++---------+--------+--------+--------+--------+--------+
+|  1 1 1  | opcode |   rd   |   ra   |   rb   |   rc   |
+| (3 bits)|(5 bits)|(5 bits)|(5 bits)|(5 bits)|(5 bits) |
++---------+--------+--------+--------+--------+--------+
+31                                                     0
++------------------------------------------------------+
+|                     immediate                         |
+|                     (32 bits)                         |
++------------------------------------------------------+
+```
+
+The extended format is indicated by opcode bits [31:29] = 111. This allows for:
+
+- 4-operand instructions (FMA, MMA)
+- 32-bit immediate values
+- Extended opcodes (224 additional operations)
+
+## 9. Conformance
+
+### 9.1 Required Behavior
+
+A conformant implementation **MUST**:
+
+1. Execute all required instructions with correct semantics.
+2. Meet or exceed all minimum capability values.
+3. Provide correct memory ordering per Section 4.
+4. Correctly handle divergence per Section 5.
+5. Report capabilities accurately via Section 7.
+
+### 9.2 Implementation-Defined
+
+The following are implementation-defined:
+
+- Scheduling policy (Wave selection, Workgroup assignment)
+- Memory coalescing behavior
+- Bank conflict penalties
+- Divergence mechanism
+- NaN payload values
+- Clock counter resolution
+
+### 9.3 Undefined Behavior
+
+The following result in undefined behavior:
+
+- Barrier within divergent control flow
+- Uniform branch that diverges at runtime
+- Access to unallocated registers
+- Out-of-bounds memory access
+- Data races (concurrent access without synchronization where at least one is a write)
+
+### 9.4 Conformance Testing
+
+The reference test suite (forthcoming) will include:
+
+- Instruction correctness tests for all required operations
+- Memory ordering tests
+- Divergence correctness tests
+- Capability query tests
+- Edge case tests (overflow, NaN handling, etc.)
+
+## A. Full Opcode Table
+
+Deferred to a future version of this specification.
+
+## B. Vendor Mapping
+
+This appendix provides suggested mappings to vendor ISAs for reference implementations:
+
+| WAVE Concept | NVIDIA (PTX) | AMD (RDNA) | Intel (Xe) | Apple (M-series) |
+|---|---|---|---|---|
+| Wave | Warp (32) | Wave (32/64) | SIMD (8/16) | SIMD-group (32) |
+| Workgroup | Thread Block | Work-group | Thread Group | Threadgroup |
+| Local Memory | Shared Memory | LDS | SLM | Threadgroup Memory |
+| Device Memory | Global Memory | VRAM | Global Memory | Device Memory |
+| wave.shuffle | shfl.sync | ds_permute | mov (cross-lane) | quad_shuffle |
+| Barrier | bar.sync | s_barrier | barrier | threadgroup_barrier |
+| Fence | fence.sc | S_WAITCNT | scoreboard | wait_for_loads |
+
+## C. Revision History
+
+| Version | Date | Changes |
+|---|---|---|
+| 0.1 | 2026-03-22 | Initial draft |
+
+:::note[Defensive Publication Statement]
+This specification is published as a defensive publication. The architectural concepts described herein are placed in the public domain for the purpose of establishing prior art and preventing proprietary claims on vendor-neutral GPU compute primitives.
+:::
