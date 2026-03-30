@@ -1,0 +1,69 @@
+---
+title: WAVE - The Universal GPU ISA
+description: Open-source GPU instruction set architecture. Write kernels once, run on Apple, NVIDIA, AMD, and Intel GPUs.
+template: splash
+hero:
+  tagline: Open-source GPU instruction set architecture. Write kernels once, run on Apple, NVIDIA, AMD, and Intel GPUs.
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/Oabraham1/wave
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+WAVE is an open-source research project exploring whether a single GPU instruction set can target every major GPU vendor. The answer is yes. The specification, compiler, four vendor backends, and four language SDKs are all Apache 2.0 licensed.
+
+<CardGrid>
+  <Card title="Any GPU" icon="rocket">
+    WAVE defines 11 hardware-invariant primitives distilled from 5,000+ pages of vendor ISA documentation across 16 microarchitectures. One binary format targets Apple Metal, NVIDIA PTX, AMD HIP, and Intel SYCL through dedicated compiler backends. No vendor lock-in, no rewriting kernels per platform.
+  </Card>
+  <Card title="Any Language" icon="pencil">
+    Native SDKs for Python, Rust, C++, and TypeScript let you write, compile, and launch GPU kernels from the language you already use. Install with `pip install wave-gpu`, `cargo add wave-sdk`, CMake `find_package`, or `npm install wave-gpu` and start computing in minutes.
+  </Card>
+  <Card title="Proven" icon="approve-check">
+    Verified on real hardware - Apple M4 Pro, NVIDIA T4, and AMD MI300X - with full spec-level compliance tests for every primitive. The research behind WAVE is published on Zenodo (DOI 10.5281/zenodo.19163452) and in preparation for ASPLOS 2027.
+  </Card>
+</CardGrid>
+
+## Quick Example
+
+A complete GPU vector addition in Python, from kernel definition to result readback:
+
+```python
+import wave_gpu
+
+@wave_gpu.kernel(threads=256)
+def vector_add(a, b, out, n):
+    tid = wave_gpu.thread_id()
+    if tid < n:
+        out[tid] = a[tid] + b[tid]
+
+# Allocate device arrays
+n = 1024
+a = wave_gpu.array([1.0] * n)
+b = wave_gpu.array([2.0] * n)
+out = wave_gpu.array([0.0] * n)
+
+# Launch - WAVE detects your GPU and selects the right backend
+vector_add(a, b, out, n)
+
+print(out.to_list()[:4])  # [3.0, 3.0, 3.0, 3.0]
+```
+
+WAVE compiles the kernel to its portable `.wbin` binary format, selects the appropriate backend for your hardware (Metal on Apple, PTX on NVIDIA, HIP on AMD, SYCL on Intel), translates to vendor-native code, and dispatches to the GPU. If no supported GPU is detected, the built-in emulator runs the kernel on the CPU so you can develop anywhere.
+
+## How It Works
+
+```
+Source kernel → wave-compiler → .wbin → backend → vendor GPU code → GPU
+```
+
+The WAVE compiler lowers your kernel into a compact 32-bit base instruction format (64-bit extended for 3+ operands) using 32 general-purpose registers, 4 predicate registers, and structured control flow. Each backend then translates this portable IR into the vendor's native ISA.
+
+**Next:** [Introduction](/getting-started/introduction/) - learn what WAVE is and why it exists.
