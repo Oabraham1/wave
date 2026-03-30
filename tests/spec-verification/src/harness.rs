@@ -84,6 +84,7 @@ pub fn run_kernel(
         trace_enabled: config.trace,
         f64_enabled: true,
         max_instructions: config.max_instructions,
+        initial_registers: Vec::new(),
     };
 
     let mut emulator = Emulator::new(emu_config);

@@ -10,6 +10,10 @@ The verification suite:
 - Uses self-checking tests (assembly writes results to memory, harness verifies)
 - Includes real GPU-style programs as stress tests
 
+## Dependencies
+
+Requires `wave-asm` (assembler) and `wave-emu` (emulator) from the parent workspace.
+
 ## Running Tests
 
 ```bash
@@ -36,24 +40,6 @@ cargo build --release
 | Section 9 | Conformance | Determinism, halt behavior, bounds checking |
 | Real Programs | End-to-end | Dot product, matrix multiply, etc. |
 | Stress Tests | GPU workloads | Vector add, reduction, histogram, transpose |
-
-## Output Format
-
-```
-WAVE Specification Verification Report
-=======================================
-Spec Version: 0.1
-Toolchain: wave-asm v0.1, wave-emu v0.1
-Date: 2026-03-22
-
-Section 2: Execution Model
-  [PASS] test_wave_width — Wave width is exactly W threads
-  [FAIL] test_thread_identity — Each Thread has a unique identity
-    Lane 1 wrote 0 instead of 1 at offset 4
-...
-
-Summary: 45/60 PASSED, 15 FAILED
-```
 
 ## Test Result Interpretation
 

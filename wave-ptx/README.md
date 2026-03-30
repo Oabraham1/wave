@@ -56,19 +56,6 @@ PTX is assembly, not C++. This makes it fundamentally different from the Metal, 
 - **64-bit addressing.** Device memory requires 64-bit addresses. The 32-bit WAVE byte offset is zero-extended via `cvt.u64.u32` and added to the base pointer in `%rd0`.
 - **No atomic sub.** PTX lacks `atom.sub`. The backend negates the value and uses `atom.add`.
 
-## Tests
-
-76 tests across 5 test files:
-- 47 arithmetic (integer, float, bitwise, comparison, conversion, predicates, kernel structure)
-- 9 memory (global/shared load/store, atomics, CAS, fences)
-- 4 control flow (if/endif, if/else/endif, loop/break, loop/continue)
-- 12 wave ops (shuffle modes, ballot, vote, reduce add/min/max, prefix sum)
-- 4 programs (vector_add, reduction with barrier, empty kernel, invalid WBIN)
-
-```
-cargo test
-```
-
 ## License
 
 Copyright (c) 2026 Ojima Abraham. All rights reserved.

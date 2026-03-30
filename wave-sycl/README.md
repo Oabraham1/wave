@@ -84,14 +84,6 @@ function → queue::submit → handler::parallel_for → nd_item lambda → kern
 
 The kernel body lives at indent level 4 inside the lambda.
 
-## Tests
-
-50 tests: 45 individual instruction codegen tests + 5 full-program integration tests.
-
-```
-cargo test
-```
-
 ## License
 
 Copyright (c) 2026 Ojima Abraham. All rights reserved.

@@ -88,4 +88,4 @@ Followed by the code section, symbol table (null-terminated strings), and kernel
 
 ## License
 
-Apache-2.0
+Apache 2.0 - see [LICENSE](../LICENSE)

@@ -56,14 +56,6 @@ swiftc examples/run_on_metal.swift -framework Metal -framework Foundation -o run
 - Memory alignment assumed. Pointer casts require aligned byte offsets.
 - Single device buffer. All device memory through `[[buffer(0)]]`.
 
-## Tests
-
-77 tests: 69 individual instruction codegen tests + 8 full-program integration tests.
-
-```
-cargo test
-```
-
 ## License
 
 Copyright (c) 2026 Ojima Abraham. All rights reserved.

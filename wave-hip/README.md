@@ -57,14 +57,6 @@ Generated code uses `warpSize` everywhere instead of hardcoding 32. This makes t
 
 Reduction trees and prefix sums use `for` loops bounded by `warpSize` rather than unrolled steps, so the same generated code adapts to either width at runtime.
 
-## Tests
-
-53 tests: 48 individual instruction codegen tests + 5 full-program integration tests.
-
-```
-cargo test
-```
-
 ## License
 
 Copyright (c) 2026 Ojima Abraham. All rights reserved.
