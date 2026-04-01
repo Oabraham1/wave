@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "wave-asm"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "ariadne",
  "clap",
@@ -515,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "wave-compiler"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "ariadne",
  "clap",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "wave-decode"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "byteorder",
  "thiserror",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "wave-emu"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "byteorder",
  "clap",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "wave-hip"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "clap",
  "thiserror",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "wave-metal"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "clap",
  "thiserror",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "wave-ptx"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "clap",
  "thiserror",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "wave-runtime"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -588,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "wave-sycl"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "clap",
  "thiserror",

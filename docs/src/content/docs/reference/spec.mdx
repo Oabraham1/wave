@@ -10,10 +10,25 @@ The WAVE specification defines the instruction set architecture, binary encoding
 ## Specification Versions
 
 <Tabs>
-  <TabItem label="v0.3 (Current)">
-    ### v0.3 — Current
+  <TabItem label="v0.4 (Current)">
+    ### v0.4 — Current
 
-    The v0.3 specification is the current stable version of the WAVE ISA. It resolves encoding issues present in earlier versions and establishes the canonical instruction format used by all WAVE tooling.
+    The v0.4 specification is the current version of the WAVE ISA. It clarifies type conversion semantics and adds neural network training as conformance evidence.
+
+    **Key changes from v0.3:**
+
+    - **Type conversion naming convention clarified.** The mnemonic `cvt_A_B` converts from type B to type A (destination type first). An emulator bug where `cvt_f32_i32` and `cvt_i32_f32` were swapped has been fixed.
+    - **Neural network training verification.** A complete two-layer MNIST network (784→128→10) has been trained using 11 WAVE kernels, with gradients verified against PyTorch. Emulator-to-Metal results confirmed as bit-exact or numerically close across all kernels.
+
+    The binary encoding format is unchanged from v0.3.
+
+    <LinkCard title="Read the full v0.4 specification →" href="/reference/spec-v04/" />
+  </TabItem>
+
+  <TabItem label="v0.3">
+    ### v0.3
+
+    The v0.3 specification resolved encoding issues present in earlier versions and established the canonical instruction format used by all WAVE tooling.
 
     **Key changes from v0.2:**
 

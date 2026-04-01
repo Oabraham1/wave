@@ -12,7 +12,7 @@ from .device import DeviceInfo, device
 from .kernel import kernel
 from .types import f16, f32, f64, i32, u32
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     "WaveArray",
