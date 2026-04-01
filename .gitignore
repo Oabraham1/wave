@@ -20,3 +20,11 @@ sdk/js/dist/
 # Temp files
 *.wbin
 /tmp/
+
+# MNIST data
+data/
+
+# PyTorch integration artifacts
+pytorch-integration/.kernel_cache/
+pytorch-integration/results_summary.md
+pytorch-integration/test_metal_minimal.py

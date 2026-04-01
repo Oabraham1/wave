@@ -643,10 +643,10 @@ impl<'a> Executor<'a> {
             let rs1 = thread.read_register(inst.rs1);
 
             let result = match inst.modifier {
-                m if m == CvtType::F32I32 as u8 => ((rs1 as i32) as f32).to_bits(), // i32 → f32
-                m if m == CvtType::F32U32 as u8 => (rs1 as f32).to_bits(),          // u32 → f32
-                m if m == CvtType::I32F32 as u8 => f32::from_bits(rs1) as i32 as u32, // f32 → i32
-                m if m == CvtType::U32F32 as u8 => f32::from_bits(rs1) as u32,      // f32 → u32
+                m if m == CvtType::F32I32 as u8 => f32::from_bits(rs1) as i32 as u32, // f32 → i32
+                m if m == CvtType::F32U32 as u8 => f32::from_bits(rs1) as u32,        // f32 → u32
+                m if m == CvtType::I32F32 as u8 => ((rs1 as i32) as f32).to_bits(),   // i32 → f32
+                m if m == CvtType::U32F32 as u8 => (rs1 as f32).to_bits(),            // u32 → f32
                 m if m == CvtType::F32F16 as u8 => f16::from_bits(rs1 as u16).to_f32().to_bits(),
                 m if m == CvtType::F16F32 as u8 => {
                     u32::from(f16::from_f32(f32::from_bits(rs1)).to_bits())
