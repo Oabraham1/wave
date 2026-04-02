@@ -119,7 +119,7 @@ def run_kernel_cuda(wbin_path, buffers, scalars, output_specs, grid=(1, 1, 1), w
         host_buf.extend(part)
 
     total_bytes = len(host_buf)
-    host_array = np.frombuffer(bytes(host_buf), dtype=np.uint8)
+    host_array = np.array(bytearray(host_buf), dtype=np.uint8)
 
     d_mem = cuda.mem_alloc(max(total_bytes, 4))
     cuda.memcpy_htod(d_mem, host_array)
