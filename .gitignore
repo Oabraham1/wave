@@ -21,6 +21,9 @@ sdk/js/dist/
 *.wbin
 /tmp/
 
+# Notebooks
+*.ipynb
+
 # MNIST data
 data/
 
