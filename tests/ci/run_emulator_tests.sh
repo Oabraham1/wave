@@ -353,18 +353,30 @@ B_OFF=$A_SIZE
 C_OFF=$((B_OFF + A_SIZE))
 MEM=$((C_OFF + A_SIZE + 4096))
 
-write_f16_bin "$TMPDIR/t15_a.bin" $(python3 -c "
-import random
+python3 -c "
+import struct, random
 random.seed(42)
-print(' '.join(str(random.uniform(-1, 1)) for _ in range($N * $N)))
-")
-
-write_f16_bin "$TMPDIR/t15_b.bin" $(python3 -c "
-import random
-random.seed(42)
-[random.uniform(-1, 1) for _ in range($N * $N)]
-print(' '.join(str(random.uniform(-1, 1)) for _ in range($N * $N)))
-")
+N = $N
+def f32_to_f16(val):
+    bits = struct.unpack('<I', struct.pack('<f', val))[0]
+    sign = (bits >> 31) & 1
+    exp = (bits >> 23) & 0xFF
+    mant = bits & 0x7FFFFF
+    if exp == 0: return sign << 15
+    elif exp == 0xFF: return (sign << 15) | 0x7C00 | (mant >> 13)
+    new_exp = exp - 127 + 15
+    if new_exp <= 0: return sign << 15
+    elif new_exp >= 31: return (sign << 15) | 0x7C00
+    return (sign << 15) | (new_exp << 10) | (mant >> 13)
+A = [random.uniform(-1, 1) for _ in range(N * N)]
+B = [random.uniform(-1, 1) for _ in range(N * N)]
+with open('$TMPDIR/t15_a.bin', 'wb') as f:
+    for v in A:
+        f.write(struct.pack('<H', f32_to_f16(v)))
+with open('$TMPDIR/t15_b.bin', 'wb') as f:
+    for v in B:
+        f.write(struct.pack('<H', f32_to_f16(v)))
+"
 
 "$EMU" "$TMPDIR/t15.wbin" \
     --grid 1,1,1 --workgroup 16,16,1 \

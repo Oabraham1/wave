@@ -64,8 +64,10 @@ impl CodeGenerator {
             kernel.local_memory_size,
         ));
 
-        self.output
-            .push_str(&registers::emit_declarations(kernel.register_count, kernel.local_memory_size > 0));
+        self.output.push_str(&registers::emit_declarations(
+            kernel.register_count,
+            kernel.local_memory_size > 0,
+        ));
         self.line("");
 
         for instr in instructions {

@@ -9,8 +9,8 @@
 // ControlFlowManager is now in Wave, not Executor
 use crate::decoder::{
     AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, DecodedInstruction,
-    Decoder, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, Opcode,
-    SyncOp, WaveOpType, WaveReduceType, SYNC_MODIFIER_OFFSET,
+    Decoder, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, Opcode, SyncOp,
+    WaveOpType, WaveReduceType, SYNC_MODIFIER_OFFSET,
 };
 use crate::memory::{DeviceMemory, LocalMemory};
 use crate::shuffle;
@@ -87,8 +87,7 @@ impl<'a> Executor<'a> {
     ) -> Result<ExecuteResult, EmulatorError> {
         let original_mask = wave.active_mask;
         let is_control_sync = inst.opcode == Opcode::Control && inst.is_sync_op();
-        let is_halt = is_control_sync
-            && inst.modifier == SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET;
+        let is_halt = is_control_sync && inst.modifier == SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET;
 
         if inst.is_predicated() {
             let pred_mask = self.compute_predicate_mask(wave, inst.pred_reg, inst.pred_neg);
@@ -582,12 +581,14 @@ impl<'a> Executor<'a> {
                 let c_hi = Self::bf16_to_f32((rs3_bits >> 16) as u16);
 
                 let (r_lo, r_hi) = match inst.modifier {
-                    m if m == Bf16PackedOp::Badd2 as u8 => {
-                        (Self::f32_to_bf16(a_lo + b_lo), Self::f32_to_bf16(a_hi + b_hi))
-                    }
-                    m if m == Bf16PackedOp::Bmul2 as u8 => {
-                        (Self::f32_to_bf16(a_lo * b_lo), Self::f32_to_bf16(a_hi * b_hi))
-                    }
+                    m if m == Bf16PackedOp::Badd2 as u8 => (
+                        Self::f32_to_bf16(a_lo + b_lo),
+                        Self::f32_to_bf16(a_hi + b_hi),
+                    ),
+                    m if m == Bf16PackedOp::Bmul2 as u8 => (
+                        Self::f32_to_bf16(a_lo * b_lo),
+                        Self::f32_to_bf16(a_hi * b_hi),
+                    ),
                     m if m == Bf16PackedOp::Bma2 as u8 => (
                         Self::f32_to_bf16(a_lo.mul_add(b_lo, c_lo)),
                         Self::f32_to_bf16(a_hi.mul_add(b_hi, c_hi)),
@@ -739,9 +740,7 @@ impl<'a> Executor<'a> {
                     thread.write_register(inst.rd + 1, (bits >> 32) as u32);
                     bits as u32
                 }
-                m if m == CvtType::F32Bf16 as u8 => {
-                    Self::bf16_to_f32(rs1 as u16).to_bits()
-                }
+                m if m == CvtType::F32Bf16 as u8 => Self::bf16_to_f32(rs1 as u16).to_bits(),
                 m if m == CvtType::Bf16F32 as u8 => {
                     u32::from(Self::f32_to_bf16(f32::from_bits(rs1)))
                 }
@@ -1314,7 +1313,10 @@ impl<'a> Executor<'a> {
                             data.push(f32::from_bits(bits));
                         }
                     }
-                    wave.threads[idx].mma_fragments.a_fragments.insert(frag_id, data);
+                    wave.threads[idx]
+                        .mma_fragments
+                        .a_fragments
+                        .insert(frag_id, data);
                 }
                 1 => {
                     let frag_id = inst.rd;
@@ -1328,7 +1330,10 @@ impl<'a> Executor<'a> {
                             data.push(f32::from_bits(bits));
                         }
                     }
-                    wave.threads[idx].mma_fragments.b_fragments.insert(frag_id, data);
+                    wave.threads[idx]
+                        .mma_fragments
+                        .b_fragments
+                        .insert(frag_id, data);
                 }
                 2 => {
                     let addr = wave.threads[idx].read_register(inst.rd);

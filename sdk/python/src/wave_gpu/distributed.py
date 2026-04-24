@@ -10,11 +10,10 @@ M-series) all operations are no-ops that preserve correctness so the
 same training code runs everywhere.
 """
 
-import math
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from .array import WaveArray
-from .device import DeviceInfo, detect_gpu, device
+from .device import DeviceInfo, detect_gpu
 
 
 def enumerate_devices() -> List[DeviceInfo]:

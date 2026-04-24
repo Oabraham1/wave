@@ -228,7 +228,6 @@ impl ControlFlowManager {
         &mut self,
         _active_mask: u64,
     ) -> Result<(u64, Option<u32>), EmulatorError> {
-
         let frame = self
             .stack
             .top_mut()

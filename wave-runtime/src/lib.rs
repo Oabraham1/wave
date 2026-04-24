@@ -30,7 +30,9 @@ pub mod multi;
 pub use backend::translate_to_vendor;
 pub use cache::{cache_size, clear_cache, compile_cached, translate_cached};
 pub use compiler::{compile_kernel, compile_kernel_with_config};
-pub use device::{detect_gpu, enumerate_devices, Device, DeviceCapabilities, DeviceInfo, GpuVendor};
+pub use device::{
+    detect_gpu, enumerate_devices, Device, DeviceCapabilities, DeviceInfo, GpuVendor,
+};
 pub use error::RuntimeError;
 pub use launcher::launch_kernel;
 pub use memory::{DeviceBuffer, ElementType};

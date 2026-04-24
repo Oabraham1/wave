@@ -40,15 +40,7 @@ fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, pred: u8) -> Vec
     v
 }
 
-fn extended3(
-    opcode: u8,
-    rd: u8,
-    rs1: u8,
-    rs2: u8,
-    rs3: u8,
-    modifier: u8,
-    pred: u8,
-) -> Vec<u8> {
+fn extended3(opcode: u8, rd: u8, rs1: u8, rs2: u8, rs3: u8, modifier: u8, pred: u8) -> Vec<u8> {
     let mut v = encode_word0(opcode, rd, rs1, modifier, pred)
         .to_le_bytes()
         .to_vec();
@@ -388,11 +380,11 @@ fn test_if_else_endif() {
     let mut code = Vec::new();
     // Control flow ops use opcode 0x3F with modifier < 8
     // If=0, Else=1, Endif=2
-    code.extend_from_slice(&single(0x3F, 0, 1, 0, 0));      // if p1
-    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0, 0));  // iadd
-    code.extend_from_slice(&single(0x3F, 0, 0, 1, 0));       // else
-    code.extend_from_slice(&extended(0x00, 5, 1, 2, 0, 0));  // iadd
-    code.extend_from_slice(&single(0x3F, 0, 0, 2, 0));       // endif
+    code.extend_from_slice(&single(0x3F, 0, 1, 0, 0)); // if p1
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0, 0)); // iadd
+    code.extend_from_slice(&single(0x3F, 0, 0, 1, 0)); // else
+    code.extend_from_slice(&extended(0x00, 5, 1, 2, 0, 0)); // iadd
+    code.extend_from_slice(&single(0x3F, 0, 0, 2, 0)); // endif
     let hip = compile_instructions(&code);
     assert!(hip.contains("if (p1) {"), "HIP: {hip}");
     assert!(hip.contains("} else {"), "HIP: {hip}");
@@ -402,9 +394,9 @@ fn test_if_else_endif() {
 fn test_loop_break() {
     let mut code = Vec::new();
     // Loop=3, Break=4, Endloop=6
-    code.extend_from_slice(&single(0x3F, 0, 0, 3, 0));  // loop
-    code.extend_from_slice(&single(0x3F, 0, 1, 4, 0));   // break p1
-    code.extend_from_slice(&single(0x3F, 0, 0, 6, 0));   // endloop
+    code.extend_from_slice(&single(0x3F, 0, 0, 3, 0)); // loop
+    code.extend_from_slice(&single(0x3F, 0, 1, 4, 0)); // break p1
+    code.extend_from_slice(&single(0x3F, 0, 0, 6, 0)); // endloop
     let hip = compile_instructions(&code);
     assert!(hip.contains("while (true) {"), "HIP: {hip}");
     assert!(hip.contains("if (p1) break;"), "HIP: {hip}");

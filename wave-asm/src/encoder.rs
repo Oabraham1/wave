@@ -12,9 +12,9 @@ use crate::ast::{
 use crate::diagnostics::AssemblerError;
 use crate::opcodes::{
     lookup_mnemonic, ControlOp, InstructionSignature, MiscOp, Opcode, OperandKind, Scope, SyncOp,
-    WaveOpType, EXTENDED_RS2_SHIFT, EXTENDED_RS3_SHIFT, EXTENDED_RS4_SHIFT,
-    EXTENDED_SCOPE_SHIFT, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT, PRED_NEG_SHIFT,
-    PRED_REG_MASK, PRED_REG_SHIFT, RD_SHIFT, RS1_SHIFT,
+    WaveOpType, EXTENDED_RS2_SHIFT, EXTENDED_RS3_SHIFT, EXTENDED_RS4_SHIFT, EXTENDED_SCOPE_SHIFT,
+    MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT, PRED_NEG_SHIFT, PRED_REG_MASK, PRED_REG_SHIFT,
+    RD_SHIFT, RS1_SHIFT,
 };
 use crate::symbols::SymbolTable;
 
@@ -441,8 +441,7 @@ impl<'a> Encoder<'a> {
         word0 |= u32::from(rd) << RD_SHIFT;
         word0 |= u32::from(pd) << RS1_SHIFT;
 
-        let word1 = (u32::from(rs1) << EXTENDED_RS2_SHIFT)
-            | (u32::from(rs2) << EXTENDED_RS3_SHIFT);
+        let word1 = (u32::from(rs1) << EXTENDED_RS2_SHIFT) | (u32::from(rs2) << EXTENDED_RS3_SHIFT);
 
         Ok(EncodedInstruction::extended(word0, word1))
     }

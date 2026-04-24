@@ -577,7 +577,11 @@ impl CodeGenerator {
                     reg(*rs1)
                 ));
             }
-            Operation::MmaCompute { rd: _, rs1: _, rs2: _ } => {
+            Operation::MmaCompute {
+                rd: _,
+                rs1: _,
+                rs2: _,
+            } => {
                 self.line(&format!(
                     "{pp}wmma.mma.sync.aligned.row.col.m16n16k16.f32.f32.f32.f32 \
                      {{%mC0, %mC1, %mC2, %mC3, %mC4, %mC5, %mC6, %mC7}}, \

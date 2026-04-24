@@ -47,7 +47,15 @@ pub fn launch_on_device(
     grid: [u32; 3],
     workgroup: [u32; 3],
 ) -> Result<(), RuntimeError> {
-    launch_kernel(vendor_code, wbin, device.vendor, buffers, scalars, grid, workgroup)
+    launch_kernel(
+        vendor_code,
+        wbin,
+        device.vendor,
+        buffers,
+        scalars,
+        grid,
+        workgroup,
+    )
 }
 
 /// Split a buffer along the first (batch) dimension across devices.
@@ -304,7 +312,10 @@ mod tests {
         let shards = shard_tensor(&buf, &devices, 0).unwrap();
         let gathered = gather_shards(&shards).unwrap();
 
-        assert_eq!(gathered.to_f32().unwrap(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(
+            gathered.to_f32().unwrap(),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        );
     }
 
     #[test]
@@ -329,7 +340,10 @@ mod tests {
     #[test]
     fn test_reduce_strategy_single() {
         let devices = vec![make_device(0, GpuVendor::Apple)];
-        assert_eq!(select_reduce_strategy(&devices), ReduceStrategy::SingleDevice);
+        assert_eq!(
+            select_reduce_strategy(&devices),
+            ReduceStrategy::SingleDevice
+        );
     }
 
     #[test]
@@ -350,7 +364,10 @@ mod tests {
             make_device(0, GpuVendor::Nvidia),
             make_device(1, GpuVendor::Amd),
         ];
-        assert_eq!(select_reduce_strategy(&devices), ReduceStrategy::CrossVendor);
+        assert_eq!(
+            select_reduce_strategy(&devices),
+            ReduceStrategy::CrossVendor
+        );
     }
 
     #[test]

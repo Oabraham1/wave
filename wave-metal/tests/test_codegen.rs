@@ -56,14 +56,7 @@ fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> Vec<u8> {
 }
 
 /// Extended instruction with scope in word1 bits 0-1
-fn extended_scope(
-    opcode: u8,
-    rd: u8,
-    rs1: u8,
-    rs2: u8,
-    modifier: u8,
-    scope: u8,
-) -> Vec<u8> {
+fn extended_scope(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8) -> Vec<u8> {
     let mut v = encode_word0(opcode, rd, rs1, modifier, 0, false)
         .to_le_bytes()
         .to_vec();
@@ -405,9 +398,7 @@ fn test_mov() {
 #[test]
 fn test_mov_imm() {
     // Misc opcode 0x41, modifier=1 (MovImm) - reads word1 as immediate
-    let mut code = encode_word0(0x41, 5, 0, 1, 0, false)
-        .to_le_bytes()
-        .to_vec();
+    let mut code = encode_word0(0x41, 5, 0, 1, 0, false).to_le_bytes().to_vec();
     code.extend_from_slice(&42u32.to_le_bytes());
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = 42u;"), "MSL: {msl}");

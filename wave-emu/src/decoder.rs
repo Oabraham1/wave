@@ -241,8 +241,7 @@ impl<'a> Decoder<'a> {
                     SyncOp::from_u8(inst.modifier - SYNC_MODIFIER_OFFSET)
                         .map_or("sync_unknown", |op| op.mnemonic())
                 } else {
-                    ControlOp::from_u8(inst.modifier)
-                        .map_or("control_unknown", |op| op.mnemonic())
+                    ControlOp::from_u8(inst.modifier).map_or("control_unknown", |op| op.mnemonic())
                 }
             }
             Opcode::Misc => {
@@ -339,14 +338,12 @@ impl<'a> Decoder<'a> {
                     }
                 }
             }
-            Opcode::Misc => {
-                match inst.modifier {
-                    0 => format!("r{}, r{}", inst.rd, inst.rs1),
-                    1 => format!("r{}, 0x{:08x}", inst.rd, inst.immediate),
-                    2 => format!("r{}, sr_{}", inst.rd, inst.rs1),
-                    _ => String::new(),
-                }
-            }
+            Opcode::Misc => match inst.modifier {
+                0 => format!("r{}, r{}", inst.rd, inst.rs1),
+                1 => format!("r{}, 0x{:08x}", inst.rd, inst.immediate),
+                2 => format!("r{}, sr_{}", inst.rd, inst.rs1),
+                _ => String::new(),
+            },
             Opcode::Mma => format!("r{}, r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2, inst.rs3),
             Opcode::BitOps => String::new(),
         }
@@ -805,78 +802,177 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
 
         Operation::Return => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::Return as u8 + SYNC_MODIFIER_OFFSET,
-            0, 0, 0,
+            0,
+            0,
+            0,
         ),
         Operation::Halt => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET,
-            0, 0, 0,
+            0,
+            0,
+            0,
         ),
         Operation::Barrier => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::Barrier as u8 + SYNC_MODIFIER_OFFSET,
-            0, 0, 0,
+            0,
+            0,
+            0,
         ),
         Operation::FenceAcquire { scope } => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::FenceAcquire as u8 + SYNC_MODIFIER_OFFSET,
-            *scope as u8, 0, 0,
+            *scope as u8,
+            0,
+            0,
         ),
         Operation::FenceRelease { scope } => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::FenceRelease as u8 + SYNC_MODIFIER_OFFSET,
-            *scope as u8, 0, 0,
+            *scope as u8,
+            0,
+            0,
         ),
         Operation::FenceAcqRel { scope } => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::FenceAcqRel as u8 + SYNC_MODIFIER_OFFSET,
-            *scope as u8, 0, 0,
+            *scope as u8,
+            0,
+            0,
         ),
         Operation::Wait => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::Wait as u8 + SYNC_MODIFIER_OFFSET,
-            0, 0, 0,
+            0,
+            0,
+            0,
         ),
         Operation::Nop => (
             Opcode::Control,
-            0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
             SyncOp::Nop as u8 + SYNC_MODIFIER_OFFSET,
-            0, 0, 0,
+            0,
+            0,
+            0,
         ),
 
-        Operation::Mov { rd, rs1 } => (
-            Opcode::Misc, *rd, *rs1, 0, 0, 0,
-            MiscOp::Mov as u8, 0, 0, 0,
-        ),
+        Operation::Mov { rd, rs1 } => {
+            (Opcode::Misc, *rd, *rs1, 0, 0, 0, MiscOp::Mov as u8, 0, 0, 0)
+        }
         Operation::MovImm { rd, imm } => (
-            Opcode::Misc, *rd, 0, 0, 0, 0,
-            MiscOp::MovImm as u8, 0, 0, *imm,
+            Opcode::Misc,
+            *rd,
+            0,
+            0,
+            0,
+            0,
+            MiscOp::MovImm as u8,
+            0,
+            0,
+            *imm,
         ),
         Operation::MovSr { rd, sr_index } => (
-            Opcode::Misc, *rd, *sr_index, 0, 0, 0,
-            MiscOp::MovSr as u8, 0, 0, 0,
+            Opcode::Misc,
+            *rd,
+            *sr_index,
+            0,
+            0,
+            0,
+            MiscOp::MovSr as u8,
+            0,
+            0,
+            0,
         ),
 
-        Operation::MmaLoadA { rd, rs1, rs2 } => {
-            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::LoadA as u8, 0, 0, 0)
-        }
-        Operation::MmaLoadB { rd, rs1, rs2 } => {
-            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::LoadB as u8, 0, 0, 0)
-        }
-        Operation::MmaStoreC { rd, rs1, rs2 } => {
-            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::StoreC as u8, 0, 0, 0)
-        }
-        Operation::MmaCompute { rd, rs1, rs2 } => {
-            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::Compute as u8, 0, 0, 0)
-        }
+        Operation::MmaLoadA { rd, rs1, rs2 } => (
+            Opcode::Mma,
+            *rd,
+            *rs1,
+            *rs2,
+            0,
+            0,
+            MmaOp::LoadA as u8,
+            0,
+            0,
+            0,
+        ),
+        Operation::MmaLoadB { rd, rs1, rs2 } => (
+            Opcode::Mma,
+            *rd,
+            *rs1,
+            *rs2,
+            0,
+            0,
+            MmaOp::LoadB as u8,
+            0,
+            0,
+            0,
+        ),
+        Operation::MmaStoreC { rd, rs1, rs2 } => (
+            Opcode::Mma,
+            *rd,
+            *rs1,
+            *rs2,
+            0,
+            0,
+            MmaOp::StoreC as u8,
+            0,
+            0,
+            0,
+        ),
+        Operation::MmaCompute { rd, rs1, rs2 } => (
+            Opcode::Mma,
+            *rd,
+            *rs1,
+            *rs2,
+            0,
+            0,
+            MmaOp::Compute as u8,
+            0,
+            0,
+            0,
+        ),
 
         Operation::Unknown {
             opcode,

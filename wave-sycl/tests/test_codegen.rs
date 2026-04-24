@@ -19,28 +19,56 @@ const EXTENDED_SCOPE_SHIFT: u32 = 0;
 const SYNC_MODIFIER_OFFSET: u8 = 8;
 
 fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> u32 {
-    (u32::from(opcode) << OPCODE_SHIFT) | (u32::from(rd) << RD_SHIFT) | (u32::from(rs1) << RS1_SHIFT) | (u32::from(modifier) << MODIFIER_SHIFT) | u32::from(pred)
+    (u32::from(opcode) << OPCODE_SHIFT)
+        | (u32::from(rd) << RD_SHIFT)
+        | (u32::from(rs1) << RS1_SHIFT)
+        | (u32::from(modifier) << MODIFIER_SHIFT)
+        | u32::from(pred)
 }
 fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> Vec<u8> {
-    encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec()
+    encode_word0(opcode, rd, rs1, modifier, pred)
+        .to_le_bytes()
+        .to_vec()
 }
 fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, pred: u8) -> Vec<u8> {
-    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred)
+        .to_le_bytes()
+        .to_vec();
     v.extend_from_slice(&(u32::from(rs2) << EXTENDED_RS2_SHIFT).to_le_bytes());
     v
 }
 fn extended3(opcode: u8, rd: u8, rs1: u8, rs2: u8, rs3: u8, modifier: u8, pred: u8) -> Vec<u8> {
-    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
-    v.extend_from_slice(&((u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(rs3) << EXTENDED_RS3_SHIFT)).to_le_bytes());
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred)
+        .to_le_bytes()
+        .to_vec();
+    v.extend_from_slice(
+        &((u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(rs3) << EXTENDED_RS3_SHIFT))
+            .to_le_bytes(),
+    );
     v
 }
-fn extended_scope(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8, pred: u8) -> Vec<u8> {
-    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
-    v.extend_from_slice(&((u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(scope) << EXTENDED_SCOPE_SHIFT)).to_le_bytes());
+fn extended_scope(
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    modifier: u8,
+    scope: u8,
+    pred: u8,
+) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred)
+        .to_le_bytes()
+        .to_vec();
+    v.extend_from_slice(
+        &((u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(scope) << EXTENDED_SCOPE_SHIFT))
+            .to_le_bytes(),
+    );
     v
 }
 fn sync_extended_scope(modifier: u8, scope: u8) -> Vec<u8> {
-    let mut v = encode_word0(0x3F, 0, 0, SYNC_MODIFIER_OFFSET + modifier, 0).to_le_bytes().to_vec();
+    let mut v = encode_word0(0x3F, 0, 0, SYNC_MODIFIER_OFFSET + modifier, 0)
+        .to_le_bytes()
+        .to_vec();
     v.extend_from_slice(&(u32::from(scope) << EXTENDED_SCOPE_SHIFT).to_le_bytes());
     v
 }

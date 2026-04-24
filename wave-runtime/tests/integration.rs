@@ -108,7 +108,10 @@ fn test_shard_and_gather_roundtrip() {
     let devices = enumerate_devices().unwrap();
     let shards = shard_tensor(&data, &devices, 0).unwrap();
     let gathered = gather_shards(&shards).unwrap();
-    assert_eq!(gathered.to_f32().unwrap(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(
+        gathered.to_f32().unwrap(),
+        vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    );
 }
 
 #[test]

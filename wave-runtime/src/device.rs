@@ -205,7 +205,10 @@ fn query_apple_device_properties() -> (String, u64) {
 
 fn enumerate_nvidia(next_id: &mut usize) -> Vec<DeviceInfo> {
     let output = Command::new("nvidia-smi")
-        .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+        .args([
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ])
         .output();
 
     let Ok(output) = output else {

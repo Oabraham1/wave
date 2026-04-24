@@ -41,7 +41,9 @@ fn hash_key(source: &str, language: Language) -> u64 {
 pub fn compile_cached(source: &str, language: Language) -> Result<Vec<u8>, RuntimeError> {
     let key = hash_key(source, language);
 
-    let mut guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let cache = guard.get_or_insert_with(HashMap::new);
 
     if let Some(entry) = cache.get(&key) {
@@ -51,7 +53,9 @@ pub fn compile_cached(source: &str, language: Language) -> Result<Vec<u8>, Runti
 
     let wbin = crate::compiler::compile_kernel(source, language)?;
 
-    let mut guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let cache = guard.get_or_insert_with(HashMap::new);
     cache.insert(
         key,
@@ -79,7 +83,9 @@ pub fn translate_cached(
 ) -> Result<String, RuntimeError> {
     let key = hash_key(source, language);
 
-    let mut guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let cache = guard.get_or_insert_with(HashMap::new);
 
     if let Some(entry) = cache.get(&key) {
@@ -92,7 +98,9 @@ pub fn translate_cached(
     let wbin = compile_cached(source, language)?;
     let vendor_code = crate::backend::translate_to_vendor(&wbin, vendor)?;
 
-    let mut guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let cache = guard.get_or_insert_with(HashMap::new);
     if let Some(entry) = cache.get_mut(&key) {
         entry.vendor_code.insert(vendor, vendor_code.clone());
@@ -103,13 +111,17 @@ pub fn translate_cached(
 
 /// Clear the kernel cache.
 pub fn clear_cache() {
-    let mut guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *guard = None;
 }
 
 /// Return the number of cached kernel entries.
 pub fn cache_size() -> usize {
-    let guard = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     guard.as_ref().map_or(0, HashMap::len)
 }
 

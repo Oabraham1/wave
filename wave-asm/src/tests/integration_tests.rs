@@ -389,10 +389,7 @@ fn test_integration_all_special_registers() {
         let rs1 = (word >> 8) & 0xFF;
         let modifier = (word >> 4) & 0x0F;
 
-        assert_eq!(
-            opcode, 0x41,
-            "instruction {i}: expected Misc opcode (0x41)"
-        );
+        assert_eq!(opcode, 0x41, "instruction {i}: expected Misc opcode (0x41)");
         assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
         assert_eq!(rs1, i as u32, "instruction {i}: expected sr index {i}");
         assert_eq!(

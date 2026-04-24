@@ -473,9 +473,24 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("bmul", Opcode::Bf16Ops, rrr, Bf16Op::Bmul as u8);
     extended!("bma", Opcode::Bf16Ops, rrrr, Bf16Op::Bma as u8);
 
-    base!("badd2", Opcode::Bf16PackedOps, rrr, Bf16PackedOp::Badd2 as u8);
-    base!("bmul2", Opcode::Bf16PackedOps, rrr, Bf16PackedOp::Bmul2 as u8);
-    extended!("bma2", Opcode::Bf16PackedOps, rrrr, Bf16PackedOp::Bma2 as u8);
+    base!(
+        "badd2",
+        Opcode::Bf16PackedOps,
+        rrr,
+        Bf16PackedOp::Badd2 as u8
+    );
+    base!(
+        "bmul2",
+        Opcode::Bf16PackedOps,
+        rrr,
+        Bf16PackedOp::Bmul2 as u8
+    );
+    extended!(
+        "bma2",
+        Opcode::Bf16PackedOps,
+        rrrr,
+        Bf16PackedOp::Bma2 as u8
+    );
 
     base!("dadd", Opcode::F64Ops, rrr, F64Op::Dadd as u8);
     base!("dsub", Opcode::F64Ops, rrr, F64Op::Dsub as u8);
@@ -1171,14 +1186,7 @@ pub fn lookup_special_register(name: &str) -> Option<u8> {
 }
 
 #[allow(clippy::similar_names)]
-pub fn encode_base(
-    opcode: u8,
-    rd: u8,
-    rs1: u8,
-    modifier: u8,
-    pred_reg: u8,
-    pred_neg: bool,
-) -> u32 {
+pub fn encode_base(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred_reg: u8, pred_neg: bool) -> u32 {
     ((u32::from(opcode) & OPCODE_MASK) << OPCODE_SHIFT)
         | ((u32::from(rd) & RD_MASK) << RD_SHIFT)
         | ((u32::from(rs1) & RS1_MASK) << RS1_SHIFT)

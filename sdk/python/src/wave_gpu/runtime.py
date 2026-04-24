@@ -139,7 +139,9 @@ def _get_error(lib: ctypes.CDLL) -> str:
     err_len = ctypes.c_size_t(0)
     err_ptr = lib.wave_last_error(ctypes.byref(err_len))
     if err_ptr and err_len.value > 0:
-        return ctypes.string_at(err_ptr, err_len.value).decode("utf-8", errors="replace")
+        return ctypes.string_at(err_ptr, err_len.value).decode(
+            "utf-8", errors="replace"
+        )
     return "unknown error"
 
 

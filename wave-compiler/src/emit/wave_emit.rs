@@ -229,12 +229,8 @@ fn emit_float_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
             src2,
             src3,
         } => {
-            let word0 = encode_base_word_no_rs2(
-                Opcode::Fma,
-                reg(*dest, reg_map),
-                reg(*src1, reg_map),
-                0,
-            );
+            let word0 =
+                encode_base_word_no_rs2(Opcode::Fma, reg(*dest, reg_map), reg(*src1, reg_map), 0);
             let word1 = (u32::from(reg(*src2, reg_map)) << EXTENDED_RS2_SHIFT)
                 | (u32::from(reg(*src3, reg_map)) << EXTENDED_RS3_SHIFT);
             EncodedInst {
@@ -327,24 +323,19 @@ fn emit_bitwise_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
 fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
     match inst {
         LirInst::MovImm { dest, value } => {
-            let word0 =
-                encode_misc_word(MiscOp::MovImm as u8, reg(*dest, reg_map), 0);
+            let word0 = encode_misc_word(MiscOp::MovImm as u8, reg(*dest, reg_map), 0);
             EncodedInst {
                 word0,
                 word1: Some(*value),
             }
         }
         LirInst::MovReg { dest, src } => {
-            let word0 = encode_misc_word(
-                MiscOp::Mov as u8,
-                reg(*dest, reg_map),
-                reg(*src, reg_map),
-            );
+            let word0 =
+                encode_misc_word(MiscOp::Mov as u8, reg(*dest, reg_map), reg(*src, reg_map));
             EncodedInst { word0, word1: None }
         }
         LirInst::MovSr { dest, sr } => {
-            let word0 =
-                encode_misc_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index());
+            let word0 = encode_misc_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index());
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -639,7 +630,10 @@ mod tests {
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Control as u32);
         let modifier = (encoded.word0 >> MODIFIER_SHIFT) & u32::from(MODIFIER_MASK);
-        assert_eq!(modifier, u32::from(SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET));
+        assert_eq!(
+            modifier,
+            u32::from(SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET)
+        );
     }
 
     #[test]

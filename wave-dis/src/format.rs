@@ -115,7 +115,10 @@ fn format_operation(op: &Operation) -> String {
             rs3,
         } => {
             if let Some(rs3) = rs3 {
-                format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", bf16_packed_mnemonic(*op))
+                format!(
+                    "{} r{rd}, r{rs1}, r{rs2}, r{rs3}",
+                    bf16_packed_mnemonic(*op)
+                )
             } else {
                 format!("{} r{rd}, r{rs1}, r{rs2}", bf16_packed_mnemonic(*op))
             }
