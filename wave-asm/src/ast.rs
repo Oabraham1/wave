@@ -113,7 +113,6 @@ pub enum Immediate {
 
 impl Immediate {
     #[must_use]
-    #[allow(clippy::checked_conversions)]
     pub fn as_u32(self) -> Option<u32> {
         match self {
             Self::Integer(v) => u32::try_from(v)

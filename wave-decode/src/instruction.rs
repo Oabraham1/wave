@@ -6,8 +6,9 @@
 //! format suitable for disassembly and emulation.
 
 use crate::opcodes::{
-    AtomicOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
-    FUnaryOp, MemWidth, MiscOp, Opcode, Scope, SyncOp, WaveOpType, WaveReduceType,
+    AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp,
+    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, Opcode, Scope, SyncOp,
+    WaveOpType, WaveReduceType,
 };
 
 /// A fully decoded WAVE instruction
@@ -158,6 +159,21 @@ pub enum Operation {
     },
     F16Packed {
         op: F16PackedOp,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    },
+
+    Bf16 {
+        op: Bf16Op,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    },
+    Bf16Packed {
+        op: Bf16PackedOp,
         rd: u8,
         rs1: u8,
         rs2: u8,
@@ -368,6 +384,27 @@ pub enum Operation {
         sr_index: u8,
     },
 
+    MmaLoadA {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    MmaLoadB {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    MmaStoreC {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    MmaCompute {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+
     Unknown {
         opcode: u8,
         word0: u32,
@@ -408,6 +445,8 @@ impl DecodedInstruction {
 
             Operation::F16 { op, .. } => op.mnemonic().to_string(),
             Operation::F16Packed { op, .. } => op.mnemonic().to_string(),
+            Operation::Bf16 { op, .. } => op.mnemonic().to_string(),
+            Operation::Bf16Packed { op, .. } => op.mnemonic().to_string(),
             Operation::F64 { op, .. } => op.mnemonic().to_string(),
             Operation::F64DivSqrt { op, .. } => op.mnemonic().to_string(),
 
@@ -463,6 +502,11 @@ impl DecodedInstruction {
 
             Operation::Mov { .. } | Operation::MovSr { .. } => "mov".to_string(),
             Operation::MovImm { .. } => "mov_imm".to_string(),
+
+            Operation::MmaLoadA { .. } => "mma_load_a".to_string(),
+            Operation::MmaLoadB { .. } => "mma_load_b".to_string(),
+            Operation::MmaStoreC { .. } => "mma_store_c".to_string(),
+            Operation::MmaCompute { .. } => "mma_compute".to_string(),
 
             Operation::Unknown { opcode, .. } => format!(".unknown 0x{opcode:02x}"),
         }
@@ -560,6 +604,8 @@ pub fn extract_opcode_modifier(instruction: &DecodedInstruction) -> (Opcode, Opt
 
         Operation::F16 { op, .. } => (Opcode::F16Ops, Some(*op as u8)),
         Operation::F16Packed { op, .. } => (Opcode::F16PackedOps, Some(*op as u8)),
+        Operation::Bf16 { op, .. } => (Opcode::Bf16Ops, Some(*op as u8)),
+        Operation::Bf16Packed { op, .. } => (Opcode::Bf16PackedOps, Some(*op as u8)),
         Operation::F64 { op, .. } => (Opcode::F64Ops, Some(*op as u8)),
         Operation::F64DivSqrt { op, .. } => (Opcode::F64DivSqrt, Some(*op as u8)),
 
@@ -616,6 +662,11 @@ pub fn extract_opcode_modifier(instruction: &DecodedInstruction) -> (Opcode, Opt
         Operation::Mov { .. } => (Opcode::Control, Some(MiscOp::Mov as u8)),
         Operation::MovImm { .. } => (Opcode::Control, Some(MiscOp::MovImm as u8)),
         Operation::MovSr { .. } => (Opcode::Control, Some(MiscOp::MovSr as u8)),
+
+        Operation::MmaLoadA { .. } => (Opcode::Mma, Some(MmaOp::LoadA as u8)),
+        Operation::MmaLoadB { .. } => (Opcode::Mma, Some(MmaOp::LoadB as u8)),
+        Operation::MmaStoreC { .. } => (Opcode::Mma, Some(MmaOp::StoreC as u8)),
+        Operation::MmaCompute { .. } => (Opcode::Mma, Some(MmaOp::Compute as u8)),
 
         Operation::Unknown { opcode, .. } => {
             Opcode::from_u8(*opcode).map_or((Opcode::Control, None), |op| (op, None))

@@ -77,6 +77,9 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
 
     if local_mem_size > 0 {
         writeln!(out, "    threadgroup uint8_t local_mem[{local_mem_size}];").unwrap();
+        writeln!(out, "    float _mma_a[16] = {{}};").unwrap();
+        writeln!(out, "    float _mma_b[16] = {{}};").unwrap();
+        writeln!(out, "    float _mma_c[16] = {{}};").unwrap();
     }
 
     out

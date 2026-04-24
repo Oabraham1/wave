@@ -8,25 +8,26 @@
 
 use wave_ptx::compile;
 
-const OPCODE_SHIFT: u32 = 26;
-const RD_SHIFT: u32 = 21;
-const RS1_SHIFT: u32 = 16;
-const RS2_SHIFT: u32 = 11;
-const MODIFIER_SHIFT: u32 = 7;
-const SYNC_OP_FLAG: u8 = 0x01;
+const OPCODE_SHIFT: u32 = 24;
+const RD_SHIFT: u32 = 16;
+const RS1_SHIFT: u32 = 8;
+const MODIFIER_SHIFT: u32 = 4;
+const EXTENDED_RS2_SHIFT: u32 = 24;
 
-fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8; 4] {
-    let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | (u32::from(flags) & 0x03);
-    word.to_le_bytes()
+fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> u32 {
+    (u32::from(opcode) << OPCODE_SHIFT) | (u32::from(rd) << RD_SHIFT) | (u32::from(rs1) << RS1_SHIFT) | (u32::from(modifier) << MODIFIER_SHIFT) | u32::from(pred)
+}
+fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec()
+}
+fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
+    v.extend_from_slice(&(u32::from(rs2) << EXTENDED_RS2_SHIFT).to_le_bytes());
+    v
 }
 
-fn halt() -> [u8; 4] {
-    encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG)
+fn halt_instruction() -> Vec<u8> {
+    single(0x3F, 0, 0, 9, 0)
 }
 
 fn build_wbin(code: &[u8]) -> Vec<u8> {
@@ -64,14 +65,14 @@ fn build_wbin(code: &[u8]) -> Vec<u8> {
 
 fn compile_instrs(instructions: &[u8]) -> String {
     let mut code = instructions.to_vec();
-    code.extend_from_slice(&halt());
+    code.extend_from_slice(&halt_instruction());
     let wbin = build_wbin(&code);
     compile(&wbin, 75).expect("compilation failed")
 }
 
 #[test]
 fn test_wave_shuffle() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 2, 0, 0));
+    let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 0, 0));
     assert!(
         ptx.contains("shfl.sync.idx.b32 %r3, %r1, %r2, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -80,7 +81,7 @@ fn test_wave_shuffle() {
 
 #[test]
 fn test_wave_shuffle_up() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 2, 1, 0));
+    let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 1, 0));
     assert!(
         ptx.contains("shfl.sync.up.b32 %r3, %r1, %r2, 0, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -89,7 +90,7 @@ fn test_wave_shuffle_up() {
 
 #[test]
 fn test_wave_shuffle_down() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 2, 2, 0));
+    let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 2, 0));
     assert!(
         ptx.contains("shfl.sync.down.b32 %r3, %r1, %r2, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -98,7 +99,7 @@ fn test_wave_shuffle_down() {
 
 #[test]
 fn test_wave_shuffle_xor() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 2, 3, 0));
+    let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 3, 0));
     assert!(
         ptx.contains("shfl.sync.bfly.b32 %r3, %r1, %r2, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -107,7 +108,7 @@ fn test_wave_shuffle_xor() {
 
 #[test]
 fn test_wave_broadcast() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 2, 4, 0));
+    let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 4, 0));
     assert!(
         ptx.contains("shfl.sync.idx.b32 %r3, %r1, %r2, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -116,7 +117,7 @@ fn test_wave_broadcast() {
 
 #[test]
 fn test_wave_ballot() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 5, 0));
+    let ptx = compile_instrs(&single(0x3E, 3, 1, 5, 0));
     assert!(
         ptx.contains("vote.sync.ballot.b32 %r3, %p1, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -125,7 +126,7 @@ fn test_wave_ballot() {
 
 #[test]
 fn test_wave_any() {
-    let ptx = compile_instrs(&encode(0x3E, 2, 1, 0, 6, 0));
+    let ptx = compile_instrs(&single(0x3E, 2, 1, 6, 0));
     assert!(
         ptx.contains("vote.sync.any.pred %p2, %p1, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -134,7 +135,7 @@ fn test_wave_any() {
 
 #[test]
 fn test_wave_all() {
-    let ptx = compile_instrs(&encode(0x3E, 2, 1, 0, 7, 0));
+    let ptx = compile_instrs(&single(0x3E, 2, 1, 7, 0));
     assert!(
         ptx.contains("vote.sync.all.pred %p2, %p1, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -143,7 +144,7 @@ fn test_wave_all() {
 
 #[test]
 fn test_wave_reduce_add() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 9, 0));
+    let ptx = compile_instrs(&single(0x3E, 3, 1, 9, 0));
     assert!(
         ptx.contains("shfl.sync.bfly.b32 %t0, %r3, 16, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
@@ -157,19 +158,19 @@ fn test_wave_reduce_add() {
 
 #[test]
 fn test_wave_reduce_min() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 10, 0));
+    let ptx = compile_instrs(&single(0x3E, 3, 1, 10, 0));
     assert!(ptx.contains("min.s32 %r3, %r3, %t0;"), "PTX: {ptx}");
 }
 
 #[test]
 fn test_wave_reduce_max() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 11, 0));
+    let ptx = compile_instrs(&single(0x3E, 3, 1, 11, 0));
     assert!(ptx.contains("max.s32 %r3, %r3, %t0;"), "PTX: {ptx}");
 }
 
 #[test]
 fn test_wave_prefix_sum() {
-    let ptx = compile_instrs(&encode(0x3E, 3, 1, 0, 8, 0));
+    let ptx = compile_instrs(&single(0x3E, 3, 1, 8, 0));
     assert!(
         ptx.contains("shfl.sync.up.b32 %t0|%pt0, %r3, 1, 0, 0xFFFFFFFF;"),
         "PTX: {ptx}"

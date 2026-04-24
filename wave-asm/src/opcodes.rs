@@ -9,29 +9,29 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-pub const OPCODE_SHIFT: u32 = 26;
-pub const OPCODE_MASK: u32 = 0x3F;
-pub const RD_SHIFT: u32 = 21;
-pub const RD_MASK: u32 = 0x1F;
-pub const RS1_SHIFT: u32 = 16;
-pub const RS1_MASK: u32 = 0x1F;
-pub const RS2_SHIFT: u32 = 11;
-pub const RS2_MASK: u32 = 0x1F;
-pub const MODIFIER_SHIFT: u32 = 7;
+pub const OPCODE_SHIFT: u32 = 24;
+pub const OPCODE_MASK: u32 = 0xFF;
+pub const RD_SHIFT: u32 = 16;
+pub const RD_MASK: u32 = 0xFF;
+pub const RS1_SHIFT: u32 = 8;
+pub const RS1_MASK: u32 = 0xFF;
+pub const MODIFIER_SHIFT: u32 = 4;
 pub const MODIFIER_MASK: u32 = 0x0F;
-pub const SCOPE_SHIFT: u32 = 5;
-pub const SCOPE_MASK: u32 = 0x03;
-pub const PRED_SHIFT: u32 = 3;
-pub const PRED_MASK: u32 = 0x03;
+pub const PRED_REG_SHIFT: u32 = 0;
+pub const PRED_REG_MASK: u32 = 0x03;
 pub const PRED_NEG_SHIFT: u32 = 2;
 pub const PRED_NEG_MASK: u32 = 0x01;
-pub const FLAGS_SHIFT: u32 = 0;
-pub const FLAGS_MASK: u32 = 0x03;
+pub const EXTENDED_SCOPE_SHIFT: u32 = 0;
+pub const EXTENDED_SCOPE_MASK: u32 = 0x03;
 
-pub const EXTENDED_RS3_SHIFT: u32 = 27;
-pub const EXTENDED_RS3_MASK: u32 = 0x1F;
+pub const EXTENDED_RS2_SHIFT: u32 = 24;
+pub const EXTENDED_RS2_MASK: u32 = 0xFF;
+pub const EXTENDED_RS3_SHIFT: u32 = 16;
+pub const EXTENDED_RS3_MASK: u32 = 0xFF;
+pub const EXTENDED_RS4_SHIFT: u32 = 8;
+pub const EXTENDED_RS4_MASK: u32 = 0xFF;
 
-pub const MAX_REGISTER_INDEX: u8 = 31;
+pub const MAX_REGISTER_INDEX: u8 = 254;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -68,6 +68,9 @@ pub enum Opcode {
     F64Ops = 0x1E,
     F64DivSqrt = 0x1F,
 
+    Bf16Ops = 0x2D,
+    Bf16PackedOps = 0x2E,
+
     And = 0x20,
     Or = 0x21,
     Xor = 0x22,
@@ -95,6 +98,10 @@ pub enum Opcode {
     WaveOp = 0x3E,
 
     Control = 0x3F,
+
+    Mma = 0x40,
+
+    Misc = 0x41,
 }
 
 impl Opcode {
@@ -129,6 +136,21 @@ pub enum F16PackedOp {
     Hadd2 = 0,
     Hmul2 = 1,
     Hma2 = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bf16Op {
+    Badd = 0,
+    Bsub = 1,
+    Bmul = 2,
+    Bma = 3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bf16PackedOp {
+    Badd2 = 0,
+    Bmul2 = 1,
+    Bma2 = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +198,8 @@ pub enum CvtType {
     F16F32 = 5,
     F32F64 = 6,
     F64F32 = 7,
+    F32Bf16 = 8,
+    Bf16F32 = 9,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,8 +311,6 @@ pub struct InstructionSignature {
     pub operands: &'static [OperandKind],
     pub modifier: Option<u8>,
     pub extended: bool,
-    pub is_sync: bool,
-    pub is_misc: bool,
     pub wave_reduce: bool,
 }
 
@@ -313,8 +335,6 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
                     operands: $operands,
                     modifier: None,
                     extended: false,
-                    is_sync: false,
-                    is_misc: false,
                     wave_reduce: false,
                 },
             );
@@ -327,8 +347,6 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
                     operands: $operands,
                     modifier: Some($mod),
                     extended: false,
-                    is_sync: false,
-                    is_misc: false,
                     wave_reduce: false,
                 },
             );
@@ -344,8 +362,6 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
                     operands: $operands,
                     modifier: None,
                     extended: true,
-                    is_sync: false,
-                    is_misc: false,
                     wave_reduce: false,
                 },
             );
@@ -358,8 +374,6 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
                     operands: $operands,
                     modifier: Some($mod),
                     extended: true,
-                    is_sync: false,
-                    is_misc: false,
                     wave_reduce: false,
                 },
             );
@@ -407,8 +421,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -419,8 +432,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(9),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -431,8 +443,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(10),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -443,8 +454,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(11),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -457,6 +467,15 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("hadd2", Opcode::F16PackedOps, rrr, F16PackedOp::Hadd2 as u8);
     base!("hmul2", Opcode::F16PackedOps, rrr, F16PackedOp::Hmul2 as u8);
     extended!("hma2", Opcode::F16PackedOps, rrrr, F16PackedOp::Hma2 as u8);
+
+    base!("badd", Opcode::Bf16Ops, rrr, Bf16Op::Badd as u8);
+    base!("bsub", Opcode::Bf16Ops, rrr, Bf16Op::Bsub as u8);
+    base!("bmul", Opcode::Bf16Ops, rrr, Bf16Op::Bmul as u8);
+    extended!("bma", Opcode::Bf16Ops, rrrr, Bf16Op::Bma as u8);
+
+    base!("badd2", Opcode::Bf16PackedOps, rrr, Bf16PackedOp::Badd2 as u8);
+    base!("bmul2", Opcode::Bf16PackedOps, rrr, Bf16PackedOp::Bmul2 as u8);
+    extended!("bma2", Opcode::Bf16PackedOps, rrrr, Bf16PackedOp::Bma2 as u8);
 
     base!("dadd", Opcode::F64Ops, rrr, F64Op::Dadd as u8);
     base!("dsub", Opcode::F64Ops, rrr, F64Op::Dsub as u8);
@@ -484,8 +503,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[Rd, Rs1, Rs2, Rs3, Rs4],
             modifier: Some(BitOpType::Bfi as u8),
             extended: true,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -523,6 +541,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     base!("cvt_f16_f32", Opcode::Cvt, rr, CvtType::F16F32 as u8);
     base!("cvt_f32_f64", Opcode::Cvt, rr, CvtType::F32F64 as u8);
     base!("cvt_f64_f32", Opcode::Cvt, rr, CvtType::F64F32 as u8);
+    base!("cvt_f32_bf16", Opcode::Cvt, rr, CvtType::F32Bf16 as u8);
+    base!("cvt_bf16_f32", Opcode::Cvt, rr, CvtType::Bf16F32 as u8);
 
     base!("local_load_u8", Opcode::LocalLoad, rr, MemWidth::U8 as u8);
     base!("local_load_u16", Opcode::LocalLoad, rr, MemWidth::U16 as u8);
@@ -618,8 +638,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Add as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -630,8 +649,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Sub as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -642,8 +660,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Min as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -654,8 +671,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Max as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -666,8 +682,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::And as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -678,8 +693,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Or as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -690,8 +704,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Xor as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -702,8 +715,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2],
             modifier: Some(AtomicOp::Exchange as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -714,8 +726,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, Rs3],
             modifier: None,
             extended: true,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -727,8 +738,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Add as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -739,8 +749,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Sub as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -751,8 +760,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Min as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -763,8 +771,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Max as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -775,8 +782,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::And as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -787,8 +793,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Or as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -799,8 +804,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Xor as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -811,8 +815,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, OperandKind::Scope],
             modifier: Some(AtomicOp::Exchange as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -823,8 +826,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[OptionalRd, Rs1, Rs2, Rs3, OperandKind::Scope],
             modifier: None,
             extended: true,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -885,8 +887,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(WaveReduceType::PrefixSum as u8 + 8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -897,8 +898,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(WaveReduceType::ReduceAdd as u8 + 8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -909,8 +909,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(WaveReduceType::ReduceMin as u8 + 8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -921,11 +920,15 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: rr,
             modifier: Some(WaveReduceType::ReduceMax as u8 + 8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
+
+    extended!("mma_load_a", Opcode::Mma, rrr, 0);
+    extended!("mma_load_b", Opcode::Mma, rrr, 1);
+    extended!("mma_store_c", Opcode::Mma, rrr, 2);
+    extended!("mma_compute", Opcode::Mma, rrr, 3);
 
     m.insert(
         "if",
@@ -934,8 +937,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[PdSrc],
             modifier: Some(ControlOp::If as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -946,8 +948,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[],
             modifier: Some(ControlOp::Else as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -958,8 +959,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[],
             modifier: Some(ControlOp::Endif as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -970,8 +970,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[],
             modifier: Some(ControlOp::Loop as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -982,8 +981,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[PdSrc],
             modifier: Some(ControlOp::Break as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -994,8 +992,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[PdSrc],
             modifier: Some(ControlOp::Continue as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -1006,8 +1003,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[],
             modifier: Some(ControlOp::Endloop as u8),
             extended: false,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -1018,8 +1014,7 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
             operands: &[Label],
             modifier: Some(ControlOp::Call as u8),
             extended: true,
-            is_sync: false,
-            is_misc: false,
+
             wave_reduce: false,
         },
     );
@@ -1029,10 +1024,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[],
-            modifier: Some(SyncOp::Return as u8),
+            modifier: Some(SyncOp::Return as u8 + 8),
             extended: false,
-            is_sync: true,
-            is_misc: false,
             wave_reduce: false,
         },
     );
@@ -1041,10 +1034,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[],
-            modifier: Some(SyncOp::Halt as u8),
+            modifier: Some(SyncOp::Halt as u8 + 8),
             extended: false,
-            is_sync: true,
-            is_misc: false,
             wave_reduce: false,
         },
     );
@@ -1053,10 +1044,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[],
-            modifier: Some(SyncOp::Barrier as u8),
+            modifier: Some(SyncOp::Barrier as u8 + 8),
             extended: false,
-            is_sync: true,
-            is_misc: false,
             wave_reduce: false,
         },
     );
@@ -1065,10 +1054,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[OperandKind::Scope],
-            modifier: Some(SyncOp::FenceAcquire as u8),
-            extended: false,
-            is_sync: true,
-            is_misc: false,
+            modifier: Some(SyncOp::FenceAcquire as u8 + 8),
+            extended: true,
             wave_reduce: false,
         },
     );
@@ -1077,10 +1064,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[OperandKind::Scope],
-            modifier: Some(SyncOp::FenceRelease as u8),
-            extended: false,
-            is_sync: true,
-            is_misc: false,
+            modifier: Some(SyncOp::FenceRelease as u8 + 8),
+            extended: true,
             wave_reduce: false,
         },
     );
@@ -1089,10 +1074,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[OperandKind::Scope],
-            modifier: Some(SyncOp::FenceAcqRel as u8),
-            extended: false,
-            is_sync: true,
-            is_misc: false,
+            modifier: Some(SyncOp::FenceAcqRel as u8 + 8),
+            extended: true,
             wave_reduce: false,
         },
     );
@@ -1101,10 +1084,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[],
-            modifier: Some(SyncOp::Wait as u8),
+            modifier: Some(SyncOp::Wait as u8 + 8),
             extended: false,
-            is_sync: true,
-            is_misc: false,
             wave_reduce: false,
         },
     );
@@ -1113,10 +1094,8 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
         InstructionSignature {
             opcode: Opcode::Control,
             operands: &[],
-            modifier: Some(SyncOp::Nop as u8),
+            modifier: Some(SyncOp::Nop as u8 + 8),
             extended: false,
-            is_sync: true,
-            is_misc: false,
             wave_reduce: false,
         },
     );
@@ -1124,24 +1103,20 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     m.insert(
         "mov",
         InstructionSignature {
-            opcode: Opcode::Control,
+            opcode: Opcode::Misc,
             operands: &[Rd, Rs1],
             modifier: Some(MiscOp::Mov as u8),
             extended: false,
-            is_sync: false,
-            is_misc: true,
             wave_reduce: false,
         },
     );
     m.insert(
         "mov_imm",
         InstructionSignature {
-            opcode: Opcode::Control,
+            opcode: Opcode::Misc,
             operands: &[Rd, Imm32],
             modifier: Some(MiscOp::MovImm as u8),
             extended: true,
-            is_sync: false,
-            is_misc: true,
             wave_reduce: false,
         },
     );
@@ -1149,12 +1124,10 @@ fn build_mnemonic_map() -> HashMap<&'static str, InstructionSignature> {
     m.insert(
         "mov_sr",
         InstructionSignature {
-            opcode: Opcode::Control,
+            opcode: Opcode::Misc,
             operands: &[Rd, SpecialReg],
             modifier: Some(MiscOp::MovSr as u8),
             extended: false,
-            is_sync: false,
-            is_misc: true,
             wave_reduce: false,
         },
     );
@@ -1180,6 +1153,10 @@ pub static SPECIAL_REGISTERS: LazyLock<HashMap<&'static str, u8>> = LazyLock::ne
     m.insert("sr_grid_size_z", 13);
     m.insert("sr_wave_width", 14);
     m.insert("sr_num_waves", 15);
+    m.insert("sr_mma_supported", 16);
+    m.insert("sr_mma_m", 17);
+    m.insert("sr_mma_n", 18);
+    m.insert("sr_mma_k", 19);
     m
 });
 
@@ -1193,24 +1170,19 @@ pub fn lookup_special_register(name: &str) -> Option<u8> {
     SPECIAL_REGISTERS.get(name).copied()
 }
 
+#[allow(clippy::similar_names)]
 pub fn encode_base(
     opcode: u8,
     rd: u8,
     rs1: u8,
-    rs2: u8,
     modifier: u8,
-    scope: u8,
-    pred: u8,
+    pred_reg: u8,
     pred_neg: bool,
-    flags: u8,
 ) -> u32 {
     ((u32::from(opcode) & OPCODE_MASK) << OPCODE_SHIFT)
         | ((u32::from(rd) & RD_MASK) << RD_SHIFT)
         | ((u32::from(rs1) & RS1_MASK) << RS1_SHIFT)
-        | ((u32::from(rs2) & RS2_MASK) << RS2_SHIFT)
         | ((u32::from(modifier) & MODIFIER_MASK) << MODIFIER_SHIFT)
-        | ((u32::from(scope) & SCOPE_MASK) << SCOPE_SHIFT)
-        | ((u32::from(pred) & PRED_MASK) << PRED_SHIFT)
+        | ((u32::from(pred_reg) & PRED_REG_MASK) << PRED_REG_SHIFT)
         | (u32::from(pred_neg) << PRED_NEG_SHIFT)
-        | (u32::from(flags) & FLAGS_MASK)
 }

@@ -8,11 +8,12 @@
 use crate::EmulatorError;
 
 pub use wave_decode::{
-    AtomicOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
-    FUnaryOp, MemWidth, MiscOp, Opcode, Scope, SyncOp, WaveOpType, WaveReduceType,
+    AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp,
+    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, MmaPrecision, Opcode, Scope, SyncOp,
+    WaveOpType, WaveReduceType,
 };
 
-pub use wave_decode::opcodes::{MISC_OP_FLAG, SYNC_OP_FLAG};
+pub use wave_decode::opcodes::SYNC_MODIFIER_OFFSET;
 
 /// Flat decoded instruction for executor dispatch
 #[derive(Debug, Clone)]
@@ -27,7 +28,6 @@ pub struct DecodedInstruction {
     pub scope: u8,
     pub pred_reg: u8,
     pub pred_neg: bool,
-    pub flags: u8,
     pub immediate: u32,
     pub size: u32,
 }
@@ -38,11 +38,11 @@ impl DecodedInstruction {
     }
 
     pub fn is_sync_op(&self) -> bool {
-        self.opcode == Opcode::Control && (self.flags & SYNC_OP_FLAG) != 0
+        self.opcode == Opcode::Control && self.modifier >= SYNC_MODIFIER_OFFSET
     }
 
     pub fn is_misc_op(&self) -> bool {
-        self.opcode == Opcode::Control && (self.flags & MISC_OP_FLAG) != 0
+        self.opcode == Opcode::Misc
     }
 
     pub fn is_non_returning_atomic(&self) -> bool {
@@ -123,6 +123,12 @@ impl<'a> Decoder<'a> {
             Opcode::F16Ops => F16Op::from_u8(inst.modifier).map_or("h_unknown", |op| op.mnemonic()),
             Opcode::F16PackedOps => {
                 F16PackedOp::from_u8(inst.modifier).map_or("h2_unknown", |op| op.mnemonic())
+            }
+            Opcode::Bf16Ops => {
+                Bf16Op::from_u8(inst.modifier).map_or("b_unknown", |op| op.mnemonic())
+            }
+            Opcode::Bf16PackedOps => {
+                Bf16PackedOp::from_u8(inst.modifier).map_or("b2_unknown", |op| op.mnemonic())
             }
             Opcode::F64Ops => F64Op::from_u8(inst.modifier).map_or("d_unknown", |op| op.mnemonic()),
             Opcode::F64DivSqrt => {
@@ -226,14 +232,21 @@ impl<'a> Decoder<'a> {
                     WaveOpType::from_u8(inst.modifier).map_or("wave_unknown", |op| op.mnemonic())
                 }
             }
+            Opcode::Mma => match MmaOp::from_u8(inst.modifier) {
+                Some(op) => op.mnemonic(),
+                None => "mma_unknown",
+            },
             Opcode::Control => {
                 if inst.is_sync_op() {
-                    SyncOp::from_u8(inst.modifier).map_or("sync_unknown", |op| op.mnemonic())
-                } else if inst.is_misc_op() {
-                    MiscOp::from_u8(inst.modifier).map_or("misc_unknown", |op| op.mnemonic())
+                    SyncOp::from_u8(inst.modifier - SYNC_MODIFIER_OFFSET)
+                        .map_or("sync_unknown", |op| op.mnemonic())
                 } else {
-                    ControlOp::from_u8(inst.modifier).map_or("control_unknown", |op| op.mnemonic())
+                    ControlOp::from_u8(inst.modifier)
+                        .map_or("control_unknown", |op| op.mnemonic())
                 }
+            }
+            Opcode::Misc => {
+                MiscOp::from_u8(inst.modifier).map_or("misc_unknown", |op| op.mnemonic())
             }
         }
     }
@@ -259,8 +272,18 @@ impl<'a> Decoder<'a> {
             | Opcode::Xor
             | Opcode::Shl
             | Opcode::Shr
-            | Opcode::Sar => {
-                format!("r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2)
+            | Opcode::Sar
+            | Opcode::F16Ops
+            | Opcode::F16PackedOps
+            | Opcode::Bf16Ops
+            | Opcode::Bf16PackedOps
+            | Opcode::F64Ops
+            | Opcode::F64DivSqrt => {
+                if inst.rs3 != 0 {
+                    format!("r{}, r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2, inst.rs3)
+                } else {
+                    format!("r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2)
+                }
             }
             Opcode::Imad | Opcode::Iclamp | Opcode::Fma | Opcode::Fclamp => {
                 format!("r{}, r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2, inst.rs3)
@@ -306,14 +329,7 @@ impl<'a> Decoder<'a> {
                 }
             }
             Opcode::Control => {
-                if inst.is_misc_op() {
-                    match inst.modifier {
-                        0 => format!("r{}, r{}", inst.rd, inst.rs1),
-                        1 => format!("r{}, 0x{:08x}", inst.rd, inst.immediate),
-                        2 => format!("r{}, sr_{}", inst.rd, inst.rs1),
-                        _ => String::new(),
-                    }
-                } else if inst.is_sync_op() {
+                if inst.is_sync_op() {
                     String::new()
                 } else {
                     match inst.modifier {
@@ -323,7 +339,16 @@ impl<'a> Decoder<'a> {
                     }
                 }
             }
-            _ => String::new(),
+            Opcode::Misc => {
+                match inst.modifier {
+                    0 => format!("r{}, r{}", inst.rd, inst.rs1),
+                    1 => format!("r{}, 0x{:08x}", inst.rd, inst.immediate),
+                    2 => format!("r{}, sr_{}", inst.rd, inst.rs1),
+                    _ => String::new(),
+                }
+            }
+            Opcode::Mma => format!("r{}, r{}, r{}, r{}", inst.rd, inst.rs1, inst.rs2, inst.rs3),
+            Opcode::BitOps => String::new(),
         }
     }
 }
@@ -331,7 +356,7 @@ impl<'a> Decoder<'a> {
 fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInstruction {
     use wave_decode::Operation;
 
-    let (opcode, rd, rs1, rs2, rs3, rs4, modifier, scope, flags, immediate) = match &decoded
+    let (opcode, rd, rs1, rs2, rs3, rs4, modifier, scope, _flags, immediate) = match &decoded
         .operation
     {
         Operation::Iadd { rd, rs1, rs2 } => (Opcode::Iadd, *rd, *rs1, *rs2, 0, 0, 0, 0, 0, 0),
@@ -394,6 +419,43 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
             rs3,
         } => (
             Opcode::F16PackedOps,
+            *rd,
+            *rs1,
+            *rs2,
+            rs3.unwrap_or(0),
+            0,
+            *op as u8,
+            0,
+            0,
+            0,
+        ),
+
+        Operation::Bf16 {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => (
+            Opcode::Bf16Ops,
+            *rd,
+            *rs1,
+            *rs2,
+            rs3.unwrap_or(0),
+            0,
+            *op as u8,
+            0,
+            0,
+            0,
+        ),
+        Operation::Bf16Packed {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => (
+            Opcode::Bf16PackedOps,
             *rd,
             *rs1,
             *rs2,
@@ -743,137 +805,78 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
 
         Operation::Return => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::Return as u8,
-            0,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::Return as u8 + SYNC_MODIFIER_OFFSET,
+            0, 0, 0,
         ),
         Operation::Halt => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::Halt as u8,
-            0,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET,
+            0, 0, 0,
         ),
         Operation::Barrier => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::Barrier as u8,
-            0,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::Barrier as u8 + SYNC_MODIFIER_OFFSET,
+            0, 0, 0,
         ),
         Operation::FenceAcquire { scope } => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::FenceAcquire as u8,
-            *scope as u8,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::FenceAcquire as u8 + SYNC_MODIFIER_OFFSET,
+            *scope as u8, 0, 0,
         ),
         Operation::FenceRelease { scope } => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::FenceRelease as u8,
-            *scope as u8,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::FenceRelease as u8 + SYNC_MODIFIER_OFFSET,
+            *scope as u8, 0, 0,
         ),
         Operation::FenceAcqRel { scope } => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::FenceAcqRel as u8,
-            *scope as u8,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::FenceAcqRel as u8 + SYNC_MODIFIER_OFFSET,
+            *scope as u8, 0, 0,
         ),
         Operation::Wait => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::Wait as u8,
-            0,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::Wait as u8 + SYNC_MODIFIER_OFFSET,
+            0, 0, 0,
         ),
         Operation::Nop => (
             Opcode::Control,
-            0,
-            0,
-            0,
-            0,
-            0,
-            SyncOp::Nop as u8,
-            0,
-            SYNC_OP_FLAG,
-            0,
+            0, 0, 0, 0, 0,
+            SyncOp::Nop as u8 + SYNC_MODIFIER_OFFSET,
+            0, 0, 0,
         ),
 
         Operation::Mov { rd, rs1 } => (
-            Opcode::Control,
-            *rd,
-            *rs1,
-            0,
-            0,
-            0,
-            MiscOp::Mov as u8,
-            0,
-            MISC_OP_FLAG,
-            0,
+            Opcode::Misc, *rd, *rs1, 0, 0, 0,
+            MiscOp::Mov as u8, 0, 0, 0,
         ),
         Operation::MovImm { rd, imm } => (
-            Opcode::Control,
-            *rd,
-            0,
-            0,
-            0,
-            0,
-            MiscOp::MovImm as u8,
-            0,
-            MISC_OP_FLAG,
-            *imm,
+            Opcode::Misc, *rd, 0, 0, 0, 0,
+            MiscOp::MovImm as u8, 0, 0, *imm,
         ),
         Operation::MovSr { rd, sr_index } => (
-            Opcode::Control,
-            *rd,
-            *sr_index,
-            0,
-            0,
-            0,
-            MiscOp::MovSr as u8,
-            0,
-            MISC_OP_FLAG,
-            0,
+            Opcode::Misc, *rd, *sr_index, 0, 0, 0,
+            MiscOp::MovSr as u8, 0, 0, 0,
         ),
+
+        Operation::MmaLoadA { rd, rs1, rs2 } => {
+            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::LoadA as u8, 0, 0, 0)
+        }
+        Operation::MmaLoadB { rd, rs1, rs2 } => {
+            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::LoadB as u8, 0, 0, 0)
+        }
+        Operation::MmaStoreC { rd, rs1, rs2 } => {
+            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::StoreC as u8, 0, 0, 0)
+        }
+        Operation::MmaCompute { rd, rs1, rs2 } => {
+            (Opcode::Mma, *rd, *rs1, *rs2, 0, 0, MmaOp::Compute as u8, 0, 0, 0)
+        }
 
         Operation::Unknown {
             opcode,
@@ -896,7 +899,6 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
         scope,
         pred_reg: decoded.predicate,
         pred_neg: decoded.predicate_negated,
-        flags,
         immediate,
         size: u32::from(decoded.size),
     }
@@ -906,19 +908,24 @@ fn convert_instruction(decoded: &wave_decode::DecodedInstruction) -> DecodedInst
 mod tests {
     use super::*;
 
-    fn encode_base(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> Vec<u8> {
-        let word = ((u32::from(opcode) & 0x3F) << 26)
-            | ((u32::from(rd) & 0x1F) << 21)
-            | ((u32::from(rs1) & 0x1F) << 16)
-            | ((u32::from(rs2) & 0x1F) << 11)
-            | ((u32::from(modifier) & 0x0F) << 7)
-            | (u32::from(flags) & 0x03);
+    fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> Vec<u8> {
+        let word = ((u32::from(opcode) & 0xFF) << 24)
+            | ((u32::from(rd) & 0xFF) << 16)
+            | ((u32::from(rs1) & 0xFF) << 8)
+            | ((u32::from(modifier) & 0x0F) << 4)
+            | u32::from(pred & 0x07);
         word.to_le_bytes().to_vec()
+    }
+
+    fn encode_ext_rs2(rs2: u8) -> Vec<u8> {
+        let word1 = (u32::from(rs2) & 0xFF) << 24;
+        word1.to_le_bytes().to_vec()
     }
 
     #[test]
     fn test_decoder_iadd() {
-        let code = encode_base(0x00, 1, 2, 3, 0, 0);
+        let mut code = encode_word0(0x00, 1, 2, 0, 0);
+        code.extend_from_slice(&encode_ext_rs2(3));
         let decoder = Decoder::new(&code);
         let inst = decoder.decode_at(0).unwrap();
 
@@ -926,32 +933,30 @@ mod tests {
         assert_eq!(inst.rd, 1);
         assert_eq!(inst.rs1, 2);
         assert_eq!(inst.rs2, 3);
-        assert_eq!(inst.size, 4);
+        assert_eq!(inst.size, 8);
     }
 
     #[test]
     fn test_decoder_halt() {
-        let code = encode_base(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG);
+        let code = encode_word0(0x3F, 0, 0, SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET, 0);
         let decoder = Decoder::new(&code);
         let inst = decoder.decode_at(0).unwrap();
 
         assert_eq!(inst.opcode, Opcode::Control);
         assert!(inst.is_sync_op());
-        assert_eq!(inst.modifier, 1);
+        assert_eq!(inst.modifier, SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET);
     }
 
     #[test]
     fn test_decoder_mov_imm() {
-        let word0 = encode_base(0x3F, 5, 0, 0, 1, MISC_OP_FLAG);
+        let mut code = encode_word0(0x41, 5, 0, MiscOp::MovImm as u8, 0);
         let word1 = 0x12345678u32;
-
-        let mut code = word0;
         code.extend_from_slice(&word1.to_le_bytes());
 
         let decoder = Decoder::new(&code);
         let inst = decoder.decode_at(0).unwrap();
 
-        assert_eq!(inst.opcode, Opcode::Control);
+        assert_eq!(inst.opcode, Opcode::Misc);
         assert!(inst.is_misc_op());
         assert_eq!(inst.rd, 5);
         assert_eq!(inst.immediate, 0x12345678);
@@ -960,7 +965,8 @@ mod tests {
 
     #[test]
     fn test_decoder_disassemble() {
-        let code = encode_base(0x00, 1, 2, 3, 0, 0);
+        let mut code = encode_word0(0x00, 1, 2, 0, 0);
+        code.extend_from_slice(&encode_ext_rs2(3));
         let decoder = Decoder::new(&code);
         let inst = decoder.decode_at(0).unwrap();
         let disasm = decoder.disassemble(&inst);

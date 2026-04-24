@@ -206,7 +206,7 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    fn scan_register(&mut self, start: usize) -> Token {
+    fn scan_register(&mut self, _start: usize) -> Token {
         let mut reg = String::from("r");
         while let Some(ch) = self.peek_char() {
             if ch.is_ascii_digit() {
@@ -232,7 +232,6 @@ impl<'a> Lexer<'a> {
             reg.push_str(&suffix);
         }
 
-        let _ = start;
         Token::Register(reg)
     }
 

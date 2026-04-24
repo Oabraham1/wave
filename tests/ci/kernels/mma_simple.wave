@@ -1,0 +1,74 @@
+; Copyright 2026 Ojima Abraham
+; SPDX-License-Identifier: Apache-2.0
+;
+; Simple MMA test: C[4x4] = A[4x4] * B[4x4] using fragment-based MMA.
+;
+; Loads A and B from device memory into shared memory, loads fragments,
+; computes MMA, stores fragment back to shared memory, writes to device.
+;
+; Shared memory layout:
+;   offset 0:   A tile (16 floats = 64 bytes)
+;   offset 64:  B tile (16 floats = 64 bytes)
+;   offset 128: C tile (16 floats = 64 bytes)
+
+.kernel mma_simple
+.registers 16
+.workgroup_size 1, 1, 1
+.local_memory 256
+
+    mov_imm r5, 16
+    mov_imm r6, 4
+    mov_imm r7, 1
+    mov_imm r8, 64
+    mov_imm r9, 128
+
+    mov_imm r10, 0
+loop
+    icmp_ge p0, r10, r5
+    break p0
+    imul r12, r10, r6
+    device_load_u32 r13, r12
+    local_store_u32 r12, r13
+    iadd r10, r10, r7
+endloop
+
+    mov_imm r10, 0
+loop
+    icmp_ge p0, r10, r5
+    break p0
+    imul r12, r10, r6
+    iadd r14, r12, r8
+    device_load_u32 r15, r14
+    local_store_u32 r14, r15
+    iadd r10, r10, r7
+endloop
+
+    barrier
+
+    mov_imm r0, 0
+    mov_imm r1, 16
+    mma_load_a r0, r0, r1
+
+    mov_imm r2, 64
+    mma_load_b r0, r2, r1
+
+    mma_compute r0, r0, r0
+
+    mov_imm r3, 128
+    mma_store_c r3, r1, r0
+
+    barrier
+
+    mov_imm r10, 0
+loop
+    icmp_ge p0, r10, r5
+    break p0
+    imul r12, r10, r6
+    iadd r14, r12, r9
+    local_load_u32 r15, r14
+    device_store_u32 r14, r15
+    iadd r10, r10, r7
+endloop
+
+    halt
+.end

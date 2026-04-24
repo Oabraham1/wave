@@ -648,7 +648,7 @@ isub r3, r4, r5
 
     #[test]
     fn test_parser_invalid_register_index() {
-        let result = parse("iadd r0, r1, r99");
+        let result = parse("iadd r0, r1, r255");
         assert!(result.is_err());
     }
 }

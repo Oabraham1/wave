@@ -13,14 +13,16 @@ The WAVE specification defines the instruction set architecture, binary encoding
   <TabItem label="v0.4 (Current)">
     ### v0.4 — Current
 
-    The v0.4 specification is the current version of the WAVE ISA. It clarifies type conversion semantics and adds neural network training as conformance evidence.
+    The v0.4 specification is the current version of the WAVE ISA. It fixes predicate encoding (Defect 4), restructures word0 bits [3:0], and adds neural network training as conformance evidence.
 
     **Key changes from v0.3:**
 
+    - **Predicate encoding restored.** Bits [3:0] of word0 repurposed for predicate fields: pred_reg (bits [1:0]), pred_neg (bit [2]), with bit [3] reserved. Previously these bits held scope and flags, which silently dropped all predication.
+    - **Scope moved to word1.** Memory scope is now encoded in word1 bits [1:0] for extended instructions (DeviceAtomic, fence). This freed word0 bits for predicate encoding.
+    - **New opcode: Misc (0x41).** Misc operations (mov, mov_imm, mov_sr) moved from Control (0x3F) to their own opcode, since the flags field they used for dispatch no longer exists.
+    - **SyncOp modifier offset.** Sync operations (return, halt, barrier, fence) share Control opcode 0x3F but use modifier values offset by +8 (SYNC_MODIFIER_OFFSET = 8).
     - **Type conversion naming convention clarified.** The mnemonic `cvt_A_B` converts from type B to type A (destination type first). An emulator bug where `cvt_f32_i32` and `cvt_i32_f32` were swapped has been fixed.
-    - **Neural network training verification.** A complete two-layer MNIST network (784→128→10) has been trained using 11 WAVE kernels, with gradients verified against PyTorch. Emulator-to-Metal results confirmed as bit-exact or numerically close across all kernels.
-
-    The binary encoding format is unchanged from v0.3.
+    - **Neural network training verification.** A complete two-layer MNIST network (784->128->10) has been trained using 11 WAVE kernels, with gradients verified against PyTorch.
 
     <LinkCard title="Read the full v0.4 specification →" href="/reference/spec-v04/" />
   </TabItem>

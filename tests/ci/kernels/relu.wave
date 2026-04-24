@@ -1,0 +1,43 @@
+; SPDX-License-Identifier: Apache-2.0
+;
+; Element-wise ReLU: C[i] = max(0, A[i])
+;
+; Simple unfused kernel for comparison with the fused gemm_bias_relu kernel.
+; Each thread in a 256-wide workgroup processes one element. The kernel reads
+; from device memory, clamps negatives to zero, and writes back to device
+; memory, requiring two device memory round-trips (load + store) per element.
+;
+; Register arguments via --set-reg:
+;   r0 = A device memory byte offset (input, M*N f32 values)
+;   r1 = C device memory byte offset (output, M*N f32 values)
+;   r2 = total element count (M*N)
+
+.kernel relu
+.registers 12
+.workgroup_size 256, 1, 1
+.local_memory 16
+
+    mov_sr r3, sr_thread_id_x
+    mov_sr r4, sr_workgroup_id_x
+    mov_imm r5, 256
+    imul r6, r4, r5
+    iadd r6, r6, r3
+
+    icmp_lt p0, r6, r2
+    if p0
+
+        mov_imm r5, 4
+        imul r7, r6, r5
+        iadd r8, r7, r0
+        device_load_u32 r9, r8
+
+        mov_imm r10, 0
+        fmax r9, r9, r10
+
+        iadd r8, r7, r1
+        device_store_u32 r8, r9
+
+    endif
+
+    halt
+.end

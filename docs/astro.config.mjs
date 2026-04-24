@@ -39,6 +39,7 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'WAVE Spec', slug: 'reference/spec' },
+					{ label: 'Spec v0.4 (Current)', slug: 'reference/spec-v04' },
 					{ label: 'Spec v0.3', slug: 'reference/spec-v03' },
 					{ label: 'Spec v0.2', slug: 'reference/spec-v02' },
 					{ label: 'Spec v0.1', slug: 'reference/spec-v01' },

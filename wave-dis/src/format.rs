@@ -7,9 +7,9 @@
 //! predication, register naming, and immediate formatting.
 
 use wave_decode::{
-    special_register_name, AtomicOp, BitOpType, CmpOp, CvtType, DecodedInstruction, F16Op,
-    F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, Operation, Scope, WaveOpType,
-    WaveReduceType,
+    special_register_name, AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, CvtType,
+    DecodedInstruction, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, Operation,
+    Scope, WaveOpType, WaveReduceType,
 };
 
 #[derive(Default)]
@@ -92,6 +92,32 @@ fn format_operation(op: &Operation) -> String {
                 format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", f16_packed_mnemonic(*op))
             } else {
                 format!("{} r{rd}, r{rs1}, r{rs2}", f16_packed_mnemonic(*op))
+            }
+        }
+        Operation::Bf16 {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => {
+            if let Some(rs3) = rs3 {
+                format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", bf16_mnemonic(*op))
+            } else {
+                format!("{} r{rd}, r{rs1}, r{rs2}", bf16_mnemonic(*op))
+            }
+        }
+        Operation::Bf16Packed {
+            op,
+            rd,
+            rs1,
+            rs2,
+            rs3,
+        } => {
+            if let Some(rs3) = rs3 {
+                format!("{} r{rd}, r{rs1}, r{rs2}, r{rs3}", bf16_packed_mnemonic(*op))
+            } else {
+                format!("{} r{rd}, r{rs1}, r{rs2}", bf16_packed_mnemonic(*op))
             }
         }
         Operation::F64 {
@@ -265,6 +291,11 @@ fn format_operation(op: &Operation) -> String {
             format!("mov r{rd}, {sr_name}")
         }
 
+        Operation::MmaLoadA { rd, rs1, rs2 } => format!("mma_load_a r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaLoadB { rd, rs1, rs2 } => format!("mma_load_b r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaStoreC { rd, rs1, rs2 } => format!("mma_store_c r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaCompute { rd, rs1, rs2 } => format!("mma_compute r{rd}, r{rs1}, r{rs2}"),
+
         Operation::Unknown {
             opcode,
             word0,
@@ -310,6 +341,23 @@ fn f16_packed_mnemonic(op: F16PackedOp) -> &'static str {
         F16PackedOp::Hadd2 => "hadd2",
         F16PackedOp::Hmul2 => "hmul2",
         F16PackedOp::Hma2 => "hma2",
+    }
+}
+
+fn bf16_mnemonic(op: Bf16Op) -> &'static str {
+    match op {
+        Bf16Op::Badd => "badd",
+        Bf16Op::Bsub => "bsub",
+        Bf16Op::Bmul => "bmul",
+        Bf16Op::Bma => "bma",
+    }
+}
+
+fn bf16_packed_mnemonic(op: Bf16PackedOp) -> &'static str {
+    match op {
+        Bf16PackedOp::Badd2 => "badd2",
+        Bf16PackedOp::Bmul2 => "bmul2",
+        Bf16PackedOp::Bma2 => "bma2",
     }
 }
 
@@ -378,6 +426,8 @@ fn cvt_mnemonic(cvt_type: CvtType) -> &'static str {
         CvtType::F16F32 => "cvt_f16_f32",
         CvtType::F32F64 => "cvt_f32_f64",
         CvtType::F64F32 => "cvt_f64_f32",
+        CvtType::F32Bf16 => "cvt_f32_bf16",
+        CvtType::Bf16F32 => "cvt_bf16_f32",
     }
 }
 

@@ -1,9 +1,9 @@
 ---
 title: Spec Defects
-description: Three specification defects found during WAVE development, their root causes, and how each was resolved.
+description: Four specification defects found during WAVE development, their root causes, and how each was resolved.
 ---
 
-The WAVE specification has undergone three significant corrections since v0.1, each discovered through systematic verification against hardware behavior and encoding constraints.
+The WAVE specification has undergone four significant corrections since v0.1, each discovered through systematic verification against hardware behavior and encoding constraints.
 
 ## Defect 1: Register Encoding Mismatch (v0.1)
 
@@ -84,6 +84,42 @@ Full details in [Modifier Field Evolution](/internals/modifier-field/).
 
 Bit allocation in an instruction encoding must be validated against the complete enumeration of every opcode variant, including uncommon operations like transcendental functions and atomic CAS. The defect was invisible when testing only arithmetic operations and only manifested when the assembler attempted to encode the full ISA.
 
+## Defect 4: Predicate Encoding Missing (v0.3)
+
+### Symptom
+
+All predicated instructions (`@p0`, `@!p1`, etc.) executed unconditionally. Predicated stores wrote to every thread, predicated halts terminated all threads, and conditional branches ignored their predicates.
+
+### Root cause
+
+The 8-bit register field rewrite in v0.2 consumed all available bits in word0, leaving no room for predicate encoding. The assembler's `encode_predicate()` function silently returned 0, and the decoder hardcoded predicate fields to unconditional.
+
+Eleven of 13 failing tests in the spec verification suite traced to this root cause. The remaining 2 failures were caused by CVT conversion directions (`CvtType::F32I32` and `I32F32`) being swapped in the emulator.
+
+### Fix
+
+Repurposed bits [3:0] of word0 for predicate encoding:
+
+| Bits | Field | Purpose |
+|------|-------|---------|
+| [1:0] | pred_reg | Predicate register index (0=p0, 1=p1, 2=p2, 3=p3) |
+| [2] | pred_neg | Predicate negation (0=normal, 1=negated) |
+| [3] | reserved | Reserved, must be zero |
+
+Freed these bits by making three structural changes:
+
+| Change | Before (v0.3) | After (v0.4) |
+|--------|--------------|--------------|
+| Memory scope | Encoded in word0 bits [6:5] | Moved to word1 bits [1:0] for scoped instructions (DeviceAtomic, fence) |
+| SyncOp dispatch | Used SYNC_OP_FLAG in word0 flags field | Shares Control opcode (0x3F) with modifier offset +8 |
+| MiscOp dispatch | Used MISC_OP_FLAG in word0 flags field | New Opcode::Misc (0x41) |
+
+The CVT conversion direction swap was fixed separately in the emulator.
+
+### Lesson
+
+A specification verification suite must test predication end-to-end, not just instruction execution. The individual instructions all worked correctly when executed unconditionally; the defect was invisible until predicated execution paths were tested. The 102-test spec verification suite caught both the predicate encoding gap and the CVT swap, restoring all tests to passing.
+
 ## Summary
 
 | Defect | Version | Category | Impact | Fix Version |
@@ -91,5 +127,6 @@ Bit allocation in an instruction encoding must be validated against the complete
 | Register encoding mismatch | v0.1 | Spec/encoding inconsistency | Misleading documentation | v0.2 |
 | Shared divergence stack | v0.1 | Correctness (deadlock) | Programs could hang | v0.2 |
 | Modifier field overflow | v0.2 | Encoding capacity | ISA incomplete | v0.3 |
+| Predicate encoding missing | v0.3 | Correctness (silent failure) | All predication ignored | v0.4 |
 
-All three defects were caught before any hardware or production backend implementation, validating the approach of building a software emulator (`wave-emu`) and assembler (`wave-compiler`) as specification verification tools.
+All four defects were caught before any hardware or production backend implementation, validating the approach of building a software emulator (`wave-emu`) and assembler (`wave-compiler`) as specification verification tools.

@@ -56,6 +56,10 @@ impl Wave {
                 grid_size,
                 wave_width,
                 num_waves,
+                mma_supported: 1,
+                mma_m: 4,
+                mma_n: 4,
+                mma_k: 4,
             };
 
             threads.push(Thread::with_special_registers(register_count, special));

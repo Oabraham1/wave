@@ -1,0 +1,32 @@
+; Copyright 2026 Ojima Abraham
+; SPDX-License-Identifier: Apache-2.0
+; BF16 vector add: c[i] = a[i] + b[i]
+; Memory layout: a at byte offset in r1, b at r2, c at r3
+; Each element is 2 bytes (bf16), 8 elements total
+
+.kernel vector_add_bf16
+.registers 16
+.workgroup_size 256, 1, 1
+
+    mov_sr r0, sr_thread_id_x
+    mov_imm r4, 8
+    ucmp_lt p0, r0, r4
+    if p0
+
+    mov_imm r5, 2
+    imul r6, r0, r5
+
+    iadd r7, r1, r6
+    device_load_u16 r8, r7
+
+    iadd r9, r2, r6
+    device_load_u16 r10, r9
+
+    badd r11, r8, r10
+
+    iadd r12, r3, r6
+    device_store_u16 r12, r11
+
+    endif
+    halt
+.end

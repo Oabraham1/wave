@@ -44,7 +44,7 @@ impl WbinWriter {
 
     pub fn set_register_count(&mut self, count: u32) {
         if let Some(kernel) = self.kernels.last_mut() {
-            kernel.register_count = count.min(32);
+            kernel.register_count = count;
         }
     }
 
@@ -341,7 +341,7 @@ mod tests {
         writer.set_register_count(64);
         writer.end_kernel();
 
-        assert_eq!(writer.kernels[0].register_count, 32);
+        assert_eq!(writer.kernels[0].register_count, 64);
     }
 
     #[test]

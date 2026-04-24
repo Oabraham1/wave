@@ -12,7 +12,8 @@
 use std::fmt::Write;
 
 use wave_decode::opcodes::{
-    BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp,
+    Bf16Op, Bf16PackedOp, BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
+    FUnaryOp,
 };
 use wave_decode::{DecodedInstruction, KernelInfo, Operation};
 
@@ -292,6 +293,24 @@ impl CodeGenerator {
             } => {
                 self.emit_f16_packed(&pp, *op, *rd, *rs1, *rs2, *rs3);
             }
+            Operation::Bf16 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
+                self.emit_bf16(&pp, *op, *rd, *rs1, *rs2, *rs3);
+            }
+            Operation::Bf16Packed {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
+                self.emit_bf16_packed(&pp, *op, *rd, *rs1, *rs2, *rs3);
+            }
             Operation::F64 {
                 op,
                 rd,
@@ -528,6 +547,46 @@ impl CodeGenerator {
                 }
             }
 
+            Operation::MmaLoadA { rd: _, rs1, rs2 } => {
+                self.line(&format!("{pp}mov.u32 %t0, _shared_mem;"));
+                self.line(&format!("{pp}add.u32 %t0, %t0, {};", reg(*rs1)));
+                self.line(&format!(
+                    "{pp}wmma.load.a.sync.aligned.row.m16n16k16.f32 \
+                     {{%mA0, %mA1, %mA2, %mA3, %mA4, %mA5, %mA6, %mA7}}, \
+                     [%t0], {};",
+                    reg(*rs2)
+                ));
+            }
+            Operation::MmaLoadB { rd: _, rs1, rs2 } => {
+                self.line(&format!("{pp}mov.u32 %t0, _shared_mem;"));
+                self.line(&format!("{pp}add.u32 %t0, %t0, {};", reg(*rs1)));
+                self.line(&format!(
+                    "{pp}wmma.load.b.sync.aligned.col.m16n16k16.f32 \
+                     {{%mB0, %mB1, %mB2, %mB3, %mB4, %mB5, %mB6, %mB7}}, \
+                     [%t0], {};",
+                    reg(*rs2)
+                ));
+            }
+            Operation::MmaStoreC { rd, rs1, rs2: _ } => {
+                self.line(&format!("{pp}mov.u32 %t0, _shared_mem;"));
+                self.line(&format!("{pp}add.u32 %t0, %t0, {};", reg(*rd)));
+                self.line(&format!(
+                    "{pp}wmma.store.d.sync.aligned.row.m16n16k16.f32 \
+                     [%t0], \
+                     {{%mC0, %mC1, %mC2, %mC3, %mC4, %mC5, %mC6, %mC7}}, {};",
+                    reg(*rs1)
+                ));
+            }
+            Operation::MmaCompute { rd: _, rs1: _, rs2: _ } => {
+                self.line(&format!(
+                    "{pp}wmma.mma.sync.aligned.row.col.m16n16k16.f32.f32.f32.f32 \
+                     {{%mC0, %mC1, %mC2, %mC3, %mC4, %mC5, %mC6, %mC7}}, \
+                     {{%mA0, %mA1, %mA2, %mA3, %mA4, %mA5, %mA6, %mA7}}, \
+                     {{%mB0, %mB1, %mB2, %mB3, %mB4, %mB5, %mB6, %mB7}}, \
+                     {{%mC0, %mC1, %mC2, %mC3, %mC4, %mC5, %mC6, %mC7}};"
+                ));
+            }
+
             Operation::Unknown { opcode, .. } => {
                 return Err(CompileError::UnsupportedOperation(format!(
                     "unknown opcode 0x{opcode:02x}"
@@ -641,6 +700,79 @@ impl CodeGenerator {
             reg(rs1),
             reg(rs2)
         ));
+    }
+
+    fn emit_bf16(&mut self, pp: &str, op: Bf16Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
+        self.line(&format!("{pp}shl.b32 %t0, {}, 16;", reg(rs1)));
+        self.line(&format!("{pp}mov.b32 %ft0, %t0;"));
+        self.line(&format!("{pp}shl.b32 %t1, {}, 16;", reg(rs2)));
+        self.line(&format!("{pp}mov.b32 %ft1, %t1;"));
+
+        let ptx_op = match op {
+            Bf16Op::Badd => "add.f32",
+            Bf16Op::Bsub => "sub.f32",
+            Bf16Op::Bmul => "mul.f32",
+            Bf16Op::Bma => {
+                self.line(&format!("{pp}shl.b32 %t2, {}, 16;", reg(rs3.unwrap_or(0))));
+                self.line(&format!("{pp}mov.b32 %ft2, %t2;"));
+                self.line(&format!("{pp}fma.rn.f32 %ft0, %ft0, %ft1, %ft2;"));
+                self.line(&format!("{pp}mov.b32 %t0, %ft0;"));
+                self.line(&format!("{pp}shr.b32 {}, %t0, 16;", reg(rd)));
+                return;
+            }
+        };
+
+        self.line(&format!("{pp}{ptx_op} %ft0, %ft0, %ft1;"));
+        self.line(&format!("{pp}mov.b32 %t0, %ft0;"));
+        self.line(&format!("{pp}shr.b32 {}, %t0, 16;", reg(rd)));
+    }
+
+    fn emit_bf16_packed(
+        &mut self,
+        pp: &str,
+        op: Bf16PackedOp,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rs3: Option<u8>,
+    ) {
+        self.line(&format!("{pp}and.b32 %t0, {}, 0xFFFF;", reg(rs1)));
+        self.line(&format!("{pp}shl.b32 %t0, %t0, 16;"));
+        self.line(&format!("{pp}mov.b32 %ft0, %t0;"));
+        self.line(&format!("{pp}and.b32 %t0, {}, 0xFFFF0000;", reg(rs1)));
+        self.line(&format!("{pp}mov.b32 %ft1, %t0;"));
+        self.line(&format!("{pp}and.b32 %t1, {}, 0xFFFF;", reg(rs2)));
+        self.line(&format!("{pp}shl.b32 %t1, %t1, 16;"));
+        self.line(&format!("{pp}mov.b32 %ft2, %t1;"));
+        self.line(&format!("{pp}and.b32 %t1, {}, 0xFFFF0000;", reg(rs2)));
+        self.line(&format!("{pp}mov.b32 %ft3, %t1;"));
+
+        match op {
+            Bf16PackedOp::Badd2 => {
+                self.line(&format!("{pp}add.f32 %ft0, %ft0, %ft2;"));
+                self.line(&format!("{pp}add.f32 %ft1, %ft1, %ft3;"));
+            }
+            Bf16PackedOp::Bmul2 => {
+                self.line(&format!("{pp}mul.f32 %ft0, %ft0, %ft2;"));
+                self.line(&format!("{pp}mul.f32 %ft1, %ft1, %ft3;"));
+            }
+            Bf16PackedOp::Bma2 => {
+                let s3 = rs3.unwrap_or(0);
+                self.line(&format!("{pp}and.b32 %t2, {}, 0xFFFF;", reg(s3)));
+                self.line(&format!("{pp}shl.b32 %t2, %t2, 16;"));
+                self.line(&format!("{pp}mov.b32 %ft4, %t2;"));
+                self.line(&format!("{pp}and.b32 %t2, {}, 0xFFFF0000;", reg(s3)));
+                self.line(&format!("{pp}mov.b32 %ft5, %t2;"));
+                self.line(&format!("{pp}fma.rn.f32 %ft0, %ft0, %ft2, %ft4;"));
+                self.line(&format!("{pp}fma.rn.f32 %ft1, %ft1, %ft3, %ft5;"));
+            }
+        }
+
+        self.line(&format!("{pp}mov.b32 %t0, %ft0;"));
+        self.line(&format!("{pp}shr.b32 %t0, %t0, 16;"));
+        self.line(&format!("{pp}mov.b32 %t1, %ft1;"));
+        self.line(&format!("{pp}and.b32 %t1, %t1, 0xFFFF0000;"));
+        self.line(&format!("{pp}or.b32 {}, %t0, %t1;", reg(rd)));
     }
 
     fn emit_f64(&mut self, pp: &str, op: F64Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
@@ -830,6 +962,16 @@ impl CodeGenerator {
                 self.line(&format!("{pp}cvt.u16.u32 %t0, {};", reg(rs1)));
                 self.line(&format!("{pp}cvt.f32.f16 {}, %t0;", freg(rd)));
                 self.line(&format!("{pp}mov.b32 {}, {};", reg(rd), freg(rd)));
+            }
+            CvtType::F32Bf16 => {
+                self.line(&format!("{pp}shl.b32 %t0, {}, 16;", reg(rs1)));
+                self.line(&format!("{pp}mov.b32 {}, %t0;", freg(rd)));
+                self.line(&format!("{pp}mov.b32 {}, {};", reg(rd), freg(rd)));
+            }
+            CvtType::Bf16F32 => {
+                self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));
+                self.line(&format!("{pp}mov.b32 %t0, {};", freg(rs1)));
+                self.line(&format!("{pp}shr.b32 {}, %t0, 16;", reg(rd)));
             }
             CvtType::F32F64 => {
                 self.line(&format!("{pp}mov.b32 {}, {};", freg(rs1), reg(rs1)));

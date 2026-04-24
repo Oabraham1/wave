@@ -6,11 +6,21 @@
 //! predicate registers (p0-p3), and read-only special registers populated at
 //! dispatch time (thread/wave/workgroup IDs, dimensions, etc).
 
-#[derive(Debug, Clone)]
+use std::collections::HashMap;
+
+#[derive(Debug, Default)]
+pub struct MmaFragments {
+    pub a_fragments: HashMap<u8, Vec<f32>>,
+    pub b_fragments: HashMap<u8, Vec<f32>>,
+    pub c_fragments: HashMap<u8, Vec<f32>>,
+}
+
+#[derive(Debug)]
 pub struct Thread {
     pub registers: Vec<u32>,
     pub predicates: [bool; 4],
     pub special_registers: SpecialRegisters,
+    pub mma_fragments: MmaFragments,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -23,6 +33,10 @@ pub struct SpecialRegisters {
     pub grid_size: [u32; 3],
     pub wave_width: u32,
     pub num_waves: u32,
+    pub mma_supported: u32,
+    pub mma_m: u32,
+    pub mma_n: u32,
+    pub mma_k: u32,
 }
 
 impl SpecialRegisters {
@@ -44,6 +58,10 @@ impl SpecialRegisters {
             13 => self.grid_size[2],
             14 => self.wave_width,
             15 => self.num_waves,
+            16 => self.mma_supported,
+            17 => self.mma_m,
+            18 => self.mma_n,
+            19 => self.mma_k,
             _ => 0,
         }
     }
@@ -55,6 +73,7 @@ impl Thread {
             registers: vec![0; register_count as usize],
             predicates: [false; 4],
             special_registers: SpecialRegisters::default(),
+            mma_fragments: MmaFragments::default(),
         }
     }
 
@@ -63,6 +82,7 @@ impl Thread {
             registers: vec![0; register_count as usize],
             predicates: [false; 4],
             special_registers: special,
+            mma_fragments: MmaFragments::default(),
         }
     }
 
@@ -131,6 +151,10 @@ mod tests {
             grid_size: [4, 4, 1],
             wave_width: 32,
             num_waves: 2,
+            mma_supported: 1,
+            mma_m: 4,
+            mma_n: 4,
+            mma_k: 4,
         };
         let thread = Thread::with_special_registers(32, special);
 

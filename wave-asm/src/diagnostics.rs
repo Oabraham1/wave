@@ -41,7 +41,7 @@ pub enum AssemblerError {
         span: Span,
     },
 
-    #[error("invalid register index {index}: must be 0-31")]
+    #[error("invalid register index {index}: must be 0-254")]
     InvalidRegisterIndex { index: u8, span: Span },
 
     #[error("invalid predicate register index {index}: must be 0-3")]

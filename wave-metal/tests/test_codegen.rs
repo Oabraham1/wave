@@ -9,71 +9,72 @@
 
 use wave_metal::compile;
 
-const OPCODE_SHIFT: u32 = 26;
-const RD_SHIFT: u32 = 21;
-const RS1_SHIFT: u32 = 16;
-const RS2_SHIFT: u32 = 11;
-const MODIFIER_SHIFT: u32 = 7;
-const SCOPE_SHIFT: u32 = 5;
-const PRED_SHIFT: u32 = 3;
-const PRED_NEG_BIT: u32 = 1 << 2;
-const SYNC_OP_FLAG: u8 = 0x01;
-const MISC_OP_FLAG: u8 = 0x02;
+const OPCODE_SHIFT: u32 = 24;
+const RD_SHIFT: u32 = 16;
+const RS1_SHIFT: u32 = 8;
+const MODIFIER_SHIFT: u32 = 4;
+const EXTENDED_RS2_SHIFT: u32 = 24;
+const EXTENDED_RS3_SHIFT: u32 = 16;
+const EXTENDED_SCOPE_SHIFT: u32 = 0;
+const SYNC_MODIFIER_OFFSET: u8 = 8;
 
-fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8; 4] {
-    let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | (u32::from(flags) & 0x03);
-    word.to_le_bytes()
+fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred_reg: u8, pred_neg: bool) -> u32 {
+    (u32::from(opcode) << OPCODE_SHIFT)
+        | (u32::from(rd) << RD_SHIFT)
+        | (u32::from(rs1) << RS1_SHIFT)
+        | (u32::from(modifier) << MODIFIER_SHIFT)
+        | u32::from(pred_reg & 0x03)
+        | if pred_neg { 1 << 2 } else { 0 }
 }
 
-fn encode_with_scope(
+fn encode_ext(rs2: u8) -> u32 {
+    u32::from(rs2) << EXTENDED_RS2_SHIFT
+}
+
+fn encode_ext3(rs2: u8, rs3: u8) -> u32 {
+    (u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(rs3) << EXTENDED_RS3_SHIFT)
+}
+
+fn encode_ext_scope(rs2: u8, scope: u8) -> u32 {
+    (u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(scope) << EXTENDED_SCOPE_SHIFT)
+}
+
+/// Single-word instruction (4 bytes) - no predicate
+fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8) -> Vec<u8> {
+    encode_word0(opcode, rd, rs1, modifier, 0, false)
+        .to_le_bytes()
+        .to_vec()
+}
+
+/// Extended instruction (8 bytes: word0 + word1 with rs2) - no predicate
+fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, 0, false)
+        .to_le_bytes()
+        .to_vec();
+    v.extend_from_slice(&encode_ext(rs2).to_le_bytes());
+    v
+}
+
+/// Extended instruction with scope in word1 bits 0-1
+fn extended_scope(
     opcode: u8,
     rd: u8,
     rs1: u8,
     rs2: u8,
     modifier: u8,
     scope: u8,
-    flags: u8,
-) -> [u8; 4] {
-    let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | ((u32::from(scope) & 0x03) << SCOPE_SHIFT)
-        | (u32::from(flags) & 0x03);
-    word.to_le_bytes()
+) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, 0, false)
+        .to_le_bytes()
+        .to_vec();
+    v.extend_from_slice(&encode_ext_scope(rs2, scope).to_le_bytes());
+    v
 }
 
-fn encode_predicated(
-    opcode: u8,
-    rd: u8,
-    rs1: u8,
-    rs2: u8,
-    modifier: u8,
-    flags: u8,
-    pred: u8,
-    negated: bool,
-) -> [u8; 4] {
-    let mut word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | ((u32::from(pred) & 0x03) << PRED_SHIFT)
-        | (u32::from(flags) & 0x03);
-    if negated {
-        word |= PRED_NEG_BIT;
-    }
-    word.to_le_bytes()
-}
-
-fn halt_instruction() -> [u8; 4] {
-    encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG)
+/// Halt instruction: Control opcode 0x3F, modifier = Halt(1) + SYNC_MODIFIER_OFFSET(8) = 9
+/// Halt does NOT read word1 in the decoder (single-word sync op)
+fn halt_instruction() -> Vec<u8> {
+    single(0x3F, 0, 0, 1 + SYNC_MODIFIER_OFFSET)
 }
 
 fn build_wbin(kernel_name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8> {
@@ -129,28 +130,28 @@ fn compile_instructions_with_local_mem(instructions: &[u8], local_mem: u32) -> S
 
 #[test]
 fn test_iadd() {
-    let code = encode(0x00, 5, 3, 4, 0, 0);
+    let code = extended(0x00, 5, 3, 4, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_isub() {
-    let code = encode(0x01, 2, 0, 1, 0, 0);
+    let code = extended(0x01, 2, 0, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = r0 - r1;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_imul() {
-    let code = encode(0x02, 3, 1, 2, 0, 0);
+    let code = extended(0x02, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 * r2;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_imul_hi() {
-    let code = encode(0x03, 3, 1, 2, 0, 0);
+    let code = extended(0x03, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)(((uint64_t)r1 * (uint64_t)r2) >> 32)"),
@@ -160,7 +161,7 @@ fn test_imul_hi() {
 
 #[test]
 fn test_idiv() {
-    let code = encode(0x05, 3, 1, 2, 0, 0);
+    let code = extended(0x05, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)((int32_t)r1 / (int32_t)r2)"),
@@ -170,7 +171,7 @@ fn test_idiv() {
 
 #[test]
 fn test_imod() {
-    let code = encode(0x06, 3, 1, 2, 0, 0);
+    let code = extended(0x06, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)((int32_t)r1 % (int32_t)r2)"),
@@ -180,21 +181,21 @@ fn test_imod() {
 
 #[test]
 fn test_ineg() {
-    let code = encode(0x07, 2, 1, 0, 0, 0);
+    let code = single(0x07, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("(uint32_t)(-(int32_t)r1)"), "MSL: {msl}");
 }
 
 #[test]
 fn test_iabs() {
-    let code = encode(0x08, 2, 1, 0, 0, 0);
+    let code = single(0x08, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("(uint32_t)abs((int32_t)r1)"), "MSL: {msl}");
 }
 
 #[test]
 fn test_imin() {
-    let code = encode(0x09, 3, 1, 2, 0, 0);
+    let code = extended(0x09, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)min((int32_t)r1, (int32_t)r2)"),
@@ -204,7 +205,7 @@ fn test_imin() {
 
 #[test]
 fn test_imax() {
-    let code = encode(0x0A, 3, 1, 2, 0, 0);
+    let code = extended(0x0A, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)max((int32_t)r1, (int32_t)r2)"),
@@ -214,154 +215,154 @@ fn test_imax() {
 
 #[test]
 fn test_fadd() {
-    let code = encode(0x10, 3, 1, 2, 0, 0);
+    let code = extended(0x10, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = ri(rf(r1) + rf(r2));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fsub() {
-    let code = encode(0x11, 3, 1, 2, 0, 0);
+    let code = extended(0x11, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = ri(rf(r1) - rf(r2));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fmul() {
-    let code = encode(0x12, 3, 1, 2, 0, 0);
+    let code = extended(0x12, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = ri(rf(r1) * rf(r2));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fdiv() {
-    let code = encode(0x14, 3, 1, 2, 0, 0);
+    let code = extended(0x14, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = ri(rf(r1) / rf(r2));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fsqrt() {
-    let code = encode(0x1A, 2, 1, 0, 0, 0);
+    let code = single(0x1A, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(sqrt(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fneg() {
-    let code = encode(0x15, 2, 1, 0, 0, 0);
+    let code = single(0x15, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(-rf(r1));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fabs() {
-    let code = encode(0x16, 2, 1, 0, 0, 0);
+    let code = single(0x16, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(abs(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_fsin() {
-    let code = encode(0x1B, 2, 1, 0, 8, 0);
+    let code = single(0x1B, 2, 1, 8);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(sin(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_fcos() {
-    let code = encode(0x1B, 2, 1, 0, 9, 0);
+    let code = single(0x1B, 2, 1, 9);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(cos(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_fexp2() {
-    let code = encode(0x1B, 2, 1, 0, 10, 0);
+    let code = single(0x1B, 2, 1, 10);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(exp2(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_flog2() {
-    let code = encode(0x1B, 2, 1, 0, 11, 0);
+    let code = single(0x1B, 2, 1, 11);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(log2(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_ftrunc() {
-    let code = encode(0x1B, 2, 1, 0, 5, 0);
+    let code = single(0x1B, 2, 1, 5);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(trunc(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_ffract() {
-    let code = encode(0x1B, 2, 1, 0, 6, 0);
+    let code = single(0x1B, 2, 1, 6);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(fract(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_ffloor() {
-    let code = encode(0x1B, 2, 1, 0, 2, 0);
+    let code = single(0x1B, 2, 1, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(floor(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_funary_frsqrt() {
-    let code = encode(0x1B, 2, 1, 0, 0, 0);
+    let code = single(0x1B, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri(rsqrt(rf(r1)));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_and() {
-    let code = encode(0x20, 3, 1, 2, 0, 0);
+    let code = extended(0x20, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 & r2;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_or() {
-    let code = encode(0x21, 3, 1, 2, 0, 0);
+    let code = extended(0x21, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 | r2;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_xor() {
-    let code = encode(0x22, 3, 1, 2, 0, 0);
+    let code = extended(0x22, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 ^ r2;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_not() {
-    let code = encode(0x23, 2, 1, 0, 0, 0);
+    let code = single(0x23, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ~r1;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_shl() {
-    let code = encode(0x24, 3, 1, 2, 0, 0);
+    let code = extended(0x24, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 << (r2 & 0x1Fu);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_shr() {
-    let code = encode(0x25, 3, 1, 2, 0, 0);
+    let code = extended(0x25, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = r1 >> (r2 & 0x1Fu);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_sar() {
-    let code = encode(0x26, 3, 1, 2, 0, 0);
+    let code = extended(0x26, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(uint32_t)((int32_t)r1 >> (r2 & 0x1Fu))"),
@@ -371,16 +372,14 @@ fn test_sar() {
 
 #[test]
 fn test_bitcount() {
-    let mut code = encode(0x27, 2, 1, 0, 0, 0).to_vec();
-    code.extend_from_slice(&[0u8; 4]);
+    let code = single(0x27, 2, 1, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = popcount(r1);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_bitfind() {
-    let mut code = encode(0x27, 2, 1, 0, 1, 0).to_vec();
-    code.extend_from_slice(&[0u8; 4]);
+    let code = single(0x27, 2, 1, 1);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("(r1 == 0u) ? 0xFFFFFFFFu : ctz(r1)"),
@@ -390,22 +389,25 @@ fn test_bitfind() {
 
 #[test]
 fn test_bitrev() {
-    let mut code = encode(0x27, 2, 1, 0, 2, 0).to_vec();
-    code.extend_from_slice(&[0u8; 4]);
+    let code = single(0x27, 2, 1, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = reverse_bits(r1);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_mov() {
-    let code = encode(0x3F, 5, 3, 0, 0, MISC_OP_FLAG);
+    // Misc opcode 0x41, modifier=0 (Mov) - Mov does NOT read word1
+    let code = single(0x41, 5, 3, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = r3;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_mov_imm() {
-    let mut code = encode(0x3F, 5, 0, 0, 1, MISC_OP_FLAG).to_vec();
+    // Misc opcode 0x41, modifier=1 (MovImm) - reads word1 as immediate
+    let mut code = encode_word0(0x41, 5, 0, 1, 0, false)
+        .to_le_bytes()
+        .to_vec();
     code.extend_from_slice(&42u32.to_le_bytes());
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = 42u;"), "MSL: {msl}");
@@ -413,35 +415,36 @@ fn test_mov_imm() {
 
 #[test]
 fn test_mov_sr_thread_id_x() {
-    let code = encode(0x3F, 5, 0, 0, 2, MISC_OP_FLAG);
+    // Misc opcode 0x41, modifier=2 (MovSr) - does NOT read word1
+    let code = single(0x41, 5, 0, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = (uint32_t)tid.x;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_mov_sr_lane_id() {
-    let code = encode(0x3F, 5, 4, 0, 2, MISC_OP_FLAG);
+    let code = single(0x41, 5, 4, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = (uint32_t)lane_id;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_mov_sr_workgroup_id() {
-    let code = encode(0x3F, 5, 5, 0, 2, MISC_OP_FLAG);
+    let code = single(0x41, 5, 5, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = (uint32_t)gid.x;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_mov_sr_wave_width() {
-    let code = encode(0x3F, 5, 14, 0, 2, MISC_OP_FLAG);
+    let code = single(0x41, 5, 14, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = (uint32_t)32u;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_device_load_u32() {
-    let code = encode(0x38, 5, 3, 0, 2, 0);
+    let code = single(0x38, 5, 3, 2);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("r5 = (uint32_t)(*(device uint32_t*)(device_mem + r3));"),
@@ -451,7 +454,7 @@ fn test_device_load_u32() {
 
 #[test]
 fn test_device_store_u32() {
-    let code = encode(0x39, 0, 3, 5, 2, 0);
+    let code = extended(0x39, 0, 3, 5, 2);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("*(device uint32_t*)(device_mem + r3) = (uint32_t)r5;"),
@@ -461,7 +464,7 @@ fn test_device_store_u32() {
 
 #[test]
 fn test_local_load_u32() {
-    let code = encode(0x30, 5, 3, 0, 2, 0);
+    let code = single(0x30, 5, 3, 2);
     let msl = compile_instructions_with_local_mem(&code, 4096);
     assert!(
         msl.contains("r5 = (uint32_t)(*(threadgroup uint32_t*)(local_mem + r3));"),
@@ -475,7 +478,7 @@ fn test_local_load_u32() {
 
 #[test]
 fn test_local_store_u32() {
-    let code = encode(0x31, 0, 3, 5, 2, 0);
+    let code = extended(0x31, 0, 3, 5, 2);
     let msl = compile_instructions_with_local_mem(&code, 4096);
     assert!(
         msl.contains("*(threadgroup uint32_t*)(local_mem + r3) = (uint32_t)r5;"),
@@ -485,7 +488,7 @@ fn test_local_store_u32() {
 
 #[test]
 fn test_device_load_u8() {
-    let code = encode(0x38, 5, 3, 0, 0, 0);
+    let code = single(0x38, 5, 3, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("r5 = (uint32_t)(*(device uint8_t*)(device_mem + r3));"),
@@ -495,7 +498,9 @@ fn test_device_load_u8() {
 
 #[test]
 fn test_barrier() {
-    let code = encode(0x3F, 0, 0, 0, 2, SYNC_OP_FLAG);
+    // Barrier = SyncOp::Barrier(2) + SYNC_MODIFIER_OFFSET(8) = 10
+    // Barrier does NOT read word1
+    let code = single(0x3F, 0, 0, 2 + SYNC_MODIFIER_OFFSET);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("threadgroup_barrier(mem_flags::mem_threadgroup | mem_flags::mem_device);"),
@@ -505,7 +510,8 @@ fn test_barrier() {
 
 #[test]
 fn test_halt() {
-    let code = encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG);
+    // Halt = SyncOp::Halt(1) + SYNC_MODIFIER_OFFSET(8) = 9
+    let code = single(0x3F, 0, 0, 1 + SYNC_MODIFIER_OFFSET);
     let msl = compile_instructions(&code);
     assert!(msl.contains("return;"), "MSL: {msl}");
 }
@@ -513,14 +519,14 @@ fn test_halt() {
 #[test]
 fn test_if_else_endif() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 1, 0, 0, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x00, 5, 3, 4, 0, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 1, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x00, 5, 1, 2, 0, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 2, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    // Control::If = modifier 0, rs1=1 (predicate register) - does NOT read word1
+    code.extend_from_slice(&single(0x3F, 0, 1, 0));
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0));
+    // Control::Else = modifier 1 - does NOT read word1
+    code.extend_from_slice(&single(0x3F, 0, 0, 1));
+    code.extend_from_slice(&extended(0x00, 5, 1, 2, 0));
+    // Control::Endif = modifier 2 - does NOT read word1
+    code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
     assert!(msl.contains("if (p1) {"), "MSL: {msl}");
     assert!(msl.contains("} else {"), "MSL: {msl}");
@@ -531,12 +537,12 @@ fn test_if_else_endif() {
 #[test]
 fn test_loop_break() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 3, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 1, 0, 4, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 6, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    // Control::Loop = modifier 3
+    code.extend_from_slice(&single(0x3F, 0, 0, 3));
+    // Control::Break = modifier 4, rs1=1
+    code.extend_from_slice(&single(0x3F, 0, 1, 4));
+    // Control::Endloop = modifier 6
+    code.extend_from_slice(&single(0x3F, 0, 0, 6));
     let msl = compile_instructions(&code);
     assert!(msl.contains("while (true) {"), "MSL: {msl}");
     assert!(msl.contains("if (p1) break;"), "MSL: {msl}");
@@ -544,7 +550,12 @@ fn test_loop_break() {
 
 #[test]
 fn test_predicated_instruction() {
-    let code = encode_predicated(0x00, 5, 3, 4, 0, 0, 1, false);
+    let mut code = Vec::new();
+    // Control::If = modifier 0, rs1=1
+    code.extend_from_slice(&single(0x3F, 0, 1, 0));
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0));
+    // Control::Endif = modifier 2
+    code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
     assert!(msl.contains("if (p1) {"), "MSL: {msl}");
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
@@ -552,15 +563,20 @@ fn test_predicated_instruction() {
 
 #[test]
 fn test_predicated_negated() {
-    let code = encode_predicated(0x00, 5, 3, 4, 0, 0, 2, true);
+    let mut code = Vec::new();
+    // Control::If = modifier 0, rs1=2
+    code.extend_from_slice(&single(0x3F, 0, 2, 0));
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0));
+    // Control::Endif = modifier 2
+    code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
-    assert!(msl.contains("if (!p2) {"), "MSL: {msl}");
+    assert!(msl.contains("if (p2) {"), "MSL: {msl}");
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_icmp_eq() {
-    let code = encode(0x28, 1, 3, 4, 0, 0);
+    let code = extended(0x28, 1, 3, 4, 0);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("p1 = (int32_t)r3 == (int32_t)r4;"),
@@ -570,63 +586,64 @@ fn test_icmp_eq() {
 
 #[test]
 fn test_ucmp_lt() {
-    let code = encode(0x29, 2, 3, 4, 2, 0);
+    let code = extended(0x29, 2, 3, 4, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("p2 = r3 < r4;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_fcmp_gt() {
-    let code = encode(0x2A, 1, 3, 4, 4, 0);
+    let code = extended(0x2A, 1, 3, 4, 4);
     let msl = compile_instructions(&code);
     assert!(msl.contains("p1 = rf(r3) > rf(r4);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_select() {
-    let code = encode(0x2B, 5, 1, 3, 4, 0);
+    let mut code = encode_word0(0x2B, 5, 1, 0, 0, false).to_le_bytes().to_vec();
+    code.extend_from_slice(&encode_ext3(3, 4).to_le_bytes());
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = p1 ? r3 : r4;"), "MSL: {msl}");
 }
 
 #[test]
 fn test_cvt_i32_f32() {
-    let code = encode(0x2C, 2, 1, 0, 2, 0);
+    let code = single(0x2C, 2, 1, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = ri((float)((int32_t)r1));"), "MSL: {msl}");
 }
 
 #[test]
 fn test_cvt_f32_u32() {
-    let code = encode(0x2C, 2, 1, 0, 1, 0);
+    let code = single(0x2C, 2, 1, 1);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r2 = (uint32_t)rf(r1);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_wave_shuffle() {
-    let code = encode(0x3E, 3, 1, 2, 0, 0);
+    let code = extended(0x3E, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = simd_shuffle(r1, r2);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_wave_broadcast() {
-    let code = encode(0x3E, 3, 1, 2, 4, 0);
+    let code = extended(0x3E, 3, 1, 2, 4);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = simd_broadcast(r1, r2);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_wave_reduce_add() {
-    let code = encode(0x3E, 3, 1, 0, 9, 0);
+    let code = single(0x3E, 3, 1, 9);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r3 = simd_sum(r1);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_wave_ballot() {
-    let code = encode(0x3E, 3, 1, 0, 5, 0);
+    let code = single(0x3E, 3, 1, 5);
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("r3 = (uint32_t)simd_ballot(p1);"),
@@ -636,14 +653,14 @@ fn test_wave_ballot() {
 
 #[test]
 fn test_wave_any() {
-    let code = encode(0x3E, 2, 1, 0, 6, 0);
+    let code = single(0x3E, 2, 1, 6);
     let msl = compile_instructions(&code);
     assert!(msl.contains("p2 = simd_any(p1);"), "MSL: {msl}");
 }
 
 #[test]
 fn test_kernel_header_structure() {
-    let code = encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG);
+    let code = halt_instruction();
     let wbin = build_wbin("my_kernel", 4, 0, &code);
     let msl = compile(&wbin).unwrap();
     assert!(msl.contains("#include <metal_stdlib>"), "MSL: {msl}");
@@ -667,7 +684,7 @@ fn test_kernel_header_structure() {
 
 #[test]
 fn test_register_declarations() {
-    let code = encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG);
+    let code = halt_instruction();
     let wbin = build_wbin("test_kernel", 4, 1024, &code);
     let msl = compile(&wbin).unwrap();
     assert!(
@@ -686,8 +703,8 @@ fn test_register_declarations() {
 
 #[test]
 fn test_device_atomic_add() {
-    let mut code = encode_with_scope(0x3D, 5, 3, 4, 0, 2, 0).to_vec();
-    code.extend_from_slice(&[0u8; 4]);
+    // DeviceAtomic opcode 0x3D, scope in word1 bits 0-1
+    let code = extended_scope(0x3D, 5, 3, 4, 0, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("atomic_fetch_add_explicit"), "MSL: {msl}");
     assert!(
@@ -699,7 +716,12 @@ fn test_device_atomic_add() {
 
 #[test]
 fn test_fence() {
-    let code = encode_with_scope(0x3F, 0, 0, 0, 3, 1, SYNC_OP_FLAG);
+    // FenceAcquire = SyncOp::FenceAcquire(3) + SYNC_MODIFIER_OFFSET(8) = 11
+    // Fences read word1 for scope; scope=1 (Workgroup) in word1 bits 0-1
+    let mut code = encode_word0(0x3F, 0, 0, 3 + SYNC_MODIFIER_OFFSET, 0, false)
+        .to_le_bytes()
+        .to_vec();
+    code.extend_from_slice(&(1u32 << EXTENDED_SCOPE_SHIFT).to_le_bytes());
     let msl = compile_instructions(&code);
     assert!(
         msl.contains("threadgroup_barrier(mem_flags::mem_threadgroup);"),
@@ -709,7 +731,9 @@ fn test_fence() {
 
 #[test]
 fn test_nop_produces_no_output() {
-    let code = encode(0x3F, 0, 0, 0, 7, SYNC_OP_FLAG);
+    // Nop = SyncOp::Nop(7) + SYNC_MODIFIER_OFFSET(8) = 15
+    // Nop does NOT read word1
+    let code = single(0x3F, 0, 0, 7 + SYNC_MODIFIER_OFFSET);
     let msl = compile_instructions(&code);
     let lines: Vec<&str> = msl.lines().collect();
     let return_count = lines.iter().filter(|l| l.trim() == "return;").count();
@@ -718,8 +742,7 @@ fn test_nop_produces_no_output() {
 
 #[test]
 fn test_f16_hadd() {
-    let mut code = encode(0x1C, 3, 1, 2, 0, 0).to_vec();
-    code.extend_from_slice(&[0u8; 4]);
+    let code = extended(0x1C, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("rhi(rh(r1) + rh(r2))"), "MSL: {msl}");
 }

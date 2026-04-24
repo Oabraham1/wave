@@ -8,15 +8,13 @@
 //! for bit-accurate encoding.
 
 use wave_decode::opcodes::{
-    CmpOp, ControlOp, FUnaryOp, MemWidth as DecodeMemWidth, MiscOp, Opcode, SyncOp, MODIFIER_MASK,
-    MODIFIER_SHIFT, OPCODE_SHIFT, RD_SHIFT, RS1_SHIFT, RS2_SHIFT,
+    CmpOp, ControlOp, FUnaryOp, MemWidth as DecodeMemWidth, MiscOp, Opcode, SyncOp,
+    EXTENDED_RS2_SHIFT, EXTENDED_RS3_SHIFT, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT, RD_SHIFT,
+    RS1_SHIFT, SYNC_MODIFIER_OFFSET,
 };
 
 use crate::lir::instruction::LirInst;
 use crate::lir::operand::{MemWidth, PhysReg, VReg};
-
-const SYNC_OP_FLAG: u32 = 0x01;
-const MISC_OP_FLAG: u32 = 0x02;
 
 /// An encoded WAVE instruction (4 or 8 bytes).
 #[derive(Debug, Clone)]
@@ -148,12 +146,12 @@ fn emit_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Sar { .. } => emit_bitwise_alu(inst, reg_map),
         LirInst::CvtF32I32 { dest, src } => {
             let word0 =
-                encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 0);
+                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0);
             EncodedInst { word0, word1: None }
         }
         LirInst::CvtI32F32 { dest, src } => {
             let word0 =
-                encode_base_word(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0, 2);
+                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 2);
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -231,14 +229,14 @@ fn emit_float_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
             src2,
             src3,
         } => {
-            let word0 = encode_base_word(
+            let word0 = encode_base_word_no_rs2(
                 Opcode::Fma,
                 reg(*dest, reg_map),
                 reg(*src1, reg_map),
-                reg(*src2, reg_map),
                 0,
             );
-            let word1 = u32::from(reg(*src3, reg_map)) << 27;
+            let word1 = (u32::from(reg(*src2, reg_map)) << EXTENDED_RS2_SHIFT)
+                | (u32::from(reg(*src3, reg_map)) << EXTENDED_RS3_SHIFT);
             EncodedInst {
                 word0,
                 word1: Some(word1),
@@ -330,25 +328,23 @@ fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
     match inst {
         LirInst::MovImm { dest, value } => {
             let word0 =
-                encode_control_word(MiscOp::MovImm as u8, reg(*dest, reg_map), 0, 0) | MISC_OP_FLAG;
+                encode_misc_word(MiscOp::MovImm as u8, reg(*dest, reg_map), 0);
             EncodedInst {
                 word0,
                 word1: Some(*value),
             }
         }
         LirInst::MovReg { dest, src } => {
-            let word0 = encode_control_word(
+            let word0 = encode_misc_word(
                 MiscOp::Mov as u8,
                 reg(*dest, reg_map),
                 reg(*src, reg_map),
-                0,
-            ) | MISC_OP_FLAG;
+            );
             EncodedInst { word0, word1: None }
         }
         LirInst::MovSr { dest, sr } => {
             let word0 =
-                encode_control_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index(), 0)
-                    | MISC_OP_FLAG;
+                encode_misc_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index());
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -496,11 +492,11 @@ fn emit_control(inst: &LirInst, _reg_map: &RegMap) -> EncodedInst {
             EncodedInst { word0, word1: None }
         }
         LirInst::Barrier => {
-            let word0 = encode_control_word(SyncOp::Barrier as u8, 0, 0, 0) | SYNC_OP_FLAG;
+            let word0 = encode_control_word(SyncOp::Barrier as u8 + SYNC_MODIFIER_OFFSET, 0, 0, 0);
             EncodedInst { word0, word1: None }
         }
         LirInst::Halt => {
-            let word0 = encode_control_word(SyncOp::Halt as u8, 0, 0, 0) | SYNC_OP_FLAG;
+            let word0 = encode_control_word(SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET, 0, 0, 0);
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
@@ -514,51 +510,65 @@ fn reg(vreg: VReg, map: &RegMap) -> u8 {
         })
 }
 
-fn encode_base_word(opcode: Opcode, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> u32 {
+fn encode_base_word_no_rs2(opcode: Opcode, rd: u8, rs1: u8, modifier: u8) -> u32 {
     (u32::from(opcode as u8) << OPCODE_SHIFT)
-        | (u32::from(rd & 0x1F) << RD_SHIFT)
-        | (u32::from(rs1 & 0x1F) << RS1_SHIFT)
-        | (u32::from(rs2 & 0x1F) << RS2_SHIFT)
+        | (u32::from(rd) << RD_SHIFT)
+        | (u32::from(rs1) << RS1_SHIFT)
         | ((u32::from(modifier) & MODIFIER_MASK) << MODIFIER_SHIFT)
 }
 
 fn encode_alu3(opcode: Opcode, rd: u8, rs1: u8, rs2: u8) -> EncodedInst {
+    let word0 = encode_base_word_no_rs2(opcode, rd, rs1, 0);
+    let word1 = u32::from(rs2) << EXTENDED_RS2_SHIFT;
     EncodedInst {
-        word0: encode_base_word(opcode, rd, rs1, rs2, 0),
-        word1: None,
+        word0,
+        word1: Some(word1),
     }
 }
 
 fn encode_alu2(opcode: Opcode, rd: u8, rs1: u8) -> EncodedInst {
     EncodedInst {
-        word0: encode_base_word(opcode, rd, rs1, 0, 0),
+        word0: encode_base_word_no_rs2(opcode, rd, rs1, 0),
         word1: None,
     }
 }
 
 fn encode_funary(op: FUnaryOp, rd: u8, rs1: u8) -> EncodedInst {
     EncodedInst {
-        word0: encode_base_word(Opcode::FUnaryOps, rd, rs1, 0, op as u8),
+        word0: encode_base_word_no_rs2(Opcode::FUnaryOps, rd, rs1, op as u8),
         word1: None,
     }
 }
 
 fn encode_mem(opcode: Opcode, rd: u8, rs1: u8, rs2: u8, width: DecodeMemWidth) -> EncodedInst {
-    EncodedInst {
-        word0: encode_base_word(opcode, rd, rs1, rs2, width as u8),
-        word1: None,
+    let word0 = encode_base_word_no_rs2(opcode, rd, rs1, width as u8);
+    let needs_rs2 = matches!(opcode, Opcode::LocalStore | Opcode::DeviceStore);
+    if needs_rs2 {
+        let word1 = u32::from(rs2) << EXTENDED_RS2_SHIFT;
+        EncodedInst {
+            word0,
+            word1: Some(word1),
+        }
+    } else {
+        EncodedInst { word0, word1: None }
     }
 }
 
 fn encode_cmp(opcode: Opcode, cmp_op: CmpOp, pd: u8, rs1: u8, rs2: u8) -> EncodedInst {
+    let word0 = encode_base_word_no_rs2(opcode, pd, rs1, cmp_op as u8);
+    let word1 = u32::from(rs2) << EXTENDED_RS2_SHIFT;
     EncodedInst {
-        word0: encode_base_word(opcode, pd, rs1, rs2, cmp_op as u8),
-        word1: None,
+        word0,
+        word1: Some(word1),
     }
 }
 
-fn encode_control_word(modifier: u8, rd: u8, rs1: u8, rs2: u8) -> u32 {
-    encode_base_word(Opcode::Control, rd, rs1, rs2, modifier)
+fn encode_control_word(modifier: u8, rd: u8, rs1: u8, _rs2: u8) -> u32 {
+    encode_base_word_no_rs2(Opcode::Control, rd, rs1, modifier)
+}
+
+fn encode_misc_word(modifier: u8, rd: u8, rs1: u8) -> u32 {
+    encode_base_word_no_rs2(Opcode::Misc, rd, rs1, modifier)
 }
 
 fn lir_width_to_decode(w: MemWidth) -> DecodeMemWidth {
@@ -587,11 +597,13 @@ mod tests {
             src2: VReg(4),
         };
         let encoded = emit_instruction(&inst, &empty_map());
-        assert!(encoded.word1.is_none());
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        assert!(encoded.word1.is_some());
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Iadd as u32);
-        let rd = (encoded.word0 >> RD_SHIFT) & 0x1F;
+        let rd = (encoded.word0 >> RD_SHIFT) & 0xFF;
         assert_eq!(rd, 5);
+        let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
+        assert_eq!(rs2, 4);
     }
 
     #[test]
@@ -602,9 +614,10 @@ mod tests {
             width: MemWidth::W32,
         };
         let encoded = emit_instruction(&inst, &empty_map());
-        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0x1F;
-        let rs2 = (encoded.word0 >> RS2_SHIFT) & 0x1F;
+        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0xFF;
         assert_eq!(rs1, 3);
+        assert!(encoded.word1.is_some());
+        let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
         assert_eq!(rs2, 5);
     }
 
@@ -623,9 +636,10 @@ mod tests {
     fn test_emit_halt() {
         let inst = LirInst::Halt;
         let encoded = emit_instruction(&inst, &empty_map());
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Control as u32);
-        assert_ne!(encoded.word0 & SYNC_OP_FLAG, 0);
+        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & u32::from(MODIFIER_MASK);
+        assert_eq!(modifier, u32::from(SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET));
     }
 
     #[test]
@@ -656,11 +670,11 @@ mod tests {
             src2: VReg(1),
         };
         let encoded = emit_instruction(&inst, &map);
-        let rd = (encoded.word0 >> RD_SHIFT) & 0x1F;
-        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0x1F;
-        let rs2 = (encoded.word0 >> RS2_SHIFT) & 0x1F;
+        let rd = (encoded.word0 >> RD_SHIFT) & 0xFF;
+        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0xFF;
         assert_eq!(rd, 12);
         assert_eq!(rs1, 10);
+        let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
         assert_eq!(rs2, 11);
     }
 }

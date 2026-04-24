@@ -5,45 +5,69 @@ description: Deep dive into the WAVE 32-bit and 64-bit instruction encoding form
 
 The WAVE binary encoding packs every instruction into a fixed 32-bit word, with an optional second word for extended operations, balancing decode simplicity against expressiveness.
 
-## 32-Bit Base Format
+## Word0: 32-Bit Base Format
 
-Every WAVE instruction fits into a single 32-bit word with the following bit layout:
+Every WAVE instruction starts with a 32-bit word with the following bit layout:
 
 | Bits | Field | Width | Purpose |
 |------|-------|-------|---------|
-| 31:26 | `opcode` | 6 bits | Operation class (up to 64 opcodes) |
-| 25:21 | `RD` | 5 bits | Destination register (0--31) |
-| 20:16 | `RS1` | 5 bits | Source register 1 (0--31) |
-| 15:11 | `RS2` | 5 bits | Source register 2 (0--31) |
-| 10:7 | `modifier` | 4 bits | Operation variant within opcode class (0--15) |
-| 6:5 | `scope` | 2 bits | Memory scope (wave, workgroup, device, system) |
-| 4:3 | `predicate` | 2 bits | Predicate register selector |
+| 31:24 | `opcode` | 8 bits | Operation class |
+| 23:16 | `RD` | 8 bits | Destination register (0--255) |
+| 15:8 | `RS1` | 8 bits | Source register 1 (0--255) |
+| 7:4 | `modifier` | 4 bits | Operation variant within opcode class (0--15) |
+| 3 | `reserved` | 1 bit | Reserved, must be zero |
 | 2 | `pred_neg` | 1 bit | Negate predicate condition |
-| 1:0 | `flags` | 2 bits | Instruction-specific flags |
+| 1:0 | `pred_reg` | 2 bits | Predicate register index (0=p0, 1=p1, 2=p2, 3=p3) |
 
 ```
- 31  26 25  21 20  16 15  11 10   7 6  5 4  3  2  1  0
-┌──────┬──────┬──────┬──────┬──────┬────┬────┬───┬────┐
-│opcode│  RD  │ RS1  │ RS2  │ mod  │scop│pred│neg│flag│
-│ 6b   │ 5b   │ 5b   │ 5b   │ 4b   │ 2b │ 2b │1b │ 2b│
-└──────┴──────┴──────┴──────┴──────┴────┴────┴───┴────┘
+ 31    24 23    16 15     8 7    4  3  2  1  0
+┌────────┬────────┬────────┬──────┬───┬───┬────┐
+│ opcode │   RD   │  RS1   │ mod  │rsv│neg│pred│
+│  8b    │  8b    │  8b    │ 4b   │1b │1b │ 2b │
+└────────┴────────┴────────┴──────┴───┴───┴────┘
 ```
 
-### Why 6-bit opcodes?
+### Predicate encoding
 
-Six bits provide 64 opcode slots. WAVE currently uses fewer than 40, leaving room for future extensions without changing the encoding width. Wider opcodes would steal bits from register fields or modifiers; narrower opcodes would constrain the instruction set too early.
+When pred_reg=0 and pred_neg=0, the instruction is unconditional. When pred_reg is nonzero, the instruction executes only if the specified predicate register is true (or false, if pred_neg=1). For example, `@p1` sets pred_reg=1, pred_neg=0; `@!p2` sets pred_reg=2, pred_neg=1.
 
-### Why 5-bit register fields?
+This encoding was introduced in v0.4. Earlier versions used bits [3:0] for scope and flags, which silently dropped all predication. See [Spec Defects](/internals/spec-defects/) for the full history (Defect 4).
 
-Five bits address 32 registers per thread. This is a deliberate trade-off: 32 registers are sufficient for the vast majority of GPU kernels (validated against shader compiler statistics from all four target vendors), while keeping the instruction word at 32 bits. The v0.1 spec text incorrectly referenced 256 registers despite using 5-bit fields; this was identified and corrected as a spec defect (see [Spec Defects](/internals/spec-defects/)).
+### Why 8-bit register fields?
+
+Eight bits address 256 registers per thread. In practice, most kernels use far fewer, but the wide field simplifies encoding and avoids the v0.1 mismatch between spec text and register field width. Two 8-bit register fields (rd, rs1) fit in word0; additional source registers (rs2, rs3, rs4) are encoded in word1.
 
 ### Why a 4-bit modifier?
 
-The modifier field disambiguates variants within an opcode class. For example, the `FUnaryOp` opcode class uses the modifier to select between `fsqrt` (0), `frsqrt` (1), ... `fsin` (8), `fcos` (9), `fexp2` (10), `flog2` (11). Four bits encode values 0--15, covering all current variants with room to grow. The earlier 3-bit modifier could only encode 0--7, which caused a concrete encoding failure documented in [Modifier Field Evolution](/internals/modifier-field/).
+The modifier field disambiguates variants within an opcode class. For example, the `FUnaryOp` opcode class uses the modifier to select between `frsqrt` (0), `frcp` (1), ... `fsin` (8), `fcos` (9), `fexp2` (10), `flog2` (11). Four bits encode values 0--15, covering all current variants with room to grow. The earlier 3-bit modifier could only encode 0--7, which caused a concrete encoding failure documented in [Modifier Field Evolution](/internals/modifier-field/).
+
+The Control opcode (0x3F) uses modifier values 0--7 for ControlOp (if, else, endif, loop, break, continue, endloop, call) and values 8--15 for SyncOp (return, halt, barrier, fence variants, wait, nop), offset by `SYNC_MODIFIER_OFFSET = 8`.
+
+## Word1: 32-Bit Extended Format
+
+When an instruction needs additional source registers, a memory scope, or an inline immediate, it uses a second 32-bit word. The opcode in word0 determines whether word1 is present.
+
+| Bits | Field | Width | Purpose |
+|------|-------|-------|---------|
+| 31:24 | `RS2` | 8 bits | Source register 2 (0--255) |
+| 23:16 | `RS3` | 8 bits | Source register 3 (0--255) |
+| 15:8 | `RS4` | 8 bits | Source register 4 (0--255) |
+| 7:2 | `reserved` | 6 bits | Reserved, must be zero |
+| 1:0 | `scope` | 2 bits | Memory scope (00=wave, 01=workgroup, 10=device, 11=system) |
+
+```
+ 31    24 23    16 15     8 7         2 1  0
+┌────────┬────────┬────────┬──────────┬────┐
+│  RS2   │  RS3   │  RS4   │ reserved │scop│
+│  8b    │  8b    │  8b    │   6b     │ 2b │
+└────────┴────────┴────────┴──────────┴────┘
+```
+
+Alternatively, the entire word1 can serve as a 32-bit immediate value (e.g., for `mov_imm`). The opcode determines interpretation.
 
 ### Scope encoding
 
-The 2-bit scope field encodes memory ordering visibility:
+The 2-bit scope field in word1 encodes memory ordering visibility for scoped instructions (DeviceAtomic, fence):
 
 | Value | Scope | Meaning |
 |-------|-------|---------|
@@ -52,27 +76,15 @@ The 2-bit scope field encodes memory ordering visibility:
 | `10` | Device | Visible to all waves on the device |
 | `11` | System | Visible to the device and host CPU |
 
-## 64-Bit Extended Format
-
-When an instruction needs more than two source registers or an inline immediate, it uses a second 32-bit word:
-
-```
-Word 0: standard 32-bit encoding (as above)
-Word 1 (extended):
- 31  27 26  22 21                              0
-┌──────┬──────┬──────────────────────────────────┐
-│ RS3  │ RS4  │          reserved / imm           │
-│ 5b   │ 5b   │            22b                    │
-└──────┴──────┴──────────────────────────────────┘
-```
-
-Alternatively, the entire second word can serve as a 32-bit immediate value. The opcode in word 0 determines interpretation: if the opcode is in the extended class, the decoder fetches a second word; otherwise, the instruction is complete at 32 bits.
+In v0.3, scope was encoded in word0. It was moved to word1 in v0.4 to free bits for predicate encoding.
 
 ### When to use 64-bit encoding
 
+- **Two-source operations** (`iadd r0, r1, r2`): needs RS1 (word0) and RS2 (word1).
 - **Fused multiply-add** (`fma r0, r1, r2, r3`): needs RS1, RS2, and RS3.
-- **Immediate loads** (`imm r0, 0x3F800000`): the 32-bit immediate occupies the entire second word.
-- **Atomic compare-and-swap** (`atom.cas r0, r1, r2, r3`): needs address, expected, desired, and result registers.
+- **Immediate loads** (`mov_imm r0, 0x3F800000`): the 32-bit immediate occupies the entire word1.
+- **Scoped atomics** (`device_atomic_add r0, r1, r2, workgroup`): scope in word1 bits [1:0].
+- **Atomic compare-and-swap**: needs address, expected, desired, and result registers.
 
 ## WBIN Container Format
 

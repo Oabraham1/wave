@@ -59,7 +59,7 @@ pub fn assemble(source: &str, source_name: &str) -> Result<AssemblerResult, Asse
 
 pub fn assemble_with_options(
     source: &str,
-    source_name: &str,
+    _source_name: &str,
     options: &AssemblerOptions,
 ) -> Result<AssemblerResult, AssemblerError> {
     let tokens = Lexer::new(source).tokenize()?;
@@ -94,12 +94,6 @@ pub fn assemble_with_options(
                     in_kernel = false;
                 }
                 Directive::Registers(count) => {
-                    if *count > 32 {
-                        warnings.push(AssemblerWarning::RegisterCountExceeds32 {
-                            count: *count,
-                            span: stmt.span,
-                        });
-                    }
                     writer.set_register_count(*count);
                 }
                 Directive::LocalMemory(size) => {
@@ -123,14 +117,12 @@ pub fn assemble_with_options(
     let mut binary = Vec::new();
     writer.finish(&mut binary)?;
 
-    let _ = source_name;
-
     Ok(AssemblerResult { binary, warnings })
 }
 
 fn validate_program(
     program: &Program,
-    warnings: &mut Vec<AssemblerWarning>,
+    _warnings: &mut Vec<AssemblerWarning>,
 ) -> Result<(), AssemblerError> {
     let mut kernel_stack: Vec<(String, Span)> = Vec::new();
 
@@ -154,14 +146,7 @@ fn validate_program(
                 }
                 kernel_stack.pop();
             }
-            Statement::Directive(Directive::Registers(count)) => {
-                if *count > 32 {
-                    warnings.push(AssemblerWarning::RegisterCountExceeds32 {
-                        count: *count,
-                        span: stmt.span,
-                    });
-                }
-            }
+            Statement::Directive(Directive::Registers(_count)) => {}
             _ => {}
         }
     }

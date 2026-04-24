@@ -61,7 +61,7 @@ pub fn color(ig: &InterferenceGraph, max_regs: u32, num_params: u32) -> Coloring
         }
 
         let mut color_found = false;
-        for c in 0..max_regs.min(32) as u8 {
+        for c in 0..max_regs.min(255) as u8 {
             if !used_colors.contains(&c) {
                 assignment.insert(vreg, PhysReg(c));
                 color_found = true;

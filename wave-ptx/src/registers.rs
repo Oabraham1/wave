@@ -83,6 +83,10 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
     writeln!(out, "    .reg .b32 %t<8>;").unwrap();
     writeln!(out, "    .reg .f32 %ft<4>;").unwrap();
     writeln!(out, "    .reg .pred %pt<2>;").unwrap();
+    writeln!(out, "    .reg .b32 %mA<8>;").unwrap();
+    writeln!(out, "    .reg .b32 %mB<8>;").unwrap();
+    writeln!(out, "    .reg .f32 %mC<8>;").unwrap();
+    writeln!(out, "    .reg .f32 %mD<8>;").unwrap();
 
     if local_mem_size > 0 {
         writeln!(

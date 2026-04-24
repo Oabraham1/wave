@@ -1,0 +1,1292 @@
+; SPDX-License-Identifier: Apache-2.0
+;
+; Fused GEMM + bias + GELU: C = gelu(A * B + bias)
+;
+; Based on gemm_blocked.wave (Phase 1). After the k-loop accumulation completes,
+; this kernel applies an epilogue that adds a 1D bias vector and then applies the
+; approximate GELU activation: GELU(x) = x * sigmoid(1.702 * x), where
+; sigmoid(z) = 1 / (1 + exp(-z)). Since the ISA provides fexp2 (base-2),
+; we compute exp(-z) = 2^(-z * log2(e)) with log2(e) = 1.4426950408.
+; Fusion eliminates two device memory round-trips. Requires M, N to be
+; multiples of 128 and K to be a multiple of 8.
+;
+; Register arguments via --set-reg:
+;   r0 = A device memory byte offset
+;   r1 = B device memory byte offset
+;   r2 = bias device memory byte offset (1D vector, N f32 values)
+;   r3 = C device memory byte offset
+;   r4 = N (cols of B and C)
+;   r5 = K (cols of A, rows of B)
+;
+; Shared memory layout (16400 bytes):
+;   [0..4095]       A buf0: 128 rows x 8 cols, row-major f32
+;   [4096..8191]    B buf0: 8 rows x 128 cols, row-major f32
+;   [8192..12287]   A buf1: 128 rows x 8 cols, row-major f32
+;   [12288..16383]  B buf1: 8 rows x 128 cols, row-major f32
+;   [16384..16399]  saved parameters: A_base, B_base, N_dim, bias_base
+;
+; Register allocation:
+;   r0-r5    initial kernel arguments
+;   r6       K_dim (saved constant)
+;   r7       tid_x (0..15, constant)
+;   r8       tid_y (0..15, constant)
+;   r9       linear_tid (tid_y * 16 + tid_x, 0..255, constant)
+;   r10      k_tile outer loop counter
+;   r11-r14  temps for address computation
+;   r15      buf_read_offset (0 or 8192, swapped each iteration)
+;   r16-r79  accumulators (8x8 = 64 values)
+;   r80-r87  B values during compute / bias values during epilogue
+;   r88      A value during compute / GELU temp during epilogue
+;   r89-r95  additional temps / GELU constants during epilogue
+
+.kernel gemm_bias_gelu_fused
+.registers 96
+.workgroup_size 16, 16, 1
+.local_memory 16400
+
+    mov r6, r5
+
+    mov_imm r11, 16384
+    local_store_u32 r11, r0
+    mov_imm r11, 16388
+    local_store_u32 r11, r1
+    mov_imm r11, 16392
+    local_store_u32 r11, r4
+    mov_imm r11, 16396
+    local_store_u32 r11, r2
+
+    mov_sr r7, sr_thread_id_x
+    mov_sr r8, sr_thread_id_y
+    mov_imm r11, 16
+    imul r9, r8, r11
+    iadd r9, r9, r7
+
+    mov_imm r16, 0
+    mov_imm r17, 0
+    mov_imm r18, 0
+    mov_imm r19, 0
+    mov_imm r20, 0
+    mov_imm r21, 0
+    mov_imm r22, 0
+    mov_imm r23, 0
+    mov_imm r24, 0
+    mov_imm r25, 0
+    mov_imm r26, 0
+    mov_imm r27, 0
+    mov_imm r28, 0
+    mov_imm r29, 0
+    mov_imm r30, 0
+    mov_imm r31, 0
+    mov_imm r32, 0
+    mov_imm r33, 0
+    mov_imm r34, 0
+    mov_imm r35, 0
+    mov_imm r36, 0
+    mov_imm r37, 0
+    mov_imm r38, 0
+    mov_imm r39, 0
+    mov_imm r40, 0
+    mov_imm r41, 0
+    mov_imm r42, 0
+    mov_imm r43, 0
+    mov_imm r44, 0
+    mov_imm r45, 0
+    mov_imm r46, 0
+    mov_imm r47, 0
+    mov_imm r48, 0
+    mov_imm r49, 0
+    mov_imm r50, 0
+    mov_imm r51, 0
+    mov_imm r52, 0
+    mov_imm r53, 0
+    mov_imm r54, 0
+    mov_imm r55, 0
+    mov_imm r56, 0
+    mov_imm r57, 0
+    mov_imm r58, 0
+    mov_imm r59, 0
+    mov_imm r60, 0
+    mov_imm r61, 0
+    mov_imm r62, 0
+    mov_imm r63, 0
+    mov_imm r64, 0
+    mov_imm r65, 0
+    mov_imm r66, 0
+    mov_imm r67, 0
+    mov_imm r68, 0
+    mov_imm r69, 0
+    mov_imm r70, 0
+    mov_imm r71, 0
+    mov_imm r72, 0
+    mov_imm r73, 0
+    mov_imm r74, 0
+    mov_imm r75, 0
+    mov_imm r76, 0
+    mov_imm r77, 0
+    mov_imm r78, 0
+    mov_imm r79, 0
+
+    mov_imm r15, 0
+
+    mov_imm r89, 16384
+    local_load_u32 r11, r89
+
+    mov_imm r89, 7
+    and r12, r9, r89
+    mov_imm r89, 3
+    shr r13, r9, r89
+
+    mov_sr r89, sr_workgroup_id_y
+    mov_imm r90, 128
+    imul r89, r89, r90
+    iadd r14, r89, r13
+
+    imul r89, r14, r6
+    iadd r89, r89, r12
+    mov_imm r90, 4
+    imul r89, r89, r90
+    iadd r89, r89, r11
+
+    mov_imm r90, 32
+    imul r90, r6, r90
+    mov_imm r91, 4
+    imul r90, r90, r91
+
+    mov_imm r91, 4
+    imul r14, r9, r91
+
+    mov_imm r91, 1024
+
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    mov_imm r89, 16388
+    local_load_u32 r11, r89
+    mov_imm r89, 16392
+    local_load_u32 r12, r89
+
+    mov_imm r89, 127
+    and r13, r9, r89
+    mov_imm r89, 7
+    shr r14, r9, r89
+
+    mov r89, r14
+    mov_sr r90, sr_workgroup_id_x
+    mov_imm r91, 128
+    imul r90, r90, r91
+    iadd r90, r90, r13
+    imul r89, r89, r12
+    iadd r89, r89, r90
+
+    mov_imm r91, 4
+    imul r89, r89, r91
+    iadd r89, r89, r11
+
+    mov_imm r90, 2
+    imul r90, r12, r90
+    mov_imm r91, 4
+    imul r90, r90, r91
+
+    mov_imm r91, 4
+    imul r14, r9, r91
+    mov_imm r91, 4096
+    iadd r14, r14, r91
+    mov_imm r91, 1024
+
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    iadd r89, r89, r90
+    iadd r14, r14, r91
+    device_load_u32 r92, r89
+    local_store_u32 r14, r92
+
+    barrier
+
+    mov_imm r10, 0
+
+    loop
+        icmp_ge p0, r10, r6
+        break p0
+
+        mov_imm r89, 8
+        iadd r89, r10, r89
+        icmp_lt p0, r89, r6
+        if p0
+
+            mov_imm r93, 8192
+            xor r94, r15, r93
+
+            mov_imm r89, 16384
+            local_load_u32 r11, r89
+
+            mov_imm r89, 7
+            and r12, r9, r89
+            mov_imm r89, 3
+            shr r13, r9, r89
+
+            mov_sr r89, sr_workgroup_id_y
+            mov_imm r90, 128
+            imul r89, r89, r90
+            iadd r14, r89, r13
+
+            mov_imm r89, 8
+            iadd r89, r10, r89
+            imul r95, r14, r6
+            iadd r95, r95, r89
+            iadd r95, r95, r12
+            mov_imm r90, 4
+            imul r95, r95, r90
+            iadd r95, r95, r11
+
+            mov_imm r90, 32
+            imul r90, r6, r90
+            mov_imm r91, 4
+            imul r90, r90, r91
+
+            mov_imm r91, 4
+            imul r14, r9, r91
+            iadd r14, r14, r94
+
+            mov_imm r91, 1024
+
+            device_load_u32 r92, r95
+            local_store_u32 r14, r92
+
+            iadd r95, r95, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r95
+            local_store_u32 r14, r92
+
+            iadd r95, r95, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r95
+            local_store_u32 r14, r92
+
+            iadd r95, r95, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r95
+            local_store_u32 r14, r92
+
+            mov_imm r89, 16388
+            local_load_u32 r11, r89
+            mov_imm r89, 16392
+            local_load_u32 r12, r89
+
+            mov_imm r89, 127
+            and r13, r9, r89
+            mov_imm r89, 7
+            shr r14, r9, r89
+
+            mov_imm r89, 8
+            iadd r89, r10, r89
+            iadd r89, r89, r14
+            mov_sr r90, sr_workgroup_id_x
+            mov_imm r91, 128
+            imul r90, r90, r91
+            iadd r90, r90, r13
+            imul r89, r89, r12
+            iadd r89, r89, r90
+
+            mov_imm r91, 4
+            imul r89, r89, r91
+            iadd r89, r89, r11
+
+            mov_imm r90, 2
+            imul r90, r12, r90
+            mov_imm r91, 4
+            imul r90, r90, r91
+
+            mov_imm r91, 4
+            imul r14, r9, r91
+            mov_imm r91, 4096
+            iadd r14, r14, r91
+            iadd r14, r14, r94
+            mov_imm r91, 1024
+
+            device_load_u32 r92, r89
+            local_store_u32 r14, r92
+
+            iadd r89, r89, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r89
+            local_store_u32 r14, r92
+
+            iadd r89, r89, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r89
+            local_store_u32 r14, r92
+
+            iadd r89, r89, r90
+            iadd r14, r14, r91
+            device_load_u32 r92, r89
+            local_store_u32 r14, r92
+
+        endif
+
+        mov_imm r89, 256
+        imul r12, r8, r89
+        iadd r12, r12, r15
+
+        mov_imm r89, 32
+        imul r13, r7, r89
+        mov_imm r89, 4096
+        iadd r13, r13, r89
+        iadd r13, r13, r15
+
+        mov_imm r14, 32
+        iadd r14, r12, r14
+
+        loop
+            icmp_ge p0, r12, r14
+            break p0
+
+            mov_imm r11, 4
+            mov r89, r13
+            local_load_u32 r80, r89
+            iadd r89, r89, r11
+            local_load_u32 r81, r89
+            iadd r89, r89, r11
+            local_load_u32 r82, r89
+            iadd r89, r89, r11
+            local_load_u32 r83, r89
+            iadd r89, r89, r11
+            local_load_u32 r84, r89
+            iadd r89, r89, r11
+            local_load_u32 r85, r89
+            iadd r89, r89, r11
+            local_load_u32 r86, r89
+            iadd r89, r89, r11
+            local_load_u32 r87, r89
+
+            local_load_u32 r88, r12
+            fma r16, r88, r80, r16
+            fma r17, r88, r81, r17
+            fma r18, r88, r82, r18
+            fma r19, r88, r83, r19
+            fma r20, r88, r84, r20
+            fma r21, r88, r85, r21
+            fma r22, r88, r86, r22
+            fma r23, r88, r87, r23
+
+            mov_imm r89, 32
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r24, r88, r80, r24
+            fma r25, r88, r81, r25
+            fma r26, r88, r82, r26
+            fma r27, r88, r83, r27
+            fma r28, r88, r84, r28
+            fma r29, r88, r85, r29
+            fma r30, r88, r86, r30
+            fma r31, r88, r87, r31
+
+            mov_imm r89, 64
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r32, r88, r80, r32
+            fma r33, r88, r81, r33
+            fma r34, r88, r82, r34
+            fma r35, r88, r83, r35
+            fma r36, r88, r84, r36
+            fma r37, r88, r85, r37
+            fma r38, r88, r86, r38
+            fma r39, r88, r87, r39
+
+            mov_imm r89, 96
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r40, r88, r80, r40
+            fma r41, r88, r81, r41
+            fma r42, r88, r82, r42
+            fma r43, r88, r83, r43
+            fma r44, r88, r84, r44
+            fma r45, r88, r85, r45
+            fma r46, r88, r86, r46
+            fma r47, r88, r87, r47
+
+            mov_imm r89, 128
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r48, r88, r80, r48
+            fma r49, r88, r81, r49
+            fma r50, r88, r82, r50
+            fma r51, r88, r83, r51
+            fma r52, r88, r84, r52
+            fma r53, r88, r85, r53
+            fma r54, r88, r86, r54
+            fma r55, r88, r87, r55
+
+            mov_imm r89, 160
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r56, r88, r80, r56
+            fma r57, r88, r81, r57
+            fma r58, r88, r82, r58
+            fma r59, r88, r83, r59
+            fma r60, r88, r84, r60
+            fma r61, r88, r85, r61
+            fma r62, r88, r86, r62
+            fma r63, r88, r87, r63
+
+            mov_imm r89, 192
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r64, r88, r80, r64
+            fma r65, r88, r81, r65
+            fma r66, r88, r82, r66
+            fma r67, r88, r83, r67
+            fma r68, r88, r84, r68
+            fma r69, r88, r85, r69
+            fma r70, r88, r86, r70
+            fma r71, r88, r87, r71
+
+            mov_imm r89, 224
+            iadd r89, r12, r89
+            local_load_u32 r88, r89
+            fma r72, r88, r80, r72
+            fma r73, r88, r81, r73
+            fma r74, r88, r82, r74
+            fma r75, r88, r83, r75
+            fma r76, r88, r84, r76
+            fma r77, r88, r85, r77
+            fma r78, r88, r86, r78
+            fma r79, r88, r87, r79
+
+            mov_imm r11, 4
+            iadd r12, r12, r11
+            mov_imm r11, 512
+            iadd r13, r13, r11
+        endloop
+
+        barrier
+
+        mov_imm r89, 8192
+        xor r15, r15, r89
+
+        mov_imm r11, 8
+        iadd r10, r10, r11
+    endloop
+
+    ; === EPILOGUE: bias add + GELU ===
+
+    mov_imm r89, 16396
+    local_load_u32 r11, r89
+    mov_imm r89, 16392
+    local_load_u32 r12, r89
+
+    mov_sr r89, sr_workgroup_id_x
+    mov_imm r90, 128
+    imul r89, r89, r90
+    mov_imm r90, 8
+    imul r90, r7, r90
+    iadd r89, r89, r90
+
+    mov_imm r90, 4
+    imul r89, r89, r90
+    iadd r89, r89, r11
+
+    mov_imm r90, 4
+    device_load_u32 r80, r89
+    iadd r89, r89, r90
+    device_load_u32 r81, r89
+    iadd r89, r89, r90
+    device_load_u32 r82, r89
+    iadd r89, r89, r90
+    device_load_u32 r83, r89
+    iadd r89, r89, r90
+    device_load_u32 r84, r89
+    iadd r89, r89, r90
+    device_load_u32 r85, r89
+    iadd r89, r89, r90
+    device_load_u32 r86, r89
+    iadd r89, r89, r90
+    device_load_u32 r87, r89
+
+    fadd r16, r16, r80
+    fadd r17, r17, r81
+    fadd r18, r18, r82
+    fadd r19, r19, r83
+    fadd r20, r20, r84
+    fadd r21, r21, r85
+    fadd r22, r22, r86
+    fadd r23, r23, r87
+    fadd r24, r24, r80
+    fadd r25, r25, r81
+    fadd r26, r26, r82
+    fadd r27, r27, r83
+    fadd r28, r28, r84
+    fadd r29, r29, r85
+    fadd r30, r30, r86
+    fadd r31, r31, r87
+    fadd r32, r32, r80
+    fadd r33, r33, r81
+    fadd r34, r34, r82
+    fadd r35, r35, r83
+    fadd r36, r36, r84
+    fadd r37, r37, r85
+    fadd r38, r38, r86
+    fadd r39, r39, r87
+    fadd r40, r40, r80
+    fadd r41, r41, r81
+    fadd r42, r42, r82
+    fadd r43, r43, r83
+    fadd r44, r44, r84
+    fadd r45, r45, r85
+    fadd r46, r46, r86
+    fadd r47, r47, r87
+    fadd r48, r48, r80
+    fadd r49, r49, r81
+    fadd r50, r50, r82
+    fadd r51, r51, r83
+    fadd r52, r52, r84
+    fadd r53, r53, r85
+    fadd r54, r54, r86
+    fadd r55, r55, r87
+    fadd r56, r56, r80
+    fadd r57, r57, r81
+    fadd r58, r58, r82
+    fadd r59, r59, r83
+    fadd r60, r60, r84
+    fadd r61, r61, r85
+    fadd r62, r62, r86
+    fadd r63, r63, r87
+    fadd r64, r64, r80
+    fadd r65, r65, r81
+    fadd r66, r66, r82
+    fadd r67, r67, r83
+    fadd r68, r68, r84
+    fadd r69, r69, r85
+    fadd r70, r70, r86
+    fadd r71, r71, r87
+    fadd r72, r72, r80
+    fadd r73, r73, r81
+    fadd r74, r74, r82
+    fadd r75, r75, r83
+    fadd r76, r76, r84
+    fadd r77, r77, r85
+    fadd r78, r78, r86
+    fadd r79, r79, r87
+
+    ; Apply GELU to each accumulator: gelu(x) = x * sigmoid(1.702 * x)
+    ; sigmoid(z) = 1 / (1 + exp(-z))
+    ; exp(-z) = 2^(-z * log2(e)), log2(e) = 1.4426950408
+    ; Combined coefficient: 1.702 * 1.4426950408 = 2.455...
+    ; So: exp(-1.702*x) = 2^(-2.455*x)
+    ;
+    ; Per element:
+    ;   r88 = x (the accumulator value, saved)
+    ;   r89 = 1.702 * x
+    ;   r89 = -1.702 * x * log2(e) = -2.455 * x  (negated for exp arg)
+    ;   r89 = fexp2(r89) = exp(-1.702*x)
+    ;   r89 = 1 + r89
+    ;   r89 = 1 / r89  (frcp)
+    ;   result = x * r89
+
+    mov_imm r90, 0x401D1463
+    mov_imm r91, 0x3F800000
+
+    mov r88, r16
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r16, r88, r89
+
+    mov r88, r17
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r17, r88, r89
+
+    mov r88, r18
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r18, r88, r89
+
+    mov r88, r19
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r19, r88, r89
+
+    mov r88, r20
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r20, r88, r89
+
+    mov r88, r21
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r21, r88, r89
+
+    mov r88, r22
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r22, r88, r89
+
+    mov r88, r23
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r23, r88, r89
+
+    mov r88, r24
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r24, r88, r89
+
+    mov r88, r25
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r25, r88, r89
+
+    mov r88, r26
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r26, r88, r89
+
+    mov r88, r27
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r27, r88, r89
+
+    mov r88, r28
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r28, r88, r89
+
+    mov r88, r29
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r29, r88, r89
+
+    mov r88, r30
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r30, r88, r89
+
+    mov r88, r31
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r31, r88, r89
+
+    mov r88, r32
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r32, r88, r89
+
+    mov r88, r33
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r33, r88, r89
+
+    mov r88, r34
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r34, r88, r89
+
+    mov r88, r35
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r35, r88, r89
+
+    mov r88, r36
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r36, r88, r89
+
+    mov r88, r37
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r37, r88, r89
+
+    mov r88, r38
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r38, r88, r89
+
+    mov r88, r39
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r39, r88, r89
+
+    mov r88, r40
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r40, r88, r89
+
+    mov r88, r41
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r41, r88, r89
+
+    mov r88, r42
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r42, r88, r89
+
+    mov r88, r43
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r43, r88, r89
+
+    mov r88, r44
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r44, r88, r89
+
+    mov r88, r45
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r45, r88, r89
+
+    mov r88, r46
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r46, r88, r89
+
+    mov r88, r47
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r47, r88, r89
+
+    mov r88, r48
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r48, r88, r89
+
+    mov r88, r49
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r49, r88, r89
+
+    mov r88, r50
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r50, r88, r89
+
+    mov r88, r51
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r51, r88, r89
+
+    mov r88, r52
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r52, r88, r89
+
+    mov r88, r53
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r53, r88, r89
+
+    mov r88, r54
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r54, r88, r89
+
+    mov r88, r55
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r55, r88, r89
+
+    mov r88, r56
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r56, r88, r89
+
+    mov r88, r57
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r57, r88, r89
+
+    mov r88, r58
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r58, r88, r89
+
+    mov r88, r59
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r59, r88, r89
+
+    mov r88, r60
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r60, r88, r89
+
+    mov r88, r61
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r61, r88, r89
+
+    mov r88, r62
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r62, r88, r89
+
+    mov r88, r63
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r63, r88, r89
+
+    mov r88, r64
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r64, r88, r89
+
+    mov r88, r65
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r65, r88, r89
+
+    mov r88, r66
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r66, r88, r89
+
+    mov r88, r67
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r67, r88, r89
+
+    mov r88, r68
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r68, r88, r89
+
+    mov r88, r69
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r69, r88, r89
+
+    mov r88, r70
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r70, r88, r89
+
+    mov r88, r71
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r71, r88, r89
+
+    mov r88, r72
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r72, r88, r89
+
+    mov r88, r73
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r73, r88, r89
+
+    mov r88, r74
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r74, r88, r89
+
+    mov r88, r75
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r75, r88, r89
+
+    mov r88, r76
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r76, r88, r89
+
+    mov r88, r77
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r77, r88, r89
+
+    mov r88, r78
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r78, r88, r89
+
+    mov r88, r79
+    fmul r89, r88, r90
+    fneg r89, r89
+    fexp2 r89, r89
+    fadd r89, r91, r89
+    frcp r89, r89
+    fmul r79, r88, r89
+
+    ; === STORE C ===
+
+    mov_imm r89, 16392
+    local_load_u32 r12, r89
+
+    mov_sr r89, sr_workgroup_id_y
+    mov_imm r90, 128
+    imul r89, r89, r90
+    mov_imm r90, 8
+    imul r90, r8, r90
+    iadd r13, r89, r90
+
+    mov_sr r89, sr_workgroup_id_x
+    mov_imm r90, 128
+    imul r89, r89, r90
+    mov_imm r90, 8
+    imul r90, r7, r90
+    iadd r14, r89, r90
+
+    mov_imm r90, 4
+    imul r15, r12, r90
+
+    imul r89, r13, r12
+    iadd r89, r89, r14
+    mov_imm r90, 4
+    imul r89, r89, r90
+    iadd r89, r89, r3
+
+    mov_imm r90, 4
+
+    device_store_u32 r89, r16
+    iadd r91, r89, r90
+    device_store_u32 r91, r17
+    iadd r91, r91, r90
+    device_store_u32 r91, r18
+    iadd r91, r91, r90
+    device_store_u32 r91, r19
+    iadd r91, r91, r90
+    device_store_u32 r91, r20
+    iadd r91, r91, r90
+    device_store_u32 r91, r21
+    iadd r91, r91, r90
+    device_store_u32 r91, r22
+    iadd r91, r91, r90
+    device_store_u32 r91, r23
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r24
+    iadd r91, r89, r90
+    device_store_u32 r91, r25
+    iadd r91, r91, r90
+    device_store_u32 r91, r26
+    iadd r91, r91, r90
+    device_store_u32 r91, r27
+    iadd r91, r91, r90
+    device_store_u32 r91, r28
+    iadd r91, r91, r90
+    device_store_u32 r91, r29
+    iadd r91, r91, r90
+    device_store_u32 r91, r30
+    iadd r91, r91, r90
+    device_store_u32 r91, r31
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r32
+    iadd r91, r89, r90
+    device_store_u32 r91, r33
+    iadd r91, r91, r90
+    device_store_u32 r91, r34
+    iadd r91, r91, r90
+    device_store_u32 r91, r35
+    iadd r91, r91, r90
+    device_store_u32 r91, r36
+    iadd r91, r91, r90
+    device_store_u32 r91, r37
+    iadd r91, r91, r90
+    device_store_u32 r91, r38
+    iadd r91, r91, r90
+    device_store_u32 r91, r39
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r40
+    iadd r91, r89, r90
+    device_store_u32 r91, r41
+    iadd r91, r91, r90
+    device_store_u32 r91, r42
+    iadd r91, r91, r90
+    device_store_u32 r91, r43
+    iadd r91, r91, r90
+    device_store_u32 r91, r44
+    iadd r91, r91, r90
+    device_store_u32 r91, r45
+    iadd r91, r91, r90
+    device_store_u32 r91, r46
+    iadd r91, r91, r90
+    device_store_u32 r91, r47
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r48
+    iadd r91, r89, r90
+    device_store_u32 r91, r49
+    iadd r91, r91, r90
+    device_store_u32 r91, r50
+    iadd r91, r91, r90
+    device_store_u32 r91, r51
+    iadd r91, r91, r90
+    device_store_u32 r91, r52
+    iadd r91, r91, r90
+    device_store_u32 r91, r53
+    iadd r91, r91, r90
+    device_store_u32 r91, r54
+    iadd r91, r91, r90
+    device_store_u32 r91, r55
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r56
+    iadd r91, r89, r90
+    device_store_u32 r91, r57
+    iadd r91, r91, r90
+    device_store_u32 r91, r58
+    iadd r91, r91, r90
+    device_store_u32 r91, r59
+    iadd r91, r91, r90
+    device_store_u32 r91, r60
+    iadd r91, r91, r90
+    device_store_u32 r91, r61
+    iadd r91, r91, r90
+    device_store_u32 r91, r62
+    iadd r91, r91, r90
+    device_store_u32 r91, r63
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r64
+    iadd r91, r89, r90
+    device_store_u32 r91, r65
+    iadd r91, r91, r90
+    device_store_u32 r91, r66
+    iadd r91, r91, r90
+    device_store_u32 r91, r67
+    iadd r91, r91, r90
+    device_store_u32 r91, r68
+    iadd r91, r91, r90
+    device_store_u32 r91, r69
+    iadd r91, r91, r90
+    device_store_u32 r91, r70
+    iadd r91, r91, r90
+    device_store_u32 r91, r71
+
+    iadd r89, r89, r15
+    device_store_u32 r89, r72
+    iadd r91, r89, r90
+    device_store_u32 r91, r73
+    iadd r91, r91, r90
+    device_store_u32 r91, r74
+    iadd r91, r91, r90
+    device_store_u32 r91, r75
+    iadd r91, r91, r90
+    device_store_u32 r91, r76
+    iadd r91, r91, r90
+    device_store_u32 r91, r77
+    iadd r91, r91, r90
+    device_store_u32 r91, r78
+    iadd r91, r91, r90
+    device_store_u32 r91, r79
+
+    halt
+.end

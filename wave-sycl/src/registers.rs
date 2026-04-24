@@ -44,7 +44,7 @@ pub fn special_reg_expr(sr_index: u8) -> &'static str {
 }
 
 #[must_use]
-pub fn emit_declarations(reg_count: u32) -> String {
+pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
     let mut out = String::new();
 
     if reg_count > 0 {
@@ -69,6 +69,12 @@ pub fn emit_declarations(reg_count: u32) -> String {
         "                bool p0 = false, p1 = false, p2 = false, p3 = false;"
     )
     .unwrap();
+
+    if has_local_mem {
+        writeln!(out, "                float _mma_a[16] = {{}};").unwrap();
+        writeln!(out, "                float _mma_b[16] = {{}};").unwrap();
+        writeln!(out, "                float _mma_c[16] = {{}};").unwrap();
+    }
 
     out
 }

@@ -9,6 +9,14 @@ NVIDIA CUDA, AMD ROCm, Intel SYCL, and a built-in emulator.
 
 from .array import WaveArray, array, ones, zeros
 from .device import DeviceInfo, device
+from .distributed import (
+    DistributedDataParallel,
+    allreduce_average,
+    enumerate_devices,
+    gather_shards,
+    replicate,
+    shard_tensor,
+)
 from .kernel import kernel
 from .types import f16, f32, f64, i32, u32
 
@@ -21,6 +29,12 @@ __all__ = [
     "zeros",
     "DeviceInfo",
     "device",
+    "DistributedDataParallel",
+    "allreduce_average",
+    "enumerate_devices",
+    "gather_shards",
+    "replicate",
+    "shard_tensor",
     "kernel",
     "f16",
     "f32",

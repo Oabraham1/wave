@@ -14,6 +14,9 @@ use std::fmt::Write;
 pub fn emit_file_header() -> String {
     [
         "#include <sycl/sycl.hpp>",
+        "#if __has_include(<sycl/ext/oneapi/matrix/matrix.hpp>)",
+        "#include <sycl/ext/oneapi/matrix/matrix.hpp>",
+        "#endif",
         "#include <cstdint>",
         "",
         "using namespace sycl;",

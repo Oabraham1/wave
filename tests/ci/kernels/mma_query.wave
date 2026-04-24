@@ -1,0 +1,26 @@
+; Copyright 2026 Ojima Abraham
+; SPDX-License-Identifier: Apache-2.0
+;
+; Query MMA capability special registers and store to device memory.
+; Stores: sr_mma_supported, sr_mma_m, sr_mma_n, sr_mma_k at offsets 0-12.
+
+.kernel mma_query
+.registers 8
+.workgroup_size 1, 1, 1
+
+    mov_sr r0, sr_mma_supported
+    mov_sr r1, sr_mma_m
+    mov_sr r2, sr_mma_n
+    mov_sr r3, sr_mma_k
+
+    mov_imm r4, 0
+    device_store_u32 r4, r0
+    mov_imm r4, 4
+    device_store_u32 r4, r1
+    mov_imm r4, 8
+    device_store_u32 r4, r2
+    mov_imm r4, 12
+    device_store_u32 r4, r3
+
+    halt
+.end

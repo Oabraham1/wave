@@ -8,25 +8,26 @@
 
 use wave_ptx::compile;
 
-const OPCODE_SHIFT: u32 = 26;
-const RD_SHIFT: u32 = 21;
-const RS1_SHIFT: u32 = 16;
-const RS2_SHIFT: u32 = 11;
-const MODIFIER_SHIFT: u32 = 7;
-const SYNC_OP_FLAG: u8 = 0x01;
+const OPCODE_SHIFT: u32 = 24;
+const RD_SHIFT: u32 = 16;
+const RS1_SHIFT: u32 = 8;
+const MODIFIER_SHIFT: u32 = 4;
+const EXTENDED_RS2_SHIFT: u32 = 24;
 
-fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8; 4] {
-    let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | (u32::from(flags) & 0x03);
-    word.to_le_bytes()
+fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> u32 {
+    (u32::from(opcode) << OPCODE_SHIFT) | (u32::from(rd) << RD_SHIFT) | (u32::from(rs1) << RS1_SHIFT) | (u32::from(modifier) << MODIFIER_SHIFT) | u32::from(pred)
+}
+fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec()
+}
+fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
+    v.extend_from_slice(&(u32::from(rs2) << EXTENDED_RS2_SHIFT).to_le_bytes());
+    v
 }
 
-fn halt() -> [u8; 4] {
-    encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG)
+fn halt_instruction() -> Vec<u8> {
+    single(0x3F, 0, 0, 9, 0)
 }
 
 fn build_wbin(code: &[u8]) -> Vec<u8> {
@@ -64,7 +65,7 @@ fn build_wbin(code: &[u8]) -> Vec<u8> {
 
 fn compile_instrs(instructions: &[u8]) -> String {
     let mut code = instructions.to_vec();
-    code.extend_from_slice(&halt());
+    code.extend_from_slice(&halt_instruction());
     let wbin = build_wbin(&code);
     compile(&wbin, 75).expect("compilation failed")
 }
@@ -72,11 +73,9 @@ fn compile_instrs(instructions: &[u8]) -> String {
 #[test]
 fn test_if_endif() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 1, 0, 0, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x00, 5, 3, 4, 0, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 2, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    code.extend_from_slice(&single(0x3F, 0, 1, 0, 0));
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 2, 0));
     let ptx = compile_instrs(&code);
     assert!(ptx.contains("@!%p1 bra $L_else_0;"), "PTX: {ptx}");
     assert!(ptx.contains("add.s32 %r5, %r3, %r4;"), "PTX: {ptx}");
@@ -86,14 +85,11 @@ fn test_if_endif() {
 #[test]
 fn test_if_else_endif() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 1, 0, 0, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x00, 5, 3, 4, 0, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 1, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x01, 5, 3, 4, 0, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 2, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    code.extend_from_slice(&single(0x3F, 0, 1, 0, 0));
+    code.extend_from_slice(&extended(0x00, 5, 3, 4, 0, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 1, 0));
+    code.extend_from_slice(&extended(0x01, 5, 3, 4, 0, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 2, 0));
     let ptx = compile_instrs(&code);
     assert!(ptx.contains("@!%p1 bra $L_else_0;"), "PTX: {ptx}");
     assert!(ptx.contains("bra.uni $L_endif_0;"), "PTX: {ptx}");
@@ -106,12 +102,9 @@ fn test_if_else_endif() {
 #[test]
 fn test_loop_break() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 3, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 1, 0, 4, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 6, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    code.extend_from_slice(&single(0x3F, 0, 0, 3, 0));
+    code.extend_from_slice(&single(0x3F, 0, 1, 4, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 6, 0));
     let ptx = compile_instrs(&code);
     assert!(ptx.contains("$L_loop_0:"), "PTX: {ptx}");
     assert!(ptx.contains("@%p1 bra $L_endloop_0;"), "PTX: {ptx}");
@@ -122,12 +115,9 @@ fn test_loop_break() {
 #[test]
 fn test_loop_continue() {
     let mut code = Vec::new();
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 3, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 2, 0, 5, 0));
-    code.extend_from_slice(&[0u8; 4]);
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 6, 0));
-    code.extend_from_slice(&[0u8; 4]);
+    code.extend_from_slice(&single(0x3F, 0, 0, 3, 0));
+    code.extend_from_slice(&single(0x3F, 0, 2, 5, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 6, 0));
     let ptx = compile_instrs(&code);
     assert!(ptx.contains("@%p2 bra $L_loop_0;"), "PTX: {ptx}");
 }

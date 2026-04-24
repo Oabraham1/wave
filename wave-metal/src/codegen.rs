@@ -12,7 +12,8 @@
 use std::fmt::Write;
 
 use wave_decode::opcodes::{
-    BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp,
+    Bf16Op, Bf16PackedOp, BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
+    FUnaryOp,
 };
 use wave_decode::{DecodedInstruction, KernelInfo, Operation};
 
@@ -304,6 +305,24 @@ impl CodeGenerator {
             } => {
                 self.emit_f16_packed(*op, *rd, *rs1, *rs2, *rs3);
             }
+            Operation::Bf16 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
+                self.emit_bf16(*op, *rd, *rs1, *rs2, *rs3);
+            }
+            Operation::Bf16Packed {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
+                self.emit_bf16_packed(*op, *rd, *rs1, *rs2, *rs3);
+            }
             Operation::F64 {
                 op,
                 rd,
@@ -539,6 +558,49 @@ impl CodeGenerator {
                 ));
             }
 
+            Operation::MmaLoadA { rd: _, rs1, rs2 } => {
+                self.line("{");
+                self.line(&format!("    uint _addr = {};", reg(*rs1)));
+                self.line(&format!("    uint _stride = {};", reg(*rs2)));
+                self.line("    for (uint _r = 0; _r < 4; _r++) {");
+                self.line("        for (uint _c = 0; _c < 4; _c++) {");
+                self.line("            _mma_a[_r * 4 + _c] = rf(*(threadgroup uint32_t*)(local_mem + _addr + _r * _stride + _c * 4));");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaLoadB { rd: _, rs1, rs2 } => {
+                self.line("{");
+                self.line(&format!("    uint _addr = {};", reg(*rs1)));
+                self.line(&format!("    uint _stride = {};", reg(*rs2)));
+                self.line("    for (uint _r = 0; _r < 4; _r++) {");
+                self.line("        for (uint _c = 0; _c < 4; _c++) {");
+                self.line("            _mma_b[_r * 4 + _c] = rf(*(threadgroup uint32_t*)(local_mem + _addr + _r * _stride + _c * 4));");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaStoreC { rd, rs1, rs2: _ } => {
+                self.line("{");
+                self.line(&format!("    uint _addr = {};", reg(*rd)));
+                self.line(&format!("    uint _stride = {};", reg(*rs1)));
+                self.line("    for (uint _r = 0; _r < 4; _r++) {");
+                self.line("        for (uint _c = 0; _c < 4; _c++) {");
+                self.line("            *(threadgroup uint32_t*)(local_mem + _addr + _r * _stride + _c * 4) = ri(_mma_c[_r * 4 + _c]);");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaCompute { .. } => {
+                self.line("for (uint _i = 0; _i < 4; _i++) {");
+                self.line("    for (uint _j = 0; _j < 4; _j++) {");
+                self.line("        for (uint _k = 0; _k < 4; _k++) {");
+                self.line("            _mma_c[_i * 4 + _j] = fma(_mma_a[_i * 4 + _k], _mma_b[_k * 4 + _j], _mma_c[_i * 4 + _j]);");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+
             Operation::Unknown { opcode, .. } => {
                 return Err(CompileError::UnsupportedOperation(format!(
                     "unknown opcode 0x{opcode:02x}"
@@ -599,6 +661,73 @@ impl CodeGenerator {
             }
         };
         self.line(&expr);
+    }
+
+    fn emit_bf16(&mut self, op: Bf16Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
+        let r_d = reg(rd);
+        let b1 = format!("as_type<float>(({} & 0xFFFFu) << 16)", reg(rs1));
+        let b2 = format!("as_type<float>(({} & 0xFFFFu) << 16)", reg(rs2));
+
+        let expr = match op {
+            Bf16Op::Badd => format!("{r_d} = (as_type<uint>({b1} + {b2}) >> 16);"),
+            Bf16Op::Bsub => format!("{r_d} = (as_type<uint>({b1} - {b2}) >> 16);"),
+            Bf16Op::Bmul => format!("{r_d} = (as_type<uint>({b1} * {b2}) >> 16);"),
+            Bf16Op::Bma => {
+                let b3 = format!(
+                    "as_type<float>(({} & 0xFFFFu) << 16)",
+                    reg(rs3.unwrap_or(0))
+                );
+                format!("{r_d} = (as_type<uint>(fma({b1}, {b2}, {b3})) >> 16);")
+            }
+        };
+        self.line(&expr);
+    }
+
+    fn emit_bf16_packed(&mut self, op: Bf16PackedOp, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
+        let r_d = reg(rd);
+        let r_s1 = reg(rs1);
+        let r_s2 = reg(rs2);
+
+        self.line("{");
+        self.indent();
+        self.line(&format!(
+            "float b1_lo = as_type<float>(({r_s1} & 0xFFFFu) << 16);"
+        ));
+        self.line(&format!(
+            "float b1_hi = as_type<float>({r_s1} & 0xFFFF0000u);"
+        ));
+        self.line(&format!(
+            "float b2_lo = as_type<float>(({r_s2} & 0xFFFFu) << 16);"
+        ));
+        self.line(&format!(
+            "float b2_hi = as_type<float>({r_s2} & 0xFFFF0000u);"
+        ));
+
+        match op {
+            Bf16PackedOp::Badd2 => {
+                self.line("uint lo = (as_type<uint>(b1_lo + b2_lo) >> 16);");
+                self.line("uint hi = (as_type<uint>(b1_hi + b2_hi) & 0xFFFF0000u);");
+            }
+            Bf16PackedOp::Bmul2 => {
+                self.line("uint lo = (as_type<uint>(b1_lo * b2_lo) >> 16);");
+                self.line("uint hi = (as_type<uint>(b1_hi * b2_hi) & 0xFFFF0000u);");
+            }
+            Bf16PackedOp::Bma2 => {
+                let r_s3 = reg(rs3.unwrap_or(0));
+                self.line(&format!(
+                    "float b3_lo = as_type<float>(({r_s3} & 0xFFFFu) << 16);"
+                ));
+                self.line(&format!(
+                    "float b3_hi = as_type<float>({r_s3} & 0xFFFF0000u);"
+                ));
+                self.line("uint lo = (as_type<uint>(fma(b1_lo, b2_lo, b3_lo)) >> 16);");
+                self.line("uint hi = (as_type<uint>(fma(b1_hi, b2_hi, b3_hi)) & 0xFFFF0000u);");
+            }
+        }
+
+        self.line(&format!("{r_d} = hi | lo;"));
+        self.dedent();
+        self.line("}");
     }
 
     fn emit_f64(&mut self, op: F64Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
@@ -771,9 +900,15 @@ impl CodeGenerator {
             CvtType::F32U32 => format!("{r_d} = (uint32_t)rf({r_s1});"),
             CvtType::I32F32 => format!("{r_d} = ri((float)((int32_t){r_s1}));"),
             CvtType::U32F32 => format!("{r_d} = ri((float){r_s1});"),
-            CvtType::F32F16 => format!("{r_d} = (uint32_t)as_type<ushort>(half(rf({r_s1})));"),
-            CvtType::F16F32 => {
+            CvtType::F32F16 => {
                 format!("{r_d} = ri((float)as_type<half>((ushort)({r_s1} & 0xFFFFu)));")
+            }
+            CvtType::F16F32 => format!("{r_d} = (uint32_t)as_type<ushort>(half(rf({r_s1})));"),
+            CvtType::F32Bf16 => {
+                format!("{r_d} = (as_type<uint>(rf({r_s1})) >> 16);")
+            }
+            CvtType::Bf16F32 => {
+                format!("{r_d} = ri(as_type<float>(({r_s1} & 0xFFFFu) << 16));")
             }
             CvtType::F32F64 => {
                 let r_d1 = reg(rd + 1);

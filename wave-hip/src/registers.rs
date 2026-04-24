@@ -49,6 +49,9 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
 
     if has_local_mem {
         writeln!(out, "    extern __shared__ uint8_t local_mem[];").unwrap();
+        writeln!(out, "    float _mma_a[16] = {{}};").unwrap();
+        writeln!(out, "    float _mma_b[16] = {{}};").unwrap();
+        writeln!(out, "    float _mma_c[16] = {{}};").unwrap();
     }
 
     if reg_count > 0 {

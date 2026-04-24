@@ -85,9 +85,8 @@ impl<'a> Core<'a> {
     }
 
     pub fn run(&mut self) -> Result<ExecutionStats, EmulatorError> {
-        for wave in &self.waves {
+        for _wave in &self.waves {
             self.stats.record_wave();
-            let _ = wave;
         }
 
         loop {
@@ -164,15 +163,16 @@ impl<'a> Core<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::decoder::SYNC_OP_FLAG;
+    use crate::decoder::{SyncOp, SYNC_MODIFIER_OFFSET};
 
     fn encode_halt() -> Vec<u8> {
-        let word = ((0x3Fu32) << 26) | ((1u32) << 7) | u32::from(SYNC_OP_FLAG);
+        let halt_mod = SyncOp::Halt as u32 + u32::from(SYNC_MODIFIER_OFFSET);
+        let word = (0x3Fu32 << 24) | (halt_mod << 4);
         word.to_le_bytes().to_vec()
     }
 
     fn encode_mov_imm(rd: u8, imm: u32) -> Vec<u8> {
-        let word0 = ((0x3Fu32) << 26) | ((u32::from(rd) & 0x1F) << 21) | ((1u32) << 7) | 0x02;
+        let word0 = (0x41u32 << 24) | ((u32::from(rd) & 0xFF) << 16) | (1u32 << 4);
         let mut code = word0.to_le_bytes().to_vec();
         code.extend_from_slice(&imm.to_le_bytes());
         code
@@ -280,11 +280,10 @@ mod tests {
     }
 
     fn encode_mov_sr(rd: u8, sr_index: u8) -> Vec<u8> {
-        let word = ((0x3Fu32) << 26)
-            | ((u32::from(rd) & 0x1F) << 21)
-            | ((u32::from(sr_index) & 0x1F) << 16)
-            | ((2u32) << 7)
-            | 0x02;
+        let word = (0x41u32 << 24)
+            | ((u32::from(rd) & 0xFF) << 16)
+            | ((u32::from(sr_index) & 0xFF) << 8)
+            | (2u32 << 4);
         word.to_le_bytes().to_vec()
     }
 
@@ -320,19 +319,23 @@ mod tests {
     }
 
     fn encode_device_store_u32(addr_reg: u8, value_reg: u8) -> Vec<u8> {
-        let word = ((0x39u32) << 26)
-            | ((u32::from(addr_reg) & 0x1F) << 16)
-            | ((u32::from(value_reg) & 0x1F) << 11)
-            | ((2u32) << 7);
-        word.to_le_bytes().to_vec()
+        let word0 = ((0x39u32) << 24)
+            | ((u32::from(addr_reg) & 0xFF) << 8)
+            | ((2u32) << 4);
+        let word1 = (u32::from(value_reg) & 0xFF) << 24;
+        let mut code = word0.to_le_bytes().to_vec();
+        code.extend_from_slice(&word1.to_le_bytes());
+        code
     }
 
     fn encode_shl(rd: u8, rs1: u8, rs2: u8) -> Vec<u8> {
-        let word = ((0x24u32) << 26)
-            | ((u32::from(rd) & 0x1F) << 21)
-            | ((u32::from(rs1) & 0x1F) << 16)
-            | ((u32::from(rs2) & 0x1F) << 11);
-        word.to_le_bytes().to_vec()
+        let word0 = ((0x24u32) << 24)
+            | ((u32::from(rd) & 0xFF) << 16)
+            | ((u32::from(rs1) & 0xFF) << 8);
+        let word1 = (u32::from(rs2) & 0xFF) << 24;
+        let mut code = word0.to_le_bytes().to_vec();
+        code.extend_from_slice(&word1.to_le_bytes());
+        code
     }
 
     #[test]

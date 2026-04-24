@@ -136,7 +136,7 @@ impl ControlFlowManager {
         Ok((then_mask, None))
     }
 
-    pub fn handle_else(&mut self, active_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
+    pub fn handle_else(&mut self, _active_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
         let frame = self
             .stack
             .top_mut()
@@ -151,7 +151,6 @@ impl ControlFlowManager {
         }
 
         frame.in_else = true;
-        let _ = active_mask;
         Ok((frame.else_mask, None))
     }
 
@@ -227,9 +226,8 @@ impl ControlFlowManager {
 
     pub fn handle_endloop(
         &mut self,
-        active_mask: u64,
+        _active_mask: u64,
     ) -> Result<(u64, Option<u32>), EmulatorError> {
-        let _ = active_mask;
 
         let frame = self
             .stack

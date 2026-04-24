@@ -12,12 +12,11 @@ use crate::ast::{
 use crate::diagnostics::AssemblerError;
 use crate::opcodes::{
     lookup_mnemonic, ControlOp, InstructionSignature, MiscOp, Opcode, OperandKind, Scope, SyncOp,
-    WaveOpType, FLAGS_MASK, FLAGS_SHIFT, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT,
-    PRED_NEG_SHIFT, PRED_SHIFT, RD_SHIFT, RS1_SHIFT, RS2_SHIFT, SCOPE_SHIFT,
+    WaveOpType, EXTENDED_RS2_SHIFT, EXTENDED_RS3_SHIFT, EXTENDED_RS4_SHIFT,
+    EXTENDED_SCOPE_SHIFT, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_SHIFT, PRED_NEG_SHIFT,
+    PRED_REG_MASK, PRED_REG_SHIFT, RD_SHIFT, RS1_SHIFT,
 };
 use crate::symbols::SymbolTable;
-
-const SYNC_OP_FLAG: u32 = 0x01;
 
 #[derive(Debug, Clone)]
 pub struct EncodedInstruction {
@@ -132,15 +131,11 @@ impl<'a> Encoder<'a> {
             word0 |= (u32::from(modifier) & MODIFIER_MASK) << MODIFIER_SHIFT;
         }
 
-        if let Some(hint) = inst.cache_hint {
-            word0 |= (hint as u32 & FLAGS_MASK) << FLAGS_SHIFT;
-        }
-
         match sig.opcode {
             Opcode::LocalAtomic | Opcode::DeviceAtomic => {
                 self.encode_atomic(inst, sig, word0, span)
             }
-            Opcode::Control if sig.is_misc => self.encode_misc(inst, sig, word0, span),
+            Opcode::Misc => self.encode_misc(inst, sig, word0, span),
             Opcode::Control => self.encode_control(inst, sig, word0, span),
             Opcode::WaveOp => self.encode_wave_op(inst, sig, word0, span),
             Opcode::Select => self.encode_select(inst, word0, span),
@@ -150,13 +145,14 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_predicate(&self, pred: &Option<Predicate>) -> u32 {
-        pred.as_ref().map_or(0, |p| {
-            let mut bits = (u32::from(p.register) & 0x03) << PRED_SHIFT;
-            if p.negated {
-                bits |= 1 << PRED_NEG_SHIFT;
+        match pred {
+            Some(p) => {
+                let reg = u32::from(p.register) & PRED_REG_MASK;
+                let neg = u32::from(p.negated);
+                (reg << PRED_REG_SHIFT) | (neg << PRED_NEG_SHIFT)
             }
-            bits
-        })
+            None => 0,
+        }
     }
 
     fn encode_base(
@@ -166,6 +162,9 @@ impl<'a> Encoder<'a> {
         mut word0: u32,
         span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
+        let mut word1: u32 = 0;
+        let mut needs_extended = false;
+
         for (i, (kind, operand)) in sig.operands.iter().zip(inst.operands.iter()).enumerate() {
             match kind {
                 OperandKind::Rd => {
@@ -178,7 +177,8 @@ impl<'a> Encoder<'a> {
                 }
                 OperandKind::Rs2 => {
                     let reg = self.expect_register(operand)?;
-                    word0 |= u32::from(reg) << RS2_SHIFT;
+                    word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
+                    needs_extended = true;
                 }
                 OperandKind::Pd => {
                     let pred = self.expect_predicate(operand)?;
@@ -189,12 +189,14 @@ impl<'a> Encoder<'a> {
                     if i == 0 {
                         word0 |= u32::from(pred) << RS1_SHIFT;
                     } else {
-                        word0 |= u32::from(pred) << RS2_SHIFT;
+                        word1 |= u32::from(pred) << EXTENDED_RS2_SHIFT;
+                        needs_extended = true;
                     }
                 }
                 OperandKind::Scope => {
                     let scope = self.expect_scope(operand)?;
-                    word0 |= (scope as u32) << SCOPE_SHIFT;
+                    word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
+                    needs_extended = true;
                 }
                 _ => {
                     return Err(AssemblerError::UnexpectedToken {
@@ -205,7 +207,11 @@ impl<'a> Encoder<'a> {
             }
         }
 
-        Ok(EncodedInstruction::single(word0))
+        if needs_extended {
+            Ok(EncodedInstruction::extended(word0, word1))
+        } else {
+            Ok(EncodedInstruction::single(word0))
+        }
     }
 
     fn encode_extended(
@@ -229,15 +235,15 @@ impl<'a> Encoder<'a> {
                 }
                 OperandKind::Rs2 => {
                     let reg = self.expect_register(operand)?;
-                    word0 |= u32::from(reg) << RS2_SHIFT;
+                    word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
                 }
                 OperandKind::Rs3 => {
                     let reg = self.expect_register(operand)?;
-                    word1 |= u32::from(reg) << 27;
+                    word1 |= u32::from(reg) << EXTENDED_RS3_SHIFT;
                 }
                 OperandKind::Rs4 => {
                     let reg = self.expect_register(operand)?;
-                    word1 |= u32::from(reg) << 22;
+                    word1 |= u32::from(reg) << EXTENDED_RS4_SHIFT;
                 }
                 OperandKind::Imm32 => {
                     let imm = self.expect_immediate(operand)?;
@@ -252,12 +258,12 @@ impl<'a> Encoder<'a> {
                     if i == 0 {
                         word0 |= u32::from(pred) << RS1_SHIFT;
                     } else {
-                        word0 |= u32::from(pred) << RS2_SHIFT;
+                        word1 |= u32::from(pred) << EXTENDED_RS2_SHIFT;
                     }
                 }
                 OperandKind::Scope => {
                     let scope = self.expect_scope(operand)?;
-                    word0 |= (scope as u32) << SCOPE_SHIFT;
+                    word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                 }
                 _ => {}
             }
@@ -282,6 +288,7 @@ impl<'a> Encoder<'a> {
 
         let mut operand_idx = 0;
         let is_cas = sig.extended && sig.operands.iter().any(|o| matches!(o, OperandKind::Rs3));
+        let mut word1: u32 = 0;
 
         for kind in sig.operands {
             match kind {
@@ -299,16 +306,17 @@ impl<'a> Encoder<'a> {
                 }
                 OperandKind::Rs2 => {
                     let reg = self.expect_register(&inst.operands[operand_idx])?;
-                    word0 |= u32::from(reg) << RS2_SHIFT;
+                    word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
                     operand_idx += 1;
                 }
                 OperandKind::Rs3 if is_cas => {
                     let reg = self.expect_register(&inst.operands[operand_idx])?;
-                    return Ok(EncodedInstruction::extended(word0, u32::from(reg) << 27));
+                    word1 |= u32::from(reg) << EXTENDED_RS3_SHIFT;
+                    operand_idx += 1;
                 }
                 OperandKind::Scope => {
                     let scope = self.expect_scope(&inst.operands[operand_idx])?;
-                    word0 |= (scope as u32) << SCOPE_SHIFT;
+                    word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                     operand_idx += 1;
                 }
                 _ => {
@@ -320,7 +328,8 @@ impl<'a> Encoder<'a> {
             }
         }
 
-        Ok(EncodedInstruction::single(word0))
+        // All atomics now need extended word for rs2
+        Ok(EncodedInstruction::extended(word0, word1))
     }
 
     fn encode_control(
@@ -331,13 +340,24 @@ impl<'a> Encoder<'a> {
         span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
         let modifier = sig.modifier.unwrap_or(0);
-        let is_sync_op = Self::is_sync_op(&inst.mnemonic);
 
-        if is_sync_op {
-            word0 |= SYNC_OP_FLAG;
-        }
-
-        if !is_sync_op {
+        if modifier >= 8 {
+            let sync_mod = modifier - 8;
+            match sync_mod {
+                op if op == SyncOp::FenceAcquire as u8
+                    || op == SyncOp::FenceRelease as u8
+                    || op == SyncOp::FenceAcqRel as u8 =>
+                {
+                    let mut word1: u32 = 0;
+                    if !inst.operands.is_empty() {
+                        let scope = self.expect_scope(&inst.operands[0])?;
+                        word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
+                    }
+                    Ok(EncodedInstruction::extended(word0, word1))
+                }
+                _ => Ok(EncodedInstruction::single(word0)),
+            }
+        } else {
             match modifier {
                 op if op == ControlOp::If as u8
                     || op == ControlOp::Break as u8
@@ -361,35 +381,7 @@ impl<'a> Encoder<'a> {
                 }
                 _ => Ok(EncodedInstruction::single(word0)),
             }
-        } else {
-            match modifier {
-                op if op == SyncOp::FenceAcquire as u8
-                    || op == SyncOp::FenceRelease as u8
-                    || op == SyncOp::FenceAcqRel as u8 =>
-                {
-                    if !inst.operands.is_empty() {
-                        let scope = self.expect_scope(&inst.operands[0])?;
-                        word0 |= (scope as u32) << SCOPE_SHIFT;
-                    }
-                    Ok(EncodedInstruction::single(word0))
-                }
-                _ => Ok(EncodedInstruction::single(word0)),
-            }
         }
-    }
-
-    fn is_sync_op(mnemonic: &str) -> bool {
-        matches!(
-            mnemonic,
-            "return"
-                | "halt"
-                | "barrier"
-                | "fence_acquire"
-                | "fence_release"
-                | "fence_acq_rel"
-                | "wait"
-                | "nop"
-        )
     }
 
     fn encode_wave_op(
@@ -406,24 +398,33 @@ impl<'a> Encoder<'a> {
             let pred = self.expect_predicate(&inst.operands[1])?;
             word0 |= u32::from(rd) << RD_SHIFT;
             word0 |= u32::from(pred) << RS1_SHIFT;
+            Ok(EncodedInstruction::single(word0))
         } else if modifier == WaveOpType::Any as u8 || modifier == WaveOpType::All as u8 {
             let pd = self.expect_predicate(&inst.operands[0])?;
             let ps = self.expect_predicate(&inst.operands[1])?;
             word0 |= u32::from(pd) << RD_SHIFT;
             word0 |= u32::from(ps) << RS1_SHIFT;
+            Ok(EncodedInstruction::single(word0))
+        } else if modifier >= 8 {
+            // Reduce ops: rd, rs1 only - no rs2
+            let rd = self.expect_register(&inst.operands[0])?;
+            let rs1 = self.expect_register(&inst.operands[1])?;
+            word0 |= u32::from(rd) << RD_SHIFT;
+            word0 |= u32::from(rs1) << RS1_SHIFT;
+            Ok(EncodedInstruction::single(word0))
         } else {
-            for (i, operand) in inst.operands.iter().enumerate() {
-                let reg = self.expect_register(operand)?;
-                match i {
-                    0 => word0 |= u32::from(reg) << RD_SHIFT,
-                    1 => word0 |= u32::from(reg) << RS1_SHIFT,
-                    2 => word0 |= u32::from(reg) << RS2_SHIFT,
-                    _ => {}
-                }
+            // Shuffle/broadcast variants: rd, rs1 in base, rs2 in extended
+            let rd = self.expect_register(&inst.operands[0])?;
+            let rs1 = self.expect_register(&inst.operands[1])?;
+            word0 |= u32::from(rd) << RD_SHIFT;
+            word0 |= u32::from(rs1) << RS1_SHIFT;
+            let mut word1: u32 = 0;
+            if inst.operands.len() > 2 {
+                let rs2 = self.expect_register(&inst.operands[2])?;
+                word1 |= u32::from(rs2) << EXTENDED_RS2_SHIFT;
             }
+            Ok(EncodedInstruction::extended(word0, word1))
         }
-
-        Ok(EncodedInstruction::single(word0))
     }
 
     fn encode_select(
@@ -439,10 +440,11 @@ impl<'a> Encoder<'a> {
 
         word0 |= u32::from(rd) << RD_SHIFT;
         word0 |= u32::from(pd) << RS1_SHIFT;
-        word0 |= u32::from(rs1) << RS2_SHIFT;
-        word0 |= u32::from(rs2) << MODIFIER_SHIFT;
 
-        Ok(EncodedInstruction::single(word0))
+        let word1 = (u32::from(rs1) << EXTENDED_RS2_SHIFT)
+            | (u32::from(rs2) << EXTENDED_RS3_SHIFT);
+
+        Ok(EncodedInstruction::extended(word0, word1))
     }
 
     fn encode_misc(
@@ -452,9 +454,6 @@ impl<'a> Encoder<'a> {
         mut word0: u32,
         _span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
-        const MISC_OP_FLAG: u32 = 0x02;
-        word0 |= MISC_OP_FLAG;
-
         let modifier = sig.modifier.unwrap_or(0);
 
         let effective_modifier = if modifier == MiscOp::Mov as u8 && inst.operands.len() > 1 {
@@ -574,6 +573,7 @@ pub fn encode_instruction_standalone(
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
+    use crate::opcodes::{EXTENDED_SCOPE_MASK, PRED_NEG_MASK};
     use crate::parser::Parser;
 
     fn encode(source: &str) -> Result<EncodedInstruction, AssemblerError> {
@@ -590,18 +590,18 @@ mod tests {
     #[test]
     fn test_encoder_iadd() {
         let encoded = encode("iadd r1, r2, r3").unwrap();
-        assert!(encoded.word1.is_none());
+        assert!(encoded.word1.is_some());
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Iadd as u32);
 
-        let rd = (encoded.word0 >> RD_SHIFT) & 0x1F;
+        let rd = (encoded.word0 >> RD_SHIFT) & 0xFF;
         assert_eq!(rd, 1);
 
-        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0x1F;
+        let rs1 = (encoded.word0 >> RS1_SHIFT) & 0xFF;
         assert_eq!(rs1, 2);
 
-        let rs2 = (encoded.word0 >> RS2_SHIFT) & 0x1F;
+        let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
         assert_eq!(rs2, 3);
     }
 
@@ -610,10 +610,10 @@ mod tests {
         let encoded = encode("mov_imm r5, 0x12345678").unwrap();
         assert!(encoded.word1.is_some());
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
-        assert_eq!(opcode, Opcode::Control as u32);
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
+        assert_eq!(opcode, Opcode::Misc as u32);
 
-        let rd = (encoded.word0 >> RD_SHIFT) & 0x1F;
+        let rd = (encoded.word0 >> RD_SHIFT) & 0xFF;
         assert_eq!(rd, 5);
 
         assert_eq!(encoded.word1.unwrap(), 0x1234_5678);
@@ -622,22 +622,22 @@ mod tests {
     #[test]
     fn test_encoder_predicated() {
         let encoded = encode("@p1 iadd r0, r1, r2").unwrap();
-
-        let pred = (encoded.word0 >> PRED_SHIFT) & 0x03;
-        assert_eq!(pred, 1);
-
-        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & 0x01;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
+        assert_eq!(opcode, Opcode::Iadd as u32);
+        let pred_reg = (encoded.word0 >> PRED_REG_SHIFT) & PRED_REG_MASK;
+        assert_eq!(pred_reg, 1);
+        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
         assert_eq!(pred_neg, 0);
     }
 
     #[test]
     fn test_encoder_negated_predicate() {
         let encoded = encode("@!p2 fadd r0, r1, r2").unwrap();
-
-        let pred = (encoded.word0 >> PRED_SHIFT) & 0x03;
-        assert_eq!(pred, 2);
-
-        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & 0x01;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
+        assert_eq!(opcode, Opcode::Fadd as u32);
+        let pred_reg = (encoded.word0 >> PRED_REG_SHIFT) & PRED_REG_MASK;
+        assert_eq!(pred_reg, 2);
+        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
         assert_eq!(pred_neg, 1);
     }
 
@@ -646,10 +646,13 @@ mod tests {
         let encoded = encode("fma r0, r1, r2, r3").unwrap();
         assert!(encoded.word1.is_some());
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Fma as u32);
 
-        let rs3 = (encoded.word1.unwrap() >> 27) & 0x1F;
+        let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
+        assert_eq!(rs2, 2);
+
+        let rs3 = (encoded.word1.unwrap() >> EXTENDED_RS3_SHIFT) & 0xFF;
         assert_eq!(rs3, 3);
     }
 
@@ -657,7 +660,7 @@ mod tests {
     fn test_encoder_local_load() {
         let encoded = encode("local_load_u32 r0, r1").unwrap();
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::LocalLoad as u32);
 
         let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;
@@ -667,8 +670,8 @@ mod tests {
     #[test]
     fn test_encoder_fence() {
         let encoded = encode("fence_acquire .workgroup").unwrap();
-
-        let scope = (encoded.word0 >> SCOPE_SHIFT) & 0x03;
+        let word1 = encoded.word1.unwrap();
+        let scope = (word1 >> EXTENDED_SCOPE_SHIFT) & EXTENDED_SCOPE_MASK;
         assert_eq!(scope, Scope::Workgroup as u32);
     }
 
@@ -676,21 +679,18 @@ mod tests {
     fn test_encoder_barrier() {
         let encoded = encode("barrier").unwrap();
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Control as u32);
 
         let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;
-        assert_eq!(modifier, SyncOp::Barrier as u32);
-
-        let flags = (encoded.word0 >> FLAGS_SHIFT) & FLAGS_MASK;
-        assert_eq!(flags & SYNC_OP_FLAG, SYNC_OP_FLAG);
+        assert_eq!(modifier, SyncOp::Barrier as u32 + 8);
     }
 
     #[test]
     fn test_encoder_nop() {
         let encoded = encode("nop").unwrap();
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Control as u32);
     }
 
@@ -698,10 +698,10 @@ mod tests {
     fn test_encoder_icmp() {
         let encoded = encode("icmp_lt p0, r1, r2").unwrap();
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Icmp as u32);
 
-        let pd = (encoded.word0 >> RD_SHIFT) & 0x1F;
+        let pd = (encoded.word0 >> RD_SHIFT) & 0xFF;
         assert_eq!(pd, 0);
     }
 
@@ -709,7 +709,7 @@ mod tests {
     fn test_encoder_wave_shuffle() {
         let encoded = encode("wave_shuffle r0, r1, r2").unwrap();
 
-        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0x3F;
+        let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::WaveOp as u32);
 
         let modifier = (encoded.word0 >> MODIFIER_SHIFT) & 0x0F;

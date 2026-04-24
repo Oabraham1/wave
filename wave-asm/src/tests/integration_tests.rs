@@ -231,7 +231,7 @@ fn test_integration_error_unknown_instruction() {
 }
 
 #[test]
-fn test_integration_register_warning() {
+fn test_integration_wide_registers() {
     let source = r#"
 .kernel register_test
 .registers 64
@@ -243,7 +243,7 @@ fn test_integration_register_warning() {
     assert!(result.is_ok());
 
     let assembled = result.unwrap();
-    assert!(!assembled.warnings.is_empty());
+    assert!(assembled.warnings.is_empty());
 }
 
 #[test]
@@ -384,25 +384,20 @@ fn test_integration_all_special_registers() {
             binary[inst_offset + 3],
         ]);
 
-        let opcode = (word >> 26) & 0x3F;
-        let rd = (word >> 21) & 0x1F;
-        let rs1 = (word >> 16) & 0x1F;
-        let modifier = (word >> 7) & 0x0F;
-        let flags = word & 0x03;
+        let opcode = (word >> 24) & 0xFF;
+        let rd = (word >> 16) & 0xFF;
+        let rs1 = (word >> 8) & 0xFF;
+        let modifier = (word >> 4) & 0x0F;
 
         assert_eq!(
-            opcode, 0x3F,
-            "instruction {i}: expected Control opcode (0x3F)"
+            opcode, 0x41,
+            "instruction {i}: expected Misc opcode (0x41)"
         );
         assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
         assert_eq!(rs1, i as u32, "instruction {i}: expected sr index {i}");
         assert_eq!(
             modifier, 2,
             "instruction {i}: expected MovSr modifier (2), got {modifier}"
-        );
-        assert_eq!(
-            flags, 2,
-            "instruction {i}: expected MISC_OP_FLAG (2), got {flags}"
         );
     }
 }
@@ -435,7 +430,7 @@ fn test_integration_mov_sr_explicit_syntax() {
             binary[inst_offset + 3],
         ]);
 
-        let modifier = (word >> 7) & 0x0F;
+        let modifier = (word >> 4) & 0x0F;
         assert_eq!(
             modifier, 2,
             "instruction {i}: expected MovSr modifier (2), got {modifier}"
@@ -488,10 +483,117 @@ fn test_integration_special_register_encoding_correctness() {
             binary[code_offset + 3],
         ]);
 
-        let rs1 = (word >> 16) & 0x1F;
+        let rs1 = (word >> 8) & 0xFF;
         assert_eq!(
             rs1, expected_index,
             "{sr_name} should encode to index {expected_index}, got {rs1}"
         );
     }
+}
+
+#[test]
+fn test_integration_mma_load_a() {
+    let source = r#"
+.kernel mma_test
+.registers 8
+    mma_load_a r0, r1, r2
+.end
+"#;
+    let result = assemble_program(source);
+    assert!(result.is_ok(), "mma_load_a should assemble: {result:?}");
+}
+
+#[test]
+fn test_integration_mma_load_b() {
+    let source = r#"
+.kernel mma_test
+.registers 8
+    mma_load_b r0, r1, r2
+.end
+"#;
+    let result = assemble_program(source);
+    assert!(result.is_ok(), "mma_load_b should assemble: {result:?}");
+}
+
+#[test]
+fn test_integration_mma_store_c() {
+    let source = r#"
+.kernel mma_test
+.registers 8
+    mma_store_c r0, r1, r2
+.end
+"#;
+    let result = assemble_program(source);
+    assert!(result.is_ok(), "mma_store_c should assemble: {result:?}");
+}
+
+#[test]
+fn test_integration_mma_compute() {
+    let source = r#"
+.kernel mma_test
+.registers 8
+    mma_compute r0, r1, r2
+.end
+"#;
+    let result = assemble_program(source);
+    assert!(result.is_ok(), "mma_compute should assemble: {result:?}");
+}
+
+#[test]
+fn test_integration_mma_special_registers() {
+    let source = r#"
+.kernel mma_sr_test
+.registers 8
+    mov_sr r0, sr_mma_supported
+    mov_sr r1, sr_mma_m
+    mov_sr r2, sr_mma_n
+    mov_sr r3, sr_mma_k
+.end
+"#;
+    let result = assemble_program(source);
+    assert!(
+        result.is_ok(),
+        "MMA special registers should assemble: {result:?}"
+    );
+}
+
+#[test]
+fn test_integration_mma_encoding() {
+    let source = r#"
+.kernel mma_enc
+.registers 8
+    mma_load_a r0, r1, r2
+.end
+"#;
+    let binary = assemble_program(source).unwrap();
+
+    let code_offset = u32::from_le_bytes([binary[8], binary[9], binary[10], binary[11]]) as usize;
+    let word0 = u32::from_le_bytes([
+        binary[code_offset],
+        binary[code_offset + 1],
+        binary[code_offset + 2],
+        binary[code_offset + 3],
+    ]);
+
+    let opcode = (word0 >> 24) & 0xFF;
+    assert_eq!(opcode, 0x40, "MMA opcode should be 0x40");
+
+    let rd = (word0 >> 16) & 0xFF;
+    assert_eq!(rd, 0, "rd should be r0");
+
+    let rs1 = (word0 >> 8) & 0xFF;
+    assert_eq!(rs1, 1, "rs1 should be r1");
+
+    let modifier = (word0 >> 4) & 0x0F;
+    assert_eq!(modifier, 0, "modifier should be 0 (LoadA)");
+
+    let word1 = u32::from_le_bytes([
+        binary[code_offset + 4],
+        binary[code_offset + 5],
+        binary[code_offset + 6],
+        binary[code_offset + 7],
+    ]);
+
+    let rs2 = (word1 >> 24) & 0xFF;
+    assert_eq!(rs2, 2, "rs2 should be r2");
 }

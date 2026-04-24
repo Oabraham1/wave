@@ -1,0 +1,50 @@
+; SPDX-License-Identifier: Apache-2.0
+;
+; Element-wise average of two buffers: C[i] = (A[i] + B[i]) / 2.0
+;
+; Simulates the core operation of gradient all-reduce in data-parallel
+; training. Each thread computes the average of one element from two
+; gradient buffers. In a real multi-GPU setting each buffer comes from
+; a different device; here both live in the same device memory.
+;
+; Register arguments via --set-reg:
+;   r0 = A device memory byte offset (input gradient buffer 0)
+;   r1 = B device memory byte offset (input gradient buffer 1)
+;   r2 = C device memory byte offset (output averaged gradients)
+;   r3 = N (number of elements)
+
+.kernel allreduce_avg
+.registers 16
+.workgroup_size 256, 1, 1
+.local_memory 16
+
+    mov_sr r5, sr_thread_id_x
+    mov_sr r6, sr_workgroup_id_x
+    mov_imm r7, 256
+    imul r8, r6, r7
+    iadd r8, r8, r5
+
+    icmp_lt p0, r8, r3
+    if p0
+
+        mov_imm r7, 4
+        imul r9, r8, r7
+
+        iadd r10, r9, r0
+        device_load_u32 r11, r10
+
+        iadd r10, r9, r1
+        device_load_u32 r12, r10
+
+        fadd r11, r11, r12
+
+        mov_imm r13, 1056964608
+        fmul r11, r11, r13
+
+        iadd r10, r9, r2
+        device_store_u32 r10, r11
+
+    endif
+
+    halt
+.end

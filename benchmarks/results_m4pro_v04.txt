@@ -1,0 +1,120 @@
+WAVE Kernel Benchmarks - Apple M4 Pro
+======================================================================
+Warmup: 5, Benchmark: 20 iterations
+Timing: MTLCommandBuffer gpuStartTime/gpuEndTime
+
+--- Blocked GEMM (F32, 8x8) ---
+  Compiled OK (max threads/group: 1024)
+   128x128   median 0.1813 ms      23.1 GFLOPS
+  Correctness (128x128): PASS (max_err=2.86e-06)
+   256x256   median 0.3354 ms     100.1 GFLOPS
+   512x512   median 0.6278 ms     427.6 GFLOPS
+  1024x1024  median 0.8653 ms    2481.8 GFLOPS
+  2048x2048  median 5.3898 ms    3187.5 GFLOPS
+  4096x4096  median 42.8424 ms    3208.0 GFLOPS
+
+--- F16 GEMM (mixed prec) ---
+  Compiled OK (max threads/group: 1024)
+   128x128   median 0.0359 ms     116.9 GFLOPS
+  Correctness (128x128): PASS (max_err=0.00e+00)
+   256x256   median 0.0660 ms     508.7 GFLOPS
+   512x512   median 0.1256 ms    2136.8 GFLOPS
+  1024x1024  median 0.6809 ms    3154.0 GFLOPS
+  2048x2048  median 4.2287 ms    4062.6 GFLOPS
+  4096x4096  median 33.6245 ms    4087.5 GFLOPS
+
+--- Fused GEMM+bias+ReLU ---
+  Compiled OK (max threads/group: 1024)
+   128x128   median 0.0416 ms     100.8 GFLOPS
+  Correctness (128x128): PASS (max_err=2.86e-06)
+   256x256   median 0.0768 ms     437.0 GFLOPS
+   512x512   median 0.1467 ms    1829.7 GFLOPS
+  1024x1024  median 0.8780 ms    2446.0 GFLOPS
+  2048x2048  median 5.4652 ms    3143.5 GFLOPS
+  4096x4096  median 43.5494 ms    3155.9 GFLOPS
+
+--- Fused GEMM+bias+GELU ---
+  Compiled OK (max threads/group: 1024)
+   128x128   median 0.0429 ms      97.7 GFLOPS
+  Correctness (128x128): PASS (max_err=1.17e-04)
+   256x256   median 0.0773 ms     434.4 GFLOPS
+   512x512   median 0.1468 ms    1828.7 GFLOPS
+  1024x1024  median 0.8782 ms    2445.2 GFLOPS
+  2048x2048  median 5.4960 ms    3125.9 GFLOPS
+  4096x4096  median 43.8631 ms    3133.4 GFLOPS
+
+--- Fused F16+bias+ReLU ---
+  Compiled OK (max threads/group: 1024)
+   128x128   median 0.0355 ms     118.1 GFLOPS
+  Correctness (128x128): PASS (max_err=0.00e+00)
+   256x256   median 0.0645 ms     520.2 GFLOPS
+   512x512   median 0.1222 ms    2195.8 GFLOPS
+  1024x1024  median 0.6713 ms    3198.8 GFLOPS
+  2048x2048  median 4.2225 ms    4068.6 GFLOPS
+  4096x4096  median 33.8079 ms    4065.3 GFLOPS
+
+--- MPS Native (Metal Performance Shaders) ---
+   128x128   median 0.0072 ms     581.9 GFLOPS
+   256x256   median 0.0125 ms    2684.4 GFLOPS
+   512x512   median 0.0505 ms    5315.6 GFLOPS
+  1024x1024  median 0.3318 ms    6471.6 GFLOPS
+  2048x2048  median 2.5237 ms    6807.5 GFLOPS
+  4096x4096  median 20.4840 ms    6709.6 GFLOPS
+
+
+WAVE Kernel Benchmarks - Apple M4 Pro
+==============================================================================================================
+Kernel                       | 128        | 256        | 512        | 1024       | 2048       | 4096       | Unit   | Check
+--------------------------------------------------------------------------------------------------------------
+Blocked GEMM (F32, 8x8)      |     23.1   |    100.1   |    427.6   |   2481.8   |   3187.5   |   3208.0   | GFLOPS | PASS (3e-06)
+F16 GEMM (mixed prec)        |    116.9   |    508.7   |   2136.8   |   3154.0   |   4062.6   |   4087.5   | GFLOPS | PASS (0e+00)
+Fused GEMM+bias+ReLU         |    100.8   |    437.0   |   1829.7   |   2446.0   |   3143.5   |   3155.9   | GFLOPS | PASS (3e-06)
+Fused GEMM+bias+GELU         |     97.7   |    434.4   |   1828.7   |   2445.2   |   3125.9   |   3133.4   | GFLOPS | PASS (1e-04)
+Fused F16+bias+ReLU          |    118.1   |    520.2   |   2195.8   |   3198.8   |   4068.6   |   4065.3   | GFLOPS | PASS (0e+00)
+MPS (native Metal)           |    581.9   |   2684.4   |   5315.6   |   6471.6   |   6807.5   |   6709.6   | GFLOPS |
+
+WAVE / MPS ratio at 4096x4096:
+  Blocked GEMM (F32, 8x8)        47.8%
+  F16 GEMM (mixed prec)          60.9%
+  Fused GEMM+bias+ReLU           47.0%
+  Fused GEMM+bias+GELU           46.7%
+  Fused F16+bias+ReLU            60.6%
+
+--- TSV ---
+kernel	size	gflops
+blocked_f32	128	23.14
+blocked_f32	256	100.05
+blocked_f32	512	427.62
+blocked_f32	1024	2481.80
+blocked_f32	2048	3187.51
+blocked_f32	4096	3208.01
+blocked_f16	128	116.91
+blocked_f16	256	508.72
+blocked_f16	512	2136.80
+blocked_f16	1024	3154.01
+blocked_f16	2048	4062.64
+blocked_f16	4096	4087.46
+fused_relu	128	100.76
+fused_relu	256	436.95
+fused_relu	512	1829.72
+fused_relu	1024	2446.00
+fused_relu	2048	3143.47
+fused_relu	4096	3155.93
+fused_gelu	128	97.73
+fused_gelu	256	434.36
+fused_gelu	512	1828.68
+fused_gelu	1024	2445.18
+fused_gelu	2048	3125.89
+fused_gelu	4096	3133.36
+fused_relu_f16	128	118.15
+fused_relu_f16	256	520.22
+fused_relu_f16	512	2195.79
+fused_relu_f16	1024	3198.83
+fused_relu_f16	2048	4068.65
+fused_relu_f16	4096	4065.29
+mps_f32	128	581.87
+mps_f32	256	2684.36
+mps_f32	512	5315.55
+mps_f32	1024	6471.57
+mps_f32	2048	6807.50
+mps_f32	4096	6709.58

@@ -27,8 +27,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "noop"
         }
-        fn run(&self, func: &mut MirFunction) -> bool {
-            let _ = func.name.len();
+        fn run(&self, _func: &mut MirFunction) -> bool {
             false
         }
     }

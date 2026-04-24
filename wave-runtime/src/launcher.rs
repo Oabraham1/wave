@@ -23,7 +23,6 @@ use std::process::Command;
 ///
 /// Returns `RuntimeError::Launch` if the kernel cannot be launched, compiled,
 /// or executed on the target device.
-#[allow(clippy::too_many_arguments)]
 pub fn launch_kernel(
     vendor_code: &str,
     wbin: &[u8],
@@ -334,7 +333,6 @@ fn generate_metal_host(
     src
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn generate_cuda_host(
     kernel_code: &str,
     _buf_paths: &[String],
@@ -414,7 +412,6 @@ fn generate_cuda_host(
     src
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn generate_hip_host(
     kernel_code: &str,
     _buf_paths: &[String],
@@ -494,7 +491,6 @@ fn generate_hip_host(
     src
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn generate_sycl_host(
     kernel_code: &str,
     _buf_paths: &[String],

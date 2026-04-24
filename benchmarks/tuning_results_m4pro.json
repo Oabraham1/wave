@@ -1,0 +1,108 @@
+{
+  "Apple M4 Pro": {
+    "gemm_f32": {
+      "best": {
+        "tile_m": 64,
+        "tile_n": 64,
+        "tile_k": 8,
+        "block_m": 8,
+        "block_n": 8,
+        "prefetch": true,
+        "gflops": 3575,
+        "tag": "t64x64_k8_b8x8_p"
+      },
+      "baseline_hand_tuned": 3208,
+      "baseline_mps": 6710
+    },
+    "gemm_f16": {
+      "best": {
+        "tile_m": 64,
+        "tile_n": 64,
+        "tile_k": 8,
+        "block_m": 8,
+        "block_n": 8,
+        "prefetch": true,
+        "gflops": 4047,
+        "tag": "t64x64_k8_b8x8_p"
+      }
+    },
+    "gemm_bias_relu": {
+      "best": {
+        "tile_m": 64,
+        "tile_n": 64,
+        "tile_k": 8,
+        "block_m": 8,
+        "block_n": 8,
+        "prefetch": true,
+        "gflops": 3563,
+        "tag": "t64x64_k8_b8x8_p"
+      }
+    },
+    "gemm_bias_gelu": {
+      "best": {
+        "tile_m": 64,
+        "tile_n": 64,
+        "tile_k": 8,
+        "block_m": 8,
+        "block_n": 8,
+        "prefetch": true,
+        "gflops": 3514,
+        "tag": "t64x64_k8_b8x8_p"
+      }
+    },
+    "gemm_bias_relu_f16": {
+      "best": {
+        "tile_m": 64,
+        "tile_n": 64,
+        "tile_k": 8,
+        "block_m": 8,
+        "block_n": 8,
+        "prefetch": true,
+        "gflops": 4019,
+        "tag": "t64x64_k8_b8x8_p"
+      }
+    },
+    "search_results": [
+      {
+        "tag": "t64x64_k8_b8x8_p",
+        "gflops": 3585
+      },
+      {
+        "tag": "t64x64_k8_b8x4_p",
+        "gflops": 3398
+      },
+      {
+        "tag": "t64x64_k16_b8x4_p",
+        "gflops": 3366
+      },
+      {
+        "tag": "t128x64_k8_b8x8_p",
+        "gflops": 3309
+      },
+      {
+        "tag": "t64x128_k8_b8x8_p",
+        "gflops": 3272
+      },
+      {
+        "tag": "t64x64_k16_b4x8_p",
+        "gflops": 3268
+      },
+      {
+        "tag": "t64x64_k8_b8x8_np",
+        "gflops": 3218
+      },
+      {
+        "tag": "t128x128_k8_b8x8_p",
+        "gflops": 3205
+      },
+      {
+        "tag": "t128x64_k8_b8x4_p",
+        "gflops": 3200
+      },
+      {
+        "tag": "t64x64_k8_b4x8_p",
+        "gflops": 3188
+      }
+    ]
+  }
+}

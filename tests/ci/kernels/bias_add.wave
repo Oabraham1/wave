@@ -1,0 +1,49 @@
+; SPDX-License-Identifier: Apache-2.0
+;
+; Element-wise bias add: C[i] = A[i] + bias[i % N]
+;
+; Simple unfused kernel for comparison with the fused gemm_bias_relu kernel.
+; Each thread in a 256-wide workgroup processes one element. The kernel reads
+; from device memory, adds the bias, and writes back to device memory, requiring
+; two device memory round-trips (load + store) per element.
+;
+; Register arguments via --set-reg:
+;   r0 = A device memory byte offset (input, M*N f32 values)
+;   r1 = bias device memory byte offset (1D vector, N f32 values)
+;   r2 = C device memory byte offset (output, M*N f32 values)
+;   r3 = N (number of columns, for bias indexing)
+;   r4 = total element count (M*N)
+
+.kernel bias_add
+.registers 16
+.workgroup_size 256, 1, 1
+.local_memory 16
+
+    mov_sr r5, sr_thread_id_x
+    mov_sr r6, sr_workgroup_id_x
+    mov_imm r7, 256
+    imul r8, r6, r7
+    iadd r8, r8, r5
+
+    icmp_lt p0, r8, r4
+    if p0
+
+        mov_imm r7, 4
+        imul r9, r8, r7
+        iadd r10, r9, r0
+        device_load_u32 r11, r10
+
+        imod r12, r8, r3
+        imul r12, r12, r7
+        iadd r12, r12, r1
+        device_load_u32 r13, r12
+
+        fadd r11, r11, r13
+
+        iadd r10, r9, r2
+        device_store_u32 r10, r11
+
+    endif
+
+    halt
+.end

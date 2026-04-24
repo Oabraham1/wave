@@ -1,0 +1,71 @@
+WAVE Auto-Tuned Kernel Benchmarks - Apple M4 Pro
+======================================================================
+Auto-tuned config: tile=64x64, k=8, block=8x8, wg=8x8, prefetch=true
+Warmup: 5, Benchmark: 10 iterations
+Timing: MTLCommandBuffer gpuStartTime/gpuEndTime
+
+--- Blocked GEMM (F32, auto-tuned) ---
+   128x128       32.2 GFLOPS
+   256x256      137.0 GFLOPS
+   512x512      475.1 GFLOPS
+  1024x1024    2012.9 GFLOPS
+  2048x2048    3500.6 GFLOPS
+  4096x4096    3586.8 GFLOPS
+
+--- F16 GEMM (mixed prec, auto-tuned) ---
+   128x128      131.4 GFLOPS
+   256x256      622.8 GFLOPS
+   512x512     2449.6 GFLOPS
+  1024x1024    3689.8 GFLOPS
+  2048x2048    4012.6 GFLOPS
+  4096x4096    4049.4 GFLOPS
+
+--- Fused GEMM+bias+ReLU (auto-tuned) ---
+   128x128       31.3 GFLOPS
+   256x256      133.9 GFLOPS
+   512x512      465.7 GFLOPS
+  1024x1024    2792.6 GFLOPS
+  2048x2048    3470.8 GFLOPS
+  4096x4096    3561.5 GFLOPS
+
+--- Fused GEMM+bias+GELU (auto-tuned) ---
+   128x128      128.6 GFLOPS
+   256x256      136.3 GFLOPS
+   512x512      469.3 GFLOPS
+  1024x1024    3193.5 GFLOPS
+  2048x2048    3428.7 GFLOPS
+  4096x4096    3514.0 GFLOPS
+
+--- Fused F16+bias+ReLU (auto-tuned) ---
+   128x128      150.5 GFLOPS
+   256x256      155.5 GFLOPS
+   512x512      548.7 GFLOPS
+  1024x1024    2537.6 GFLOPS
+  2048x2048    4003.6 GFLOPS
+  4096x4096    4026.8 GFLOPS
+
+
+Comparison at 4096x4096 (MPS baseline: 6710 GFLOPS):
+==============================================================================================================
+Configuration         | F32 GFLOPS | F16 GFLOPS | F32 % MPS | F16 % MPS
+--------------------- | ---------- | ---------- | --------- | ---------
+Before (hand-tuned)   |      3,208 |      4,088 |     47.8% |     60.9%
+After (auto-tuned)    |      3,587 |      4,049 |     53.5% |     60.3%
+MPS native            |      6,710 |        --  |      100% |       --
+
+All 5 kernel variants at 4096x4096:
+==============================================================================================================
+Kernel                       | Hand-tuned | Auto-tuned | Improvement
+-----------------------------|------------|------------|------------
+Blocked GEMM (F32)           |     3208.0 |     3586.8 |     +11.8%
+F16 GEMM (mixed prec)        |     4087.5 |     4049.4 |      -0.9%
+Fused GEMM+bias+ReLU         |     3155.9 |     3561.5 |     +12.9%
+Fused GEMM+bias+GELU         |     3133.4 |     3514.0 |     +12.1%
+Fused F16+bias+ReLU          |     4065.3 |     4026.8 |      -0.9%
+
+Top 5 F32 configurations from search:
+  1. t64x64_k8_b8x8_p       3585 GFLOPS
+  2. t64x64_k8_b8x4_p       3398 GFLOPS
+  3. t64x64_k16_b8x4_p      3366 GFLOPS
+  4. t128x64_k8_b8x8_p      3309 GFLOPS
+  5. t64x128_k8_b8x8_p      3272 GFLOPS

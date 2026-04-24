@@ -9,34 +9,34 @@
 
 use wave_ptx::compile;
 
-const OPCODE_SHIFT: u32 = 26;
-const RD_SHIFT: u32 = 21;
-const RS1_SHIFT: u32 = 16;
-const RS2_SHIFT: u32 = 11;
-const MODIFIER_SHIFT: u32 = 7;
-const SYNC_OP_FLAG: u8 = 0x01;
-const MISC_OP_FLAG: u8 = 0x02;
+const OPCODE_SHIFT: u32 = 24;
+const RD_SHIFT: u32 = 16;
+const RS1_SHIFT: u32 = 8;
+const MODIFIER_SHIFT: u32 = 4;
+const EXTENDED_RS2_SHIFT: u32 = 24;
 
-fn encode(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, flags: u8) -> [u8; 4] {
-    let word = ((u32::from(opcode) & 0x3F) << OPCODE_SHIFT)
-        | ((u32::from(rd) & 0x1F) << RD_SHIFT)
-        | ((u32::from(rs1) & 0x1F) << RS1_SHIFT)
-        | ((u32::from(rs2) & 0x1F) << RS2_SHIFT)
-        | ((u32::from(modifier) & 0x0F) << MODIFIER_SHIFT)
-        | (u32::from(flags) & 0x03);
-    word.to_le_bytes()
+fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> u32 {
+    (u32::from(opcode) << OPCODE_SHIFT) | (u32::from(rd) << RD_SHIFT) | (u32::from(rs1) << RS1_SHIFT) | (u32::from(modifier) << MODIFIER_SHIFT) | u32::from(pred)
+}
+fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec()
+}
+fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, pred: u8) -> Vec<u8> {
+    let mut v = encode_word0(opcode, rd, rs1, modifier, pred).to_le_bytes().to_vec();
+    v.extend_from_slice(&(u32::from(rs2) << EXTENDED_RS2_SHIFT).to_le_bytes());
+    v
 }
 
-fn halt() -> [u8; 4] {
-    encode(0x3F, 0, 0, 0, 1, SYNC_OP_FLAG)
+fn halt_instruction() -> Vec<u8> {
+    single(0x3F, 0, 0, 9, 0)
 }
 
-fn mov_sr(rd: u8, sr: u8) -> [u8; 4] {
-    encode(0x3F, rd, sr, 0, 2, MISC_OP_FLAG)
+fn mov_sr(rd: u8, sr: u8) -> Vec<u8> {
+    single(0x41, rd, sr, 2, 0)
 }
 
 fn mov_imm(rd: u8, imm: u32) -> Vec<u8> {
-    let mut code = encode(0x3F, rd, 0, 0, 1, MISC_OP_FLAG).to_vec();
+    let mut code = encode_word0(0x41, rd, 0, 1, 0).to_le_bytes().to_vec();
     code.extend_from_slice(&imm.to_le_bytes());
     code
 }
@@ -80,19 +80,19 @@ fn test_vector_add_program() {
     code.extend_from_slice(&mov_sr(0, 0));
     code.extend_from_slice(&mov_sr(1, 5));
     code.extend_from_slice(&mov_sr(2, 8));
-    code.extend_from_slice(&encode(0x02, 3, 1, 2, 0, 0));
-    code.extend_from_slice(&encode(0x00, 4, 3, 0, 0, 0));
+    code.extend_from_slice(&extended(0x02, 3, 1, 2, 0, 0));
+    code.extend_from_slice(&extended(0x00, 4, 3, 0, 0, 0));
     code.extend_from_slice(&mov_imm(5, 4));
-    code.extend_from_slice(&encode(0x02, 6, 4, 5, 0, 0));
-    code.extend_from_slice(&encode(0x38, 7, 6, 0, 2, 0));
+    code.extend_from_slice(&extended(0x02, 6, 4, 5, 0, 0));
+    code.extend_from_slice(&single(0x38, 7, 6, 2, 0));
     code.extend_from_slice(&mov_imm(8, 1024));
-    code.extend_from_slice(&encode(0x00, 9, 6, 8, 0, 0));
-    code.extend_from_slice(&encode(0x38, 10, 9, 0, 2, 0));
-    code.extend_from_slice(&encode(0x10, 11, 7, 10, 0, 0));
+    code.extend_from_slice(&extended(0x00, 9, 6, 8, 0, 0));
+    code.extend_from_slice(&single(0x38, 10, 9, 2, 0));
+    code.extend_from_slice(&extended(0x10, 11, 7, 10, 0, 0));
     code.extend_from_slice(&mov_imm(12, 2048));
-    code.extend_from_slice(&encode(0x00, 13, 6, 12, 0, 0));
-    code.extend_from_slice(&encode(0x39, 0, 13, 11, 2, 0));
-    code.extend_from_slice(&halt());
+    code.extend_from_slice(&extended(0x00, 13, 6, 12, 0, 0));
+    code.extend_from_slice(&extended(0x39, 0, 13, 11, 2, 0));
+    code.extend_from_slice(&halt_instruction());
 
     let wbin = build_wbin("vector_add", 16, 0, &code);
     let ptx = compile(&wbin, 75).unwrap();
@@ -113,11 +113,11 @@ fn test_reduction_with_barrier() {
     let mut code = Vec::new();
     code.extend_from_slice(&mov_sr(0, 0));
     code.extend_from_slice(&mov_imm(1, 4));
-    code.extend_from_slice(&encode(0x02, 2, 0, 1, 0, 0));
-    code.extend_from_slice(&encode(0x38, 3, 2, 0, 2, 0));
-    code.extend_from_slice(&encode(0x31, 0, 2, 3, 2, 0));
-    code.extend_from_slice(&encode(0x3F, 0, 0, 0, 2, SYNC_OP_FLAG));
-    code.extend_from_slice(&halt());
+    code.extend_from_slice(&extended(0x02, 2, 0, 1, 0, 0));
+    code.extend_from_slice(&single(0x38, 3, 2, 2, 0));
+    code.extend_from_slice(&extended(0x31, 0, 2, 3, 2, 0));
+    code.extend_from_slice(&single(0x3F, 0, 0, 10, 0));
+    code.extend_from_slice(&halt_instruction());
 
     let wbin = build_wbin("reduction", 8, 4096, &code);
     let ptx = compile(&wbin, 75).unwrap();
@@ -133,7 +133,7 @@ fn test_reduction_with_barrier() {
 
 #[test]
 fn test_empty_kernel_name() {
-    let code = halt();
+    let code = halt_instruction();
     let wbin = build_wbin("", 4, 0, &code);
     let ptx = compile(&wbin, 75).unwrap();
     assert!(ptx.contains(".visible .entry wave_kernel("), "PTX: {ptx}");

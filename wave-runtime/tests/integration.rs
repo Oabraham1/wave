@@ -92,3 +92,48 @@ def vector_add(a: Buffer[f32], b: Buffer[f32], out: Buffer[f32], n: u32):
 
     assert_eq!(out.to_f32().unwrap(), expected);
 }
+
+#[test]
+fn test_enumerate_devices() {
+    let devices = enumerate_devices().unwrap();
+    assert!(!devices.is_empty());
+    let first = &devices[0];
+    assert_eq!(first.id, 0);
+    assert!(first.wave_width > 0);
+}
+
+#[test]
+fn test_shard_and_gather_roundtrip() {
+    let data = DeviceBuffer::from_f32(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let devices = enumerate_devices().unwrap();
+    let shards = shard_tensor(&data, &devices, 0).unwrap();
+    let gathered = gather_shards(&shards).unwrap();
+    assert_eq!(gathered.to_f32().unwrap(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+}
+
+#[test]
+fn test_allreduce_identity() {
+    let mut buf = DeviceBuffer::from_f32(&[10.0, 20.0, 30.0]);
+    allreduce_average(std::slice::from_mut(&mut buf)).unwrap();
+    assert_eq!(buf.to_f32().unwrap(), vec![10.0, 20.0, 30.0]);
+}
+
+#[test]
+fn test_reduce_strategy_for_system() {
+    let devices = enumerate_devices().unwrap();
+    let strategy = select_reduce_strategy(&devices);
+    if devices.len() == 1 {
+        assert_eq!(strategy, ReduceStrategy::SingleDevice);
+    }
+}
+
+#[test]
+fn test_replicate_buffer_matches_device_count() {
+    let buf = DeviceBuffer::from_f32(&[1.0, 2.0]);
+    let devices = enumerate_devices().unwrap();
+    let replicas = replicate_buffer(&buf, &devices);
+    assert_eq!(replicas.len(), devices.len());
+    for replica in &replicas {
+        assert_eq!(replica.to_f32().unwrap(), vec![1.0, 2.0]);
+    }
+}

@@ -13,7 +13,8 @@
 use std::fmt::Write;
 
 use wave_decode::opcodes::{
-    BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp,
+    Bf16Op, Bf16PackedOp, BitOpType, CmpOp, CvtType, F16Op, F16PackedOp, F64DivSqrtOp, F64Op,
+    FUnaryOp,
 };
 use wave_decode::{DecodedInstruction, KernelInfo, Operation};
 
@@ -64,7 +65,7 @@ impl CodeGenerator {
         ));
 
         self.output
-            .push_str(&registers::emit_declarations(kernel.register_count));
+            .push_str(&registers::emit_declarations(kernel.register_count, kernel.local_memory_size > 0));
         self.line("");
 
         for instr in instructions {
@@ -297,6 +298,20 @@ impl CodeGenerator {
             } => {
                 self.emit_f16_packed(*op, *rd, *rs1, *rs2);
             }
+            Operation::Bf16 {
+                op,
+                rd,
+                rs1,
+                rs2,
+                rs3,
+            } => {
+                self.emit_bf16(*op, *rd, *rs1, *rs2, *rs3);
+            }
+            Operation::Bf16Packed {
+                op, rd, rs1, rs2, ..
+            } => {
+                self.emit_bf16_packed(*op, *rd, *rs1, *rs2);
+            }
             Operation::F64 {
                 op,
                 rd,
@@ -520,6 +535,49 @@ impl CodeGenerator {
                 ));
             }
 
+            Operation::MmaLoadA { rd: _, rs1, rs2 } => {
+                self.line("{");
+                self.line(&format!("    uint32_t _addr = {};", reg(*rs1)));
+                self.line(&format!("    uint32_t _stride = {};", reg(*rs2)));
+                self.line("    for (int _r = 0; _r < 4; _r++) {");
+                self.line("        for (int _c = 0; _c < 4; _c++) {");
+                self.line("            _mma_a[_r * 4 + _c] = rf(*(uint32_t*)(lm + _addr + _r * _stride + _c * 4));");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaLoadB { rd: _, rs1, rs2 } => {
+                self.line("{");
+                self.line(&format!("    uint32_t _addr = {};", reg(*rs1)));
+                self.line(&format!("    uint32_t _stride = {};", reg(*rs2)));
+                self.line("    for (int _r = 0; _r < 4; _r++) {");
+                self.line("        for (int _c = 0; _c < 4; _c++) {");
+                self.line("            _mma_b[_r * 4 + _c] = rf(*(uint32_t*)(lm + _addr + _r * _stride + _c * 4));");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaStoreC { rd, rs1, rs2: _ } => {
+                self.line("{");
+                self.line(&format!("    uint32_t _addr = {};", reg(*rd)));
+                self.line(&format!("    uint32_t _stride = {};", reg(*rs1)));
+                self.line("    for (int _r = 0; _r < 4; _r++) {");
+                self.line("        for (int _c = 0; _c < 4; _c++) {");
+                self.line("            *(uint32_t*)(lm + _addr + _r * _stride + _c * 4) = ri(_mma_c[_r * 4 + _c]);");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+            Operation::MmaCompute { .. } => {
+                self.line("for (int _i = 0; _i < 4; _i++) {");
+                self.line("    for (int _j = 0; _j < 4; _j++) {");
+                self.line("        for (int _k = 0; _k < 4; _k++) {");
+                self.line("            _mma_c[_i * 4 + _j] = sycl::fma(_mma_a[_i * 4 + _k], _mma_b[_k * 4 + _j], _mma_c[_i * 4 + _j]);");
+                self.line("        }");
+                self.line("    }");
+                self.line("}");
+            }
+
             Operation::Unknown { opcode, .. } => {
                 return Err(CompileError::UnsupportedOperation(format!(
                     "unknown opcode 0x{opcode:02x}"
@@ -588,6 +646,68 @@ impl CodeGenerator {
             ),
         };
         self.line(&expr);
+    }
+
+    fn emit_bf16(&mut self, op: Bf16Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
+        let rb = |n: u8| format!("bit_cast<float>((r[{n}] & 0xFFFFu) << 16)");
+        let r_d = format!("r[{rd}]");
+        let b1 = rb(rs1);
+        let b2 = rb(rs2);
+        let line = match op {
+            Bf16Op::Badd => format!("{r_d} = (bit_cast<uint32_t>({b1} + {b2}) >> 16);"),
+            Bf16Op::Bsub => format!("{r_d} = (bit_cast<uint32_t>({b1} - {b2}) >> 16);"),
+            Bf16Op::Bmul => format!("{r_d} = (bit_cast<uint32_t>({b1} * {b2}) >> 16);"),
+            Bf16Op::Bma => {
+                let b3 = rb(rs3.unwrap_or(0));
+                format!("{r_d} = (bit_cast<uint32_t>(sycl::fma({b1}, {b2}, {b3})) >> 16);")
+            }
+        };
+        self.line(&line);
+    }
+
+    fn emit_bf16_packed(&mut self, op: Bf16PackedOp, rd: u8, rs1: u8, rs2: u8) {
+        let r_d = reg(rd);
+        self.line("{");
+        self.indent_level += 1;
+        self.line(&format!(
+            "float _lo1 = bit_cast<float>((r[{rs1}] & 0xFFFFu) << 16);"
+        ));
+        self.line(&format!(
+            "float _hi1 = bit_cast<float>((r[{rs1}] >> 16) << 16);"
+        ));
+        self.line(&format!(
+            "float _lo2 = bit_cast<float>((r[{rs2}] & 0xFFFFu) << 16);"
+        ));
+        self.line(&format!(
+            "float _hi2 = bit_cast<float>((r[{rs2}] >> 16) << 16);"
+        ));
+        match op {
+            Bf16PackedOp::Badd2 => {
+                self.line("float _rlo = _lo1 + _lo2;");
+                self.line("float _rhi = _hi1 + _hi2;");
+            }
+            Bf16PackedOp::Bmul2 => {
+                self.line("float _rlo = _lo1 * _lo2;");
+                self.line("float _rhi = _hi1 * _hi2;");
+            }
+            Bf16PackedOp::Bma2 => {
+                self.line(&format!(
+                    "float _lo3 = bit_cast<float>((r[{}] & 0xFFFFu) << 16);",
+                    0
+                ));
+                self.line(&format!(
+                    "float _hi3 = bit_cast<float>((r[{}] >> 16) << 16);",
+                    0
+                ));
+                self.line("float _rlo = sycl::fma(_lo1, _lo2, _lo3);");
+                self.line("float _rhi = sycl::fma(_hi1, _hi2, _hi3);");
+            }
+        }
+        self.line(&format!(
+            "{r_d} = (bit_cast<uint32_t>(_rlo) >> 16) | ((bit_cast<uint32_t>(_rhi) >> 16) << 16);"
+        ));
+        self.indent_level = self.indent_level.saturating_sub(1);
+        self.line("}");
     }
 
     fn emit_f64(&mut self, op: F64Op, rd: u8, rs1: u8, rs2: u8, rs3: Option<u8>) {
@@ -764,6 +884,12 @@ impl CodeGenerator {
             CvtType::U32F32 => format!("{r_d} = ri((float){r_s1});"),
             CvtType::F32F16 => format!("{r_d} = rhi((half)rf({r_s1}));"),
             CvtType::F16F32 => format!("{r_d} = ri((float)rh({r_s1}));"),
+            CvtType::F32Bf16 => {
+                format!("{r_d} = ri(bit_cast<float>(({r_s1} & 0xFFFFu) << 16));")
+            }
+            CvtType::Bf16F32 => {
+                format!("{r_d} = (bit_cast<uint32_t>(rf({r_s1})) >> 16);")
+            }
             CvtType::F32F64 => {
                 let r_d1 = reg(rd + 1);
                 self.line("{");

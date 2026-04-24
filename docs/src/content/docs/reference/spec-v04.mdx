@@ -5,7 +5,7 @@ description: "WAVE ISA Specification v0.4 — Working Draft, Revised (March 31, 
 
 **Version:** 0.4 (Working Draft, Revised)
 **Authors:** Ojima Abraham, Onyinye Okoli
-**Date:** March 31, 2026
+**Date:** April 3, 2026
 **Status:** Working Draft (Revised)
 
 ## 0. Conformance Language
@@ -37,10 +37,14 @@ This specification is complementary to existing standards. SPIR-V **MAY** be use
 
 ### 1.5 Changes from v0.3
 
-This version incorporates fixes discovered during end-to-end neural network training verification. Key changes:
+This version fixes the predicate encoding defect (Defect 4) discovered by the specification verification suite, and incorporates fixes discovered during end-to-end neural network training verification. Key changes:
 
-1. **Type conversion instruction semantics clarified** (Section 6.7, Appendix A). The reference emulator contained a bug where `cvt_f32_i32` (opcode 0x70, signed integer to float) and `cvt_i32_f32` (opcode 0x72, float to signed integer) conversion directions were swapped. The opcode-to-operation mapping in the specification was correct; the emulator implementation has been fixed to match. This section now includes an explicit note on the canonical direction convention: the mnemonic `cvt_A_B` means "convert from type B to type A" (destination type first).
-2. **Neural network training verification added to conformance evidence** (Section 9.4). A complete two-layer neural network (784→128→10, ReLU activation, softmax cross-entropy loss, SGD optimizer) has been trained on MNIST using WAVE kernels, with gradients verified against PyTorch to be numerically close (max relative difference < 1e-4). This exercises matmul, bias add, ReLU forward/backward, softmax, cross-entropy loss, transposed matmul variants, bias gradient, and SGD update kernels in a full forward-backward-update loop.
+1. **Predicate encoding restored** (Section 8.2). The 8-bit register field rewrite in v0.2 consumed all available bits in word0, leaving no room for predicate encoding. The assembler's `encode_predicate()` function silently returned 0, and the decoder hardcoded predicate fields to unconditional. All predicated instructions (`@p0`, `@!p1`, etc.) executed unconditionally. Bits [3:0] of word0 have been repurposed: bits [1:0] encode the predicate register index (0-3), bit [2] encodes predicate negation, and bit [3] is reserved.
+2. **Memory scope moved to word1** (Section 8.2, 8.3). For instructions that need a memory scope (DeviceAtomic, fence), the scope is now encoded in word1 bits [1:0] instead of word0. This freed word0 bits for predicate encoding.
+3. **New opcode: Misc (0x41)** (Section 8.4). Misc operations (mov, mov_imm, mov_sr) previously shared opcode 0x3F (Control) with a MISC_OP_FLAG in the flags field. Since the flags field no longer exists, Misc operations moved to their own opcode 0x41.
+4. **SyncOp modifier offset** (Section 8.4). Sync operations (return, halt, barrier, fence) share Control opcode 0x3F with modifier values offset by +8 (`SYNC_MODIFIER_OFFSET = 8`). ControlOp uses modifiers 0-7; SyncOp uses modifiers 8-15.
+5. **Type conversion instruction semantics clarified** (Section 6.7, Appendix A). The reference emulator contained a bug where `cvt_f32_i32` and `cvt_i32_f32` conversion directions were swapped. The mnemonic `cvt_A_B` means "convert from type B to type A" (destination type first).
+6. **Neural network training verification added to conformance evidence** (Section 9.4). A complete two-layer neural network (784->128->10, ReLU activation, softmax cross-entropy loss, SGD optimizer) has been trained on MNIST using WAVE kernels, with gradients verified against PyTorch to be numerically close (max relative difference < 1e-4).
 
 ### 1.6 Changes from v0.2
 
@@ -483,57 +487,56 @@ Host API provides `query_constant` and `query_capability` functions.
 
 ### 8.1 Overview
 
-Instructions are encoded as fixed-width 48-bit (6-byte) words. Some instructions require an additional 32-bit word for immediate values or extended operands (80 bits / 10 bytes total).
+Instructions are encoded as 32-bit words. Most instructions that need a second source register, an immediate value, or a memory scope use an additional 32-bit word (64 bits total). The opcode determines whether word1 is present.
 
-**v0.2 change:** The v0.1 encoding used 32-bit base instructions with 5-bit register fields (max 32 registers). This conflicted with MAX_REGISTERS = 64. The encoding has been widened to 48 bits with 8-bit register fields (max 256 registers).
+### 8.2 Word0 Format (32-bit)
 
-**v0.3 change:** The modifier field has been widened from 3 to 4 bits (lower 11 bits restructured). WAVE_REDUCE_FLAG and NON_RETURNING_ATOMIC_FLAG have been eliminated. See Section 8.2 for the updated bit layout.
-
-### 8.2 Base Instruction Format (48-bit)
-
-**v0.3 change:** The modifier field has been widened from 3 to 4 bits to accommodate wave reduce sub-opcodes (values 8-13). The flags field is reduced from 3 to 2 bits. WAVE_REDUCE_FLAG and NON_RETURNING_ATOMIC_FLAG have been eliminated -- wave reduce types are encoded directly in the modifier, and non-returning atomics are detected via the rd==0 convention.
+**v0.4 change:** Bits [3:0] of word0 have been repurposed for predicate encoding. The scope field has been moved to word1 for instructions that need it. The flags field has been eliminated.
 
 | Bits | Field | Description |
 |---|---|---|
-| [47:40] | opcode | 8 bits -- 256 primary opcodes |
-| [39:32] | rd | 8 bits -- destination register (0-255). rd==0 on atomics indicates non-returning variant. |
-| [31:24] | rs1 | 8 bits -- source register 1 (0-255) |
-| [23:16] | rs2 | 8 bits -- source register 2 (0-255) |
-| [15:11] | reserved | 5 bits -- reserved, must be zero |
-| [10:7] | modifier | 4 bits -- instruction-specific sub-opcode (0-15) |
-| [6:5] | scope | 2 bits -- memory scope (00=wave, 01=workgroup, 10=device, 11=system) |
-| [4:3] | pred | 2 bits -- predicate register selector (p0-p3) |
+| [31:24] | opcode | 8 bits -- operation class |
+| [23:16] | rd | 8 bits -- destination register (0-255). rd==0 on atomics indicates non-returning variant. |
+| [15:8] | rs1 | 8 bits -- source register 1 (0-255) |
+| [7:4] | modifier | 4 bits -- instruction-specific sub-opcode (0-15) |
+| [3] | reserved | 1 bit -- reserved, must be zero |
 | [2] | pred_neg | 1 bit -- negate predicate (0=normal, 1=negated) |
-| [1:0] | flags | 2 bits -- instruction-specific flags |
+| [1:0] | pred_reg | 2 bits -- predicate register index (0=p0, 1=p1, 2=p2, 3=p3) |
 
-### 8.3 Extended Instruction Format (80-bit)
+Predicate encoding: when pred_reg=0 and pred_neg=0, the instruction is unconditional (no predicate). When pred_reg is nonzero, the instruction executes only if the specified predicate register is true (or false, if pred_neg=1). For example, `@p1` sets pred_reg=1, pred_neg=0; `@!p2` sets pred_reg=2, pred_neg=1.
 
-For instructions requiring a third source register or a 32-bit immediate:
+### 8.3 Word1 Format (32-bit, Extended)
 
-- **Word 0** (48 bits): Base instruction as above, with flags indicating extended format
-- **Word 1** (32 bits): [31:0] rs3 (8 bits) + imm24, or full imm32
+For instructions needing additional source registers, an immediate, or a memory scope, the opcode determines that a second 32-bit word follows:
+
+| Bits | Field | Description |
+|---|---|---|
+| [31:24] | rs2 | 8 bits -- source register 2 (0-255) |
+| [23:16] | rs3 | 8 bits -- source register 3 (0-255) |
+| [15:8] | rs4 | 8 bits -- source register 4 (0-255) |
+| [7:2] | reserved | 6 bits -- reserved, must be zero |
+| [1:0] | scope | 2 bits -- memory scope (00=wave, 01=workgroup, 10=device, 11=system) |
+
+Alternatively, the entire word1 can serve as a 32-bit immediate value (e.g., for `mov_imm`). The opcode in word0 determines interpretation.
 
 ### 8.4 Opcode Map
 
-The 8-bit opcode field provides 256 primary opcodes, organized as:
+The 8-bit opcode field provides 256 primary opcodes. The following table shows the actual opcode assignments as implemented:
 
 | Range | Category |
 |---|---|
-| 0x00-0x0F | Integer arithmetic |
-| 0x10-0x1F | Floating-point arithmetic (F32) |
-| 0x20-0x27 | Bitwise operations |
-| 0x28-0x2F | Comparison and select |
-| 0x30-0x37 | Local memory operations |
-| 0x38-0x3F | Device memory operations |
-| 0x40-0x4F | Atomic operations |
-| 0x50-0x5F | Wave operations |
-| 0x60-0x6F | Control flow and synchronization |
-| 0x70-0x7F | Type conversion |
-| 0x80-0x8F | F16 arithmetic |
-| 0x90-0x9F | F64 arithmetic (optional) |
-| 0xA0-0xAF | Matrix MMA (optional) |
-| 0xB0-0xEF | Reserved for future extensions |
-| 0xF0-0xFF | Miscellaneous (mov, mov_imm, nop, halt) |
+| 0x00-0x0B | Integer arithmetic (iadd, isub, imul, imul_hi, imad, idiv, imod, ineg, iabs, imin, imax, iclamp) |
+| 0x10-0x1F | Floating-point arithmetic: F32 (0x10-0x1A), FUnaryOps (0x1B), F16 (0x1C), F16Packed (0x1D), F64 (0x1E), F64DivSqrt (0x1F) |
+| 0x20-0x27 | Bitwise operations (and, or, xor, not, shl, shr, sar, bitops) |
+| 0x28-0x2C | Comparison, select, conversion (icmp, ucmp, fcmp, select, cvt) |
+| 0x2D-0x2E | BF16 arithmetic (bf16ops, bf16packed) |
+| 0x30-0x31 | Local memory (local_load, local_store) |
+| 0x38-0x39 | Device memory (device_load, device_store) |
+| 0x3C-0x3D | Atomic operations (local_atomic, device_atomic) |
+| 0x3E | Wave operations (modifier selects: shuffle, shuffle_up, shuffle_down, shuffle_xor, broadcast, ballot, any, all) |
+| 0x3F | Control flow and synchronization. ControlOp modifier 0-7: if, else, endif, loop, break, continue, endloop, call. SyncOp modifier 8-15 (offset by SYNC_MODIFIER_OFFSET=8): return, halt, barrier, fence_acquire, fence_release, fence_acq_rel, wait, nop. |
+| 0x40 | MMA operations (modifier selects: mma_load_a, mma_load_b, mma_store_c, mma_compute) |
+| 0x41 | Misc operations (modifier selects: mov, mov_imm, mov_sr) |
 
 See Appendix A for the complete opcode-to-mnemonic mapping.
 
@@ -814,7 +817,7 @@ This specification has been validated through a reference toolchain (assembler, 
 | 0.1 | 2026-03-22 | Initial draft |
 | 0.2 | 2026-03-23 | Register encoding widened to 8-bit; minimum divergence depth specified (32); predicate negation on break/continue clarified; per-Wave control flow state required; full opcode table added; deterministic execution guarantee added; barrier divergence restriction documented; integer overflow and division semantics specified; conformance test suite (102 tests) referenced |
 | 0.3 | 2026-03-29 | Widened modifier field from 3 to 4 bits. Eliminated WAVE_REDUCE_FLAG and NON_RETURNING_ATOMIC_FLAG. Added intra-wave shuffle as 11th mandatory primitive. Documented three-vendor hardware verification (Apple M4 Pro, NVIDIA T4, AMD MI300X). |
-| 0.4 | 2026-03-31 | Clarified type conversion naming convention (cvt_A_B: B→A). Fixed emulator CVT direction bug. Added neural network training verification (MNIST, 11 kernels, gradients match PyTorch). |
+| 0.4 | 2026-04-03 | Fixed predicate encoding (Defect 4): repurposed word0 bits [3:0] for pred_reg and pred_neg. Moved scope to word1. Added Opcode::Misc (0x41). SyncOp modifier offset (+8). Clarified CVT naming convention. Fixed emulator CVT direction bug. Added neural network training verification. |
 
 ---
 

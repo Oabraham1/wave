@@ -6,30 +6,27 @@
 //! Mirrors the exact opcode assignments from wave-asm to ensure
 //! consistency between assembler, disassembler, and emulator.
 
-pub const OPCODE_SHIFT: u32 = 26;
-pub const OPCODE_MASK: u32 = 0x3F;
-pub const RD_SHIFT: u32 = 21;
-pub const RD_MASK: u32 = 0x1F;
-pub const RS1_SHIFT: u32 = 16;
-pub const RS1_MASK: u32 = 0x1F;
-pub const RS2_SHIFT: u32 = 11;
-pub const RS2_MASK: u32 = 0x1F;
-pub const MODIFIER_SHIFT: u32 = 7;
+pub const OPCODE_SHIFT: u32 = 24;
+pub const OPCODE_MASK: u32 = 0xFF;
+pub const RD_SHIFT: u32 = 16;
+pub const RD_MASK: u32 = 0xFF;
+pub const RS1_SHIFT: u32 = 8;
+pub const RS1_MASK: u32 = 0xFF;
+pub const MODIFIER_SHIFT: u32 = 4;
 pub const MODIFIER_MASK: u32 = 0x0F;
-pub const SCOPE_SHIFT: u32 = 5;
-pub const SCOPE_MASK: u32 = 0x03;
-pub const PRED_SHIFT: u32 = 3;
-pub const PRED_MASK: u32 = 0x03;
+pub const PRED_REG_SHIFT: u32 = 0;
+pub const PRED_REG_MASK: u32 = 0x03;
 pub const PRED_NEG_SHIFT: u32 = 2;
 pub const PRED_NEG_MASK: u32 = 0x01;
-pub const FLAGS_SHIFT: u32 = 0;
-pub const FLAGS_MASK: u32 = 0x03;
-pub const EXTENDED_RS3_SHIFT: u32 = 27;
-pub const EXTENDED_RS3_MASK: u32 = 0x1F;
-pub const EXTENDED_RS4_SHIFT: u32 = 22;
-pub const EXTENDED_RS4_MASK: u32 = 0x1F;
-pub const SYNC_OP_FLAG: u8 = 0x01;
-pub const MISC_OP_FLAG: u8 = 0x02;
+pub const EXTENDED_RS2_SHIFT: u32 = 24;
+pub const EXTENDED_RS2_MASK: u32 = 0xFF;
+pub const EXTENDED_RS3_SHIFT: u32 = 16;
+pub const EXTENDED_RS3_MASK: u32 = 0xFF;
+pub const EXTENDED_RS4_SHIFT: u32 = 8;
+pub const EXTENDED_RS4_MASK: u32 = 0xFF;
+pub const EXTENDED_SCOPE_SHIFT: u32 = 0;
+pub const EXTENDED_SCOPE_MASK: u32 = 0x03;
+pub const SYNC_MODIFIER_OFFSET: u8 = 8;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Opcode {
@@ -61,6 +58,8 @@ pub enum Opcode {
     F16PackedOps = 0x1D,
     F64Ops = 0x1E,
     F64DivSqrt = 0x1F,
+    Bf16Ops = 0x2D,
+    Bf16PackedOps = 0x2E,
     And = 0x20,
     Or = 0x21,
     Xor = 0x22,
@@ -82,6 +81,8 @@ pub enum Opcode {
     DeviceAtomic = 0x3D,
     WaveOp = 0x3E,
     Control = 0x3F,
+    Mma = 0x40,
+    Misc = 0x41,
 }
 impl Opcode {
     #[must_use]
@@ -115,6 +116,8 @@ impl Opcode {
             0x1D => Some(Self::F16PackedOps),
             0x1E => Some(Self::F64Ops),
             0x1F => Some(Self::F64DivSqrt),
+            0x2D => Some(Self::Bf16Ops),
+            0x2E => Some(Self::Bf16PackedOps),
             0x20 => Some(Self::And),
             0x21 => Some(Self::Or),
             0x22 => Some(Self::Xor),
@@ -136,6 +139,8 @@ impl Opcode {
             0x3D => Some(Self::DeviceAtomic),
             0x3E => Some(Self::WaveOp),
             0x3F => Some(Self::Control),
+            0x40 => Some(Self::Mma),
+            0x41 => Some(Self::Misc),
             _ => None,
         }
     }
@@ -143,17 +148,48 @@ impl Opcode {
     pub fn is_extended(self) -> bool {
         matches!(
             self,
-            Self::Imad
+            Self::Iadd
+                | Self::Isub
+                | Self::Imul
+                | Self::ImulHi
+                | Self::Imad
+                | Self::Idiv
+                | Self::Imod
+                | Self::Imin
+                | Self::Imax
                 | Self::Iclamp
+                | Self::Fadd
+                | Self::Fsub
+                | Self::Fmul
                 | Self::Fma
+                | Self::Fdiv
+                | Self::Fmin
+                | Self::Fmax
                 | Self::Fclamp
                 | Self::F16Ops
                 | Self::F16PackedOps
                 | Self::F64Ops
+                | Self::F64DivSqrt
+                | Self::Bf16Ops
+                | Self::Bf16PackedOps
+                | Self::And
+                | Self::Or
+                | Self::Xor
+                | Self::Shl
+                | Self::Shr
+                | Self::Sar
                 | Self::BitOps
+                | Self::Icmp
+                | Self::Ucmp
+                | Self::Fcmp
+                | Self::Select
+                | Self::LocalStore
+                | Self::DeviceStore
                 | Self::LocalAtomic
                 | Self::DeviceAtomic
                 | Self::Control
+                | Self::Mma
+                | Self::Misc
         )
     }
 }
@@ -262,6 +298,61 @@ impl F16PackedOp {
             Self::Hadd2 => "hadd2",
             Self::Hmul2 => "hmul2",
             Self::Hma2 => "hma2",
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Bf16Op {
+    Badd = 0,
+    Bsub = 1,
+    Bmul = 2,
+    Bma = 3,
+}
+impl Bf16Op {
+    #[must_use]
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Badd),
+            1 => Some(Self::Bsub),
+            2 => Some(Self::Bmul),
+            3 => Some(Self::Bma),
+            _ => None,
+        }
+    }
+    #[must_use]
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            Self::Badd => "badd",
+            Self::Bsub => "bsub",
+            Self::Bmul => "bmul",
+            Self::Bma => "bma",
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Bf16PackedOp {
+    Badd2 = 0,
+    Bmul2 = 1,
+    Bma2 = 2,
+}
+impl Bf16PackedOp {
+    #[must_use]
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Badd2),
+            1 => Some(Self::Bmul2),
+            2 => Some(Self::Bma2),
+            _ => None,
+        }
+    }
+    #[must_use]
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            Self::Badd2 => "badd2",
+            Self::Bmul2 => "bmul2",
+            Self::Bma2 => "bma2",
         }
     }
 }
@@ -401,6 +492,8 @@ pub enum CvtType {
     F16F32 = 5,
     F32F64 = 6,
     F64F32 = 7,
+    F32Bf16 = 8,
+    Bf16F32 = 9,
 }
 impl CvtType {
     #[must_use]
@@ -414,6 +507,8 @@ impl CvtType {
             5 => Some(Self::F16F32),
             6 => Some(Self::F32F64),
             7 => Some(Self::F64F32),
+            8 => Some(Self::F32Bf16),
+            9 => Some(Self::Bf16F32),
             _ => None,
         }
     }
@@ -428,6 +523,8 @@ impl CvtType {
             Self::F16F32 => "cvt_f16_f32",
             Self::F32F64 => "cvt_f32_f64",
             Self::F64F32 => "cvt_f64_f32",
+            Self::F32Bf16 => "cvt_f32_bf16",
+            Self::Bf16F32 => "cvt_bf16_f32",
         }
     }
 }
@@ -710,7 +807,62 @@ impl MiscOp {
         }
     }
 }
-pub const SPECIAL_REGISTER_NAMES: [&str; 16] = [
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MmaPrecision {
+    F16 = 0,
+    Bf16 = 1,
+    F32 = 2,
+}
+impl MmaPrecision {
+    #[must_use]
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::F16),
+            1 => Some(Self::Bf16),
+            2 => Some(Self::F32),
+            _ => None,
+        }
+    }
+    #[must_use]
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::F16 => "f16",
+            Self::Bf16 => "bf16",
+            Self::F32 => "f32",
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MmaOp {
+    LoadA = 0,
+    LoadB = 1,
+    StoreC = 2,
+    Compute = 3,
+}
+impl MmaOp {
+    #[must_use]
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::LoadA),
+            1 => Some(Self::LoadB),
+            2 => Some(Self::StoreC),
+            3 => Some(Self::Compute),
+            _ => None,
+        }
+    }
+    #[must_use]
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            Self::LoadA => "mma_load_a",
+            Self::LoadB => "mma_load_b",
+            Self::StoreC => "mma_store_c",
+            Self::Compute => "mma_compute",
+        }
+    }
+}
+pub const SPECIAL_REGISTER_NAMES: [&str; 20] = [
     "sr_thread_id_x",
     "sr_thread_id_y",
     "sr_thread_id_z",
@@ -727,6 +879,10 @@ pub const SPECIAL_REGISTER_NAMES: [&str; 16] = [
     "sr_grid_size_z",
     "sr_wave_width",
     "sr_num_waves",
+    "sr_mma_supported",
+    "sr_mma_m",
+    "sr_mma_n",
+    "sr_mma_k",
 ];
 #[must_use]
 pub fn special_register_name(index: u8) -> Option<&'static str> {

@@ -1,0 +1,129 @@
+; Copyright 2026 Ojima Abraham
+; SPDX-License-Identifier: Apache-2.0
+;
+; MMA-accelerated GEMM: C = A * B (32x32, F32)
+;
+; Uses fragment-based MMA instructions with 4x4x4 tile size.
+; Each thread in an 8x8 workgroup computes one 4x4 output tile.
+; For each k-tile (k=0..7), loads A[ty*4..+3][k*4..+3] and
+; B[k*4..+3][tx*4..+3] into per-thread shared memory, then uses
+; mma_load/compute/store.
+;
+; Memory layout (row-major, F32):
+;   device offset 0:    A (32x32 = 4096 bytes)
+;   device offset 4096: B (32x32 = 4096 bytes)
+;   device offset 8192: C (32x32 = 4096 bytes)
+;
+; Per-thread shared memory (192 bytes each, 64 threads):
+;   frag_a: A fragment (4x4 = 64 bytes)
+;   frag_b: B fragment (4x4 = 64 bytes)
+;   frag_c: C fragment (4x4 = 64 bytes)
+; Total local memory: 64 * 192 = 12288 bytes
+;
+.kernel gemm_mma
+.registers 32
+.workgroup_size 8, 8, 1
+.local_memory 12288
+
+    mov_sr r0, sr_thread_id_x
+    mov_sr r1, sr_thread_id_y
+
+    mov_imm r2, 8
+    imul r3, r1, r2
+    iadd r3, r3, r0
+    mov_imm r2, 192
+    imul r4, r3, r2
+    mov_imm r2, 64
+    iadd r5, r4, r2
+    mov_imm r2, 128
+    iadd r6, r4, r2
+
+    mov_imm r7, 32
+    mov_imm r8, 4
+    mov_imm r9, 16
+    mov_imm r14, 4096
+    mov_imm r15, 8192
+    mov_imm r16, 16
+    mov_imm r17, 1
+
+    imul r11, r1, r8
+    imul r12, r0, r8
+
+    mov_imm r10, 0
+loop
+    icmp_ge p0, r10, r7
+    break p0
+
+    mov_imm r13, 0
+loop
+    icmp_ge p0, r13, r16
+    break p0
+
+    idiv r18, r13, r8
+    imod r19, r13, r8
+
+    iadd r20, r11, r18
+    imul r20, r20, r7
+    iadd r21, r10, r19
+    iadd r20, r20, r21
+    imul r20, r20, r8
+    device_load_u32 r22, r20
+
+    imul r23, r13, r8
+    iadd r24, r23, r4
+    local_store_u32 r24, r22
+
+    iadd r20, r10, r18
+    imul r20, r20, r7
+    iadd r21, r12, r19
+    iadd r20, r20, r21
+    imul r20, r20, r8
+    iadd r20, r20, r14
+    device_load_u32 r22, r20
+
+    iadd r24, r23, r5
+    local_store_u32 r24, r22
+
+    iadd r13, r13, r17
+endloop
+
+    barrier
+
+    mma_load_a r0, r4, r9
+    mma_load_b r0, r5, r9
+
+    mma_compute r0, r0, r0
+
+    iadd r10, r10, r8
+    barrier
+endloop
+
+    mma_store_c r6, r9, r0
+
+    barrier
+
+    mov_imm r13, 0
+loop
+    icmp_ge p0, r13, r16
+    break p0
+
+    imul r18, r13, r8
+    iadd r19, r18, r6
+    local_load_u32 r20, r19
+
+    idiv r21, r13, r8
+    imod r22, r13, r8
+
+    iadd r23, r11, r21
+    imul r23, r23, r7
+    iadd r24, r12, r22
+    iadd r23, r23, r24
+    imul r23, r23, r8
+    iadd r23, r23, r15
+    device_store_u32 r23, r20
+
+    iadd r13, r13, r17
+endloop
+
+    halt
+.end
