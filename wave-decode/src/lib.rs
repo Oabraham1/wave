@@ -16,7 +16,6 @@ pub use instruction::{DecodedInstruction, Operation};
 pub use opcodes::{
     special_register_name, AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType,
     F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, MmaPrecision,
-    Opcode,
-    Scope, SyncOp, WaveOpType, WaveReduceType, SPECIAL_REGISTER_NAMES,
+    Opcode, Scope, SyncOp, WaveOpType, WaveReduceType, SPECIAL_REGISTER_NAMES,
 };
 pub use wbin::{KernelInfo, WbinError, WbinFile, WbinHeader, WBIN_MAGIC, WBIN_VERSION};

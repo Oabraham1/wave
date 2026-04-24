@@ -7,8 +7,8 @@
 
 use crate::opcodes::{
     AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp,
-    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, Opcode, Scope, SyncOp,
-    WaveOpType, WaveReduceType,
+    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, Opcode, Scope, SyncOp, WaveOpType,
+    WaveReduceType,
 };
 
 /// A fully decoded WAVE instruction

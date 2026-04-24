@@ -8,12 +8,11 @@
 use crate::instruction::{DecodedInstruction, Operation};
 use crate::opcodes::{
     AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp,
-    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, Opcode, Scope, SyncOp,
-    WaveOpType, WaveReduceType, EXTENDED_RS2_MASK, EXTENDED_RS2_SHIFT, EXTENDED_RS3_MASK,
-    EXTENDED_RS3_SHIFT, EXTENDED_RS4_MASK, EXTENDED_RS4_SHIFT, EXTENDED_SCOPE_MASK,
-    EXTENDED_SCOPE_SHIFT, MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_MASK, OPCODE_SHIFT,
-    PRED_NEG_MASK, PRED_NEG_SHIFT, PRED_REG_MASK, PRED_REG_SHIFT, RD_MASK, RD_SHIFT,
-    RS1_MASK, RS1_SHIFT, SYNC_MODIFIER_OFFSET,
+    F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, MmaOp, Opcode, Scope, SyncOp, WaveOpType,
+    WaveReduceType, EXTENDED_RS2_MASK, EXTENDED_RS2_SHIFT, EXTENDED_RS3_MASK, EXTENDED_RS3_SHIFT,
+    EXTENDED_RS4_MASK, EXTENDED_RS4_SHIFT, EXTENDED_SCOPE_MASK, EXTENDED_SCOPE_SHIFT,
+    MODIFIER_MASK, MODIFIER_SHIFT, OPCODE_MASK, OPCODE_SHIFT, PRED_NEG_MASK, PRED_NEG_SHIFT,
+    PRED_REG_MASK, PRED_REG_SHIFT, RD_MASK, RD_SHIFT, RS1_MASK, RS1_SHIFT, SYNC_MODIFIER_OFFSET,
 };
 use thiserror::Error;
 
@@ -84,8 +83,7 @@ impl<'a> Decoder<'a> {
             offset,
         })?;
 
-        let operation =
-            self.decode_operation(opcode, rd, rs1, modifier, offset)?;
+        let operation = self.decode_operation(opcode, rd, rs1, modifier, offset)?;
 
         let size = if self.offset > offset + 4 { 8 } else { 4 };
 
@@ -654,12 +652,11 @@ impl<'a> Decoder<'a> {
             Opcode::Misc => self.decode_misc(rd, rs1, modifier, offset)?,
 
             Opcode::Mma => {
-                let mma_op =
-                    MmaOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
-                        opcode,
-                        modifier,
-                        offset,
-                    })?;
+                let mma_op = MmaOp::from_u8(modifier).ok_or(DecodeError::InvalidModifier {
+                    opcode,
+                    modifier,
+                    offset,
+                })?;
                 let word1 = self.read_u32();
                 let rs2 = ((word1 >> EXTENDED_RS2_SHIFT) & EXTENDED_RS2_MASK) as u8;
                 match mma_op {
