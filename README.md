@@ -12,8 +12,6 @@ WAVE is a vendor-neutral GPU instruction set architecture. Write GPU code once, 
 ## Highlights
 
 - **11** hardware-invariant primitives across 4 GPU vendors
-- **34,000** lines of Rust across 10 crates
-- **618+** unit tests, **102/102** conformance tests passing
 - **Verified** on Apple M4 Pro, NVIDIA T4, and AMD MI300X
 - **3,587 GFLOPS** F32 matrix multiply on M4 Pro (53.5% of Apple MPS)
 - **89.29%** CIFAR-10 accuracy via PyTorch integration, matching native exactly
