@@ -1,11 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! TypeScript kernel parser producing HIR.
-//!
-//! Parses a subset of TypeScript suitable for GPU kernels using
-//! line-based parsing. Supports function definitions with type
-//! annotations, arithmetic, if/else, and array indexing.
+//! TypeScript kernel parser producing HIR. Parses a subset of TypeScript suitable for GPU
+//! kernels using line-based parsing. Supports function definitions with type annotations,
+//! arithmetic, if/else, and array indexing.
 
 use crate::diagnostics::CompileError;
 use crate::hir::expr::{BinOp, Dimension, Expr, Literal};
@@ -24,6 +22,7 @@ pub fn parse_typescript(source: &str) -> Result<Kernel, CompileError> {
     parser.parse_kernel()
 }
 
+#[derive(Debug)]
 struct TsParser<'a> {
     lines: &'a [&'a str],
     pos: usize,
@@ -73,10 +72,13 @@ impl<'a> TsParser<'a> {
             })?;
         let name = after_func[..paren_start].trim().to_string();
 
-        let paren_end = line.find(')').ok_or_else(|| CompileError::ParseError {
-            message: "expected ')'".into(),
-        })?;
-        let params_str = &line[line.find('(').unwrap() + 1..paren_end];
+        let parameters = &after_func[paren_start + 1..];
+        let (params_str, _) =
+            parameters
+                .split_once(')')
+                .ok_or_else(|| CompileError::ParseError {
+                    message: "expected ')' after function parameters".into(),
+                })?;
         let params = Self::parse_params(params_str);
 
         self.pos += 1;
@@ -223,11 +225,19 @@ impl<'a> TsParser<'a> {
         let rhs = line[eq_pos + 1..].trim();
         let value = parse_ts_expr(rhs)?;
 
-        if lhs.contains('[') {
-            let bracket_pos = lhs.find('[').unwrap();
-            let bracket_end = lhs.find(']').unwrap();
-            let base_name = lhs[..bracket_pos].trim();
-            let index_str = &lhs[bracket_pos + 1..bracket_end];
+        if let Some((base_name, subscript)) = lhs.split_once('[') {
+            let (index_str, suffix) =
+                subscript
+                    .split_once(']')
+                    .ok_or_else(|| CompileError::ParseError {
+                        message: format!("missing closing bracket in assignment: {lhs}"),
+                    })?;
+            if !suffix.trim().is_empty() {
+                return Err(CompileError::ParseError {
+                    message: format!("unexpected text after subscript: {suffix}"),
+                });
+            }
+            let base_name = base_name.trim();
             let base = Expr::Var(base_name.to_string());
             let index = parse_ts_expr(index_str)?;
             let offset = Expr::BinOp {
@@ -355,13 +365,17 @@ function vectorAdd(a: f32[], b: f32[], out: f32[], n: u32) {
 
     #[test]
     fn test_parse_ts_simple() {
-        let source = r#"
+        let source = r"
 function test(n: u32) {
     const x = 42;
 }
-"#;
+";
         let kernel = parse_typescript(source).unwrap();
         assert_eq!(kernel.name, "test");
         assert_eq!(kernel.body.len(), 1);
+    }
+    #[test]
+    fn malformed_subscript_returns_an_error() {
+        assert!(parse_typescript("function broken(a: number[]) {\n a[0 = 1;\n}").is_err());
     }
 }

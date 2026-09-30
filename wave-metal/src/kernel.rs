@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Kernel wrapper generation. Emits the Metal Shading Language boilerplate that
-//!
-//! surrounds translated WAVE code: the #include directives, helper inline functions
-//! for float bitcasting (rf/ri) and half-precision conversion (rh/rhi/rh2/rh2i),
-//! and the kernel function signature with all Metal built-in parameter bindings.
+//! Generate Metal kernel declarations and conversion helpers.
 
 #[must_use]
 pub fn emit_file_header() -> String {

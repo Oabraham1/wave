@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Error reporting with source context.
-//!
-//! Formats compiler errors with the relevant source line and
-//! a caret pointing to the error location.
+//! Error reporting with source context. Formats compiler errors with the relevant source line
+//! and a caret pointing to the error location.
 
 use std::fmt::Write;
 
@@ -32,7 +30,7 @@ pub fn format_error(
     if let (Some(map), Some(loc)) = (source_map, loc) {
         if let Some(line) = map.get_line(loc.line) {
             let _ = writeln!(out, " {} | {}", loc.line, line);
-            let padding = format!("{}", loc.line).len() + 3 + (loc.col as usize - 1);
+            let padding = format!("{}", loc.line).len() + 3 + (loc.col - 1);
             let _ = writeln!(out, "{}^", " ".repeat(padding));
         }
     }

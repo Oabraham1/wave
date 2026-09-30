@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for individual instruction codegen. Constructs minimal WBIN files with
-//!
-//! specific WAVE instructions, compiles them to MSL, and verifies the output contains
-//! the expected Metal code fragments. Tests cover integer arithmetic, float operations,
-//! bitwise ops, memory access, control flow, special registers, and wave intrinsics.
+//! Check Metal output for individual WAVE instructions.
 
 use wave_metal::compile;
 
@@ -18,13 +14,20 @@ const EXTENDED_RS3_SHIFT: u32 = 16;
 const EXTENDED_SCOPE_SHIFT: u32 = 0;
 const SYNC_MODIFIER_OFFSET: u8 = 8;
 
-fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred_reg: u8, pred_neg: bool) -> u32 {
+fn encode_word0(
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    modifier: u8,
+    pred_reg: u8,
+    negate_predicate: bool,
+) -> u32 {
     (u32::from(opcode) << OPCODE_SHIFT)
         | (u32::from(rd) << RD_SHIFT)
         | (u32::from(rs1) << RS1_SHIFT)
         | (u32::from(modifier) << MODIFIER_SHIFT)
         | u32::from(pred_reg & 0x03)
-        | if pred_neg { 1 << 2 } else { 0 }
+        | if negate_predicate { 1 << 2 } else { 0 }
 }
 
 fn encode_ext(rs2: u8) -> u32 {
@@ -39,14 +42,14 @@ fn encode_ext_scope(rs2: u8, scope: u8) -> u32 {
     (u32::from(rs2) << EXTENDED_RS2_SHIFT) | (u32::from(scope) << EXTENDED_SCOPE_SHIFT)
 }
 
-/// Single-word instruction (4 bytes) - no predicate
+/// Single-word instruction, 4 bytes, - no predicate
 fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8) -> Vec<u8> {
     encode_word0(opcode, rd, rs1, modifier, 0, false)
         .to_le_bytes()
         .to_vec()
 }
 
-/// Extended instruction (8 bytes: word0 + word1 with rs2) - no predicate
+/// Extended instruction, 8 bytes: word0 + word1 with rs2, - no predicate
 fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> Vec<u8> {
     let mut v = encode_word0(opcode, rd, rs1, modifier, 0, false)
         .to_le_bytes()
@@ -64,8 +67,8 @@ fn extended_scope(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8, scope: u8)
     v
 }
 
-/// Halt instruction: Control opcode 0x3F, modifier = Halt(1) + SYNC_MODIFIER_OFFSET(8) = 9
-/// Halt does NOT read word1 in the decoder (single-word sync op)
+/// Halt instruction: Control opcode 0x3F, modifier = Halt(1) + `SYNC_MODIFIER_OFFSET(8)` = 9
+/// Halt does NOT read word1 in the decoder, single-word sync op
 fn halt_instruction() -> Vec<u8> {
     single(0x3F, 0, 0, 1 + SYNC_MODIFIER_OFFSET)
 }
@@ -75,9 +78,9 @@ fn build_wbin(kernel_name: &str, reg_count: u32, local_mem: u32, code: &[u8]) ->
     let name_bytes: Vec<u8> = kernel_name.bytes().chain(std::iter::once(0)).collect();
 
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -389,7 +392,7 @@ fn test_bitrev() {
 
 #[test]
 fn test_mov() {
-    // Misc opcode 0x41, modifier=0 (Mov) - Mov does NOT read word1
+    // Misc opcode 0x41, modifier=0, Mov, - Mov does NOT read word1
     let code = single(0x41, 5, 3, 0);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = r3;"), "MSL: {msl}");
@@ -397,7 +400,7 @@ fn test_mov() {
 
 #[test]
 fn test_mov_imm() {
-    // Misc opcode 0x41, modifier=1 (MovImm) - reads word1 as immediate
+    // Misc opcode 0x41, modifier=1, MovImm, - reads word1 as immediate
     let mut code = encode_word0(0x41, 5, 0, 1, 0, false).to_le_bytes().to_vec();
     code.extend_from_slice(&42u32.to_le_bytes());
     let msl = compile_instructions(&code);
@@ -406,7 +409,7 @@ fn test_mov_imm() {
 
 #[test]
 fn test_mov_sr_thread_id_x() {
-    // Misc opcode 0x41, modifier=2 (MovSr) - does NOT read word1
+    // Misc opcode 0x41, modifier=2, MovSr, - does NOT read word1
     let code = single(0x41, 5, 0, 2);
     let msl = compile_instructions(&code);
     assert!(msl.contains("r5 = (uint32_t)tid.x;"), "MSL: {msl}");
@@ -510,7 +513,7 @@ fn test_halt() {
 #[test]
 fn test_if_else_endif() {
     let mut code = Vec::new();
-    // Control::If = modifier 0, rs1=1 (predicate register) - does NOT read word1
+    // Control::If = modifier 0, rs1=1, predicate register, - does NOT read word1
     code.extend_from_slice(&single(0x3F, 0, 1, 0));
     code.extend_from_slice(&extended(0x00, 5, 3, 4, 0));
     // Control::Else = modifier 1 - does NOT read word1
@@ -519,8 +522,12 @@ fn test_if_else_endif() {
     // Control::Endif = modifier 2 - does NOT read word1
     code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
-    assert!(msl.contains("if (p1) {"), "MSL: {msl}");
-    assert!(msl.contains("} else {"), "MSL: {msl}");
+    assert!(
+        msl.contains("const bool _wave_condition_0 = p1;"),
+        "MSL: {msl}"
+    );
+    assert!(msl.contains("_wave_active = _wave_else_0;"), "MSL: {msl}");
+    assert!(msl.contains("_wave_active = _wave_entry_0;"), "MSL: {msl}");
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
     assert!(msl.contains("r5 = r1 + r2;"), "MSL: {msl}");
 }
@@ -548,7 +555,10 @@ fn test_predicated_instruction() {
     // Control::Endif = modifier 2
     code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
-    assert!(msl.contains("if (p1) {"), "MSL: {msl}");
+    assert!(
+        msl.contains("const bool _wave_condition_0 = p1;"),
+        "MSL: {msl}"
+    );
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
 }
 
@@ -561,7 +571,10 @@ fn test_predicated_negated() {
     // Control::Endif = modifier 2
     code.extend_from_slice(&single(0x3F, 0, 0, 2));
     let msl = compile_instructions(&code);
-    assert!(msl.contains("if (p2) {"), "MSL: {msl}");
+    assert!(
+        msl.contains("const bool _wave_condition_0 = p2;"),
+        "MSL: {msl}"
+    );
     assert!(msl.contains("r5 = r3 + r4;"), "MSL: {msl}");
 }
 
@@ -615,7 +628,22 @@ fn test_cvt_f32_u32() {
 fn test_wave_shuffle() {
     let code = extended(0x3E, 3, 1, 2, 0);
     let msl = compile_instructions(&code);
-    assert!(msl.contains("r3 = simd_shuffle(r1, r2);"), "MSL: {msl}");
+    assert!(
+        msl.contains("const uint32_t _wave_source_0 = r1;"),
+        "MSL: {msl}"
+    );
+    assert!(
+        msl.contains("select(lane_id, r2, _wave_active)"),
+        "MSL: {msl}"
+    );
+    assert!(
+        msl.contains("simd_shuffle(_wave_source_0, _wave_index_0)"),
+        "MSL: {msl}"
+    );
+    assert!(
+        msl.contains("r3 = select(r3, _wave_gathered_0, _wave_active);"),
+        "MSL: {msl}"
+    );
 }
 
 #[test]
@@ -708,16 +736,35 @@ fn test_device_atomic_add() {
 #[test]
 fn test_fence() {
     // FenceAcquire = SyncOp::FenceAcquire(3) + SYNC_MODIFIER_OFFSET(8) = 11
-    // Fences read word1 for scope; scope=1 (Workgroup) in word1 bits 0-1
+    // Fences read word1 for scope; scope=1, Workgroup, in word1 bits 0-1
     let mut code = encode_word0(0x3F, 0, 0, 3 + SYNC_MODIFIER_OFFSET, 0, false)
         .to_le_bytes()
         .to_vec();
     code.extend_from_slice(&(1u32 << EXTENDED_SCOPE_SHIFT).to_le_bytes());
     let msl = compile_instructions(&code);
     assert!(
-        msl.contains("threadgroup_barrier(mem_flags::mem_threadgroup);"),
+        msl.contains("atomic_thread_fence(mem_flags::mem_threadgroup | mem_flags::mem_device, memory_order_seq_cst, thread_scope_threadgroup);"),
         "MSL: {msl}"
     );
+    assert!(!msl.contains("threadgroup_barrier("));
+}
+
+#[test]
+fn system_fence_is_rejected() {
+    let mut code = single(0x3F, 0, 0, 3 + SYNC_MODIFIER_OFFSET);
+    code.extend_from_slice(&3u32.to_le_bytes());
+    let binary = build_wbin("system_fence", 8, 0, &code);
+    assert!(compile(&binary).is_err());
+}
+
+#[test]
+fn initial_arguments_only_initialize_declared_registers() {
+    let binary = build_wbin("arguments", 2, 0, &halt_instruction());
+    let msl = wave_metal::compile_with_initial_registers(&binary, &[7, 9, 11]).unwrap();
+    assert!(msl.contains("r0 = 7u;"));
+    assert!(msl.contains("r1 = 9u;"));
+    assert!(!msl.contains("r2 = 11u;"));
+    assert!(wave_metal::compile_with_initial_registers(&binary, &[0; 257]).is_err());
 }
 
 #[test]

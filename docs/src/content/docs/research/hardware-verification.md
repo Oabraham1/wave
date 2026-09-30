@@ -1,75 +1,32 @@
 ---
-title: Hardware Verification
-description: Verification results and methodology for WAVE across GPU vendors and architectures.
+title: "Hardware verification"
+description: "Hardware execution, independent references, and measurement scope."
 ---
 
-WAVE's correctness claim rests on end-to-end hardware verification: a single WAVE binary is compiled to each vendor's native GPU instruction format and executed on real hardware, and the output is compared against a known-correct reference.
+WAVE hardware verification includes Apple M4 Pro, NVIDIA T4, and AMD MI300X. The matched benchmark study described here measures Apple M4 Pro and NVIDIA T4 execution against independent references and native kernels.
 
-## Verification Results
+## Hardware experiments
 
-| Vendor | GPU | Architecture | Native Target | Status | Output |
-|--------|-----|--------------|---------------|--------|--------|
-| Apple | M4 Pro | Apple GPU (Unified) | Metal IR | **Verified** | `c[i] = 3i` |
-| NVIDIA | T4 | Turing | PTX | **Verified** | `c[i] = 3i` |
-| AMD | MI300X | CDNA 3 | GCN ISA | **Verified** | `c[i] = 3i` |
-| Intel | *(pending)* | Xe | *(pending)* | **Pending** | - |
+The experiments execute on an Apple M4 Pro and an NVIDIA Tesla T4. The [benchmark runners](https://github.com/Oabraham1/wave/tree/main/benchmarks/gpu) use the same WAVE binaries, input allocations, and references across both GPUs and the emulator. Matched native Metal and CUDA kernels use the same algorithms and dispatch geometry.
 
-All verified GPUs produce identical output for the same input binary.
+Both devices execute vector addition, divergent arithmetic, gather, uniform and skewed histograms, wave reductions, sparse matrix-vector multiplication and a five-point stencil. Validation checks the complete allocation, including inputs and guard regions. Floating-point inputs use bounded binary fractions with exact reference results. Non-finite outputs fail validation.
 
-## Test Kernel: `vector_add`
+A comparison runs WAVE, native Metal and Slang in five fresh Apple processes with randomized variant order. The paired reduction experiment compares shuffle and local-memory communication with the same arithmetic and output. Its largest case gives a local-memory-to-shuffle time ratio of 1.855, with a 95% interval of 1.813 to 1.919 across process estimates.
 
-The verification kernel is a straightforward vector addition:
+The [NVIDIA comparison](https://github.com/Oabraham1/wave/tree/main/benchmarks/gpu/nvidia) uses five separate processes on one T4 allocation and measures execution with CUDA events. WAVE-to-native ratios range from 0.934 to 1.019 across the nine workloads at the largest size. Every process checks an input that distinguishes separate arithmetic from fused multiply-add. Both execution paths produce the exact expected bits, and disassembly confirms matching arithmetic in the measured workloads. The runner uses a standalone Driver API harness.
 
-```
-// Pseudocode
-kernel vector_add(a: &[f32], b: &[f32], c: &mut [f32]) {
-    let i = global_thread_id();
-    c[i] = a[i] + b[i];
-}
+The separate [GEMM suite](https://github.com/Oabraham1/wave/tree/main/benchmarks/autotune) checks every output element against Accelerate SGEMM using the values stored in the input format. It reports the absolute and relative tolerance, errors, GPU timing samples, and workload configuration.
+
+## Source-to-device path
+
+The runtime example compiles a source kernel, translates its WAVE binary, dispatches it through Metal, and checks all outputs and unchanged inputs. Its sizes include incomplete workgroups and multiple workgroups.
+
+```sh
+cargo run --release --manifest-path wave-runtime/Cargo.toml --example metal_validation -- 3
 ```
 
-The input buffers are initialized so that `a[i] = i` and `b[i] = 2i` for every element. The expected output is therefore `c[i] = 3i` for all `i`.
+The Metal backend emits Metal Shading Language. The host compiles it through the Metal API. Runtime measurements include the host compiler and temporary-file path; device-only benchmarks use a resident harness with compilation outside the timed region.
 
-This kernel exercises several of WAVE's hardware-invariant primitive categories:
+## Scope
 
-- **Device (Global) Memory** - loads from `a` and `b`, store to `c`.
-- **Floating-Point Arithmetic** - the addition itself.
-- **Thread Identification** - mapping each thread to its global index.
-
-## Verification Methodology
-
-Verification proceeds in four stages:
-
-### 1. Compile
-
-The WAVE binary for `vector_add` is compiled ahead of time by `wave-compiler` into each vendor's native instruction format:
-
-- **Apple:** Metal IR, loaded via the Metal framework.
-- **NVIDIA:** PTX assembly, loaded via the CUDA Driver API.
-- **AMD:** GCN ISA binary, loaded via the ROCm/HIP runtime.
-
-### 2. Dispatch
-
-The host-side runtime (`wave-runtime`) allocates input and output buffers on the target GPU, uploads the input data (`a[i] = i`, `b[i] = 2i`), and dispatches the compiled kernel.
-
-### 3. Readback
-
-After the kernel completes, the runtime copies the output buffer `c` back to host memory.
-
-### 4. Validate
-
-Every element of the output buffer is compared against the reference value `c[i] = 3i`. Verification passes if and only if every element matches exactly. Floating-point equality is exact here because the inputs and expected outputs are all representable without rounding error in IEEE 754 single precision.
-
-## What "Verified" Means
-
-A GPU is marked **Verified** when:
-
-1. The `vector_add` WAVE binary compiles without error to the vendor's native format.
-2. The compiled kernel executes on real hardware (not an emulator or simulator).
-3. The output buffer matches the reference output element-for-element.
-
-Verification demonstrates that WAVE's portable encoding, the compiler's code generation for that target, and the runtime's dispatch and memory management all function correctly end to end. It does not by itself constitute a performance benchmark or a guarantee of correctness for all possible kernels - it is a necessary baseline that confirms the toolchain works on real silicon.
-
-## Pending Verification
-
-**Intel Xe** - WAVE includes a code generation path for Intel Xe GPUs, but hardware verification has not yet been performed. Contributions of verification results on Intel hardware are welcome. See the [Contributing](/research/contributing/) page for details.
+These measurements apply to the evaluated kernels, inputs, software, and devices. Full ISA conformance and performance across other workloads require separate checks. The matched benchmark study does not include AMD or Intel timings. See [Supported GPUs](/getting-started/supported-gpus/) for hardware coverage.

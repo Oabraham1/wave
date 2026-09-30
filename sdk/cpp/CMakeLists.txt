@@ -12,3 +12,13 @@ target_include_directories(wave PUBLIC include)
 
 add_executable(test_vector_add tests/test_vector_add.cpp)
 target_link_libraries(test_vector_add PRIVATE wave)
+
+# Keep test assertions active in release builds.
+if(MSVC)
+    target_compile_options(test_vector_add PRIVATE /UNDEBUG)
+else()
+    target_compile_options(test_vector_add PRIVATE -UNDEBUG)
+endif()
+
+enable_testing()
+add_test(NAME sdk_buffers COMMAND test_vector_add)

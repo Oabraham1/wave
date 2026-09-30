@@ -1,219 +1,184 @@
 ---
-title: Memory Model
-description: Understand WAVE's three memory levels, load/store operations, cache hints, atomics, fences, and memory scopes.
+title: "Memory model"
+description: "Registers, shared memory, device memory, atomics, and synchronization."
 ---
 
-WAVE exposes three distinct memory levels - registers, local memory, and device memory - each with different scope, latency, and capacity trade-offs.
+WAVE uses registers, local memory, and device memory. Their scope and synchronization requirements differ.
 
-## Memory Hierarchy at a Glance
+## Memory hierarchy at a glance
 
-```
-┌─────────────────────────────────────────────┐
-│              Device Memory                  │
-│         (global, GB scale, ~300 cycles)     │
-├─────────────────────────────────────────────┤
-│           Local Memory (per-workgroup)      │
-│       (shared, 48–96 KB, ~20 cycles)       │
-├──────────┬──────────┬──────────┬────────────┤
-│  Thread  │  Thread  │  Thread  │   ...      │
-│  r0–r31  │  r0–r31  │  r0–r31  │            │
-│  (1 cyc) │  (1 cyc) │  (1 cyc) │            │
-└──────────┴──────────┴──────────┴────────────┘
-```
+| Storage | Scope | Access |
+|---|---|---|
+| Registers | One thread | Register operands and wave operations |
+| Local memory | One workgroup | Byte addresses |
+| Device memory | Device allocation | Byte addresses |
 
-| Level | Scope | Addressable | Typical Size | Latency |
-|---|---|---|---|---|
-| Registers (`r0`–`r31`) | Per-thread | By name | 32 x 32-bit per thread | ~1 cycle |
-| Local memory | Per-workgroup | Byte-addressable | 48–96 KB | ~20 cycles |
-| Device memory | Global | 64-bit byte-addressable | GBs | ~300 cycles |
+Capacity, latency, and cache behavior depend on the target. Declare local memory with `.local_memory` and check the target's resource limits.
 
 ## Registers
 
-Each thread has its own set of 32 general-purpose registers (`r0`–`r31`). Registers are the fastest storage but the scarcest resource. Other threads cannot see your registers - they are completely private.
+Registers hold untyped 32-bit values. Instructions determine whether those bits represent integers, floats, or packed values. Threads exchange register values through wave operations.
 
 ```asm
-mov_imm r0, 100       ; immediate to register
-iadd    r2, r0, r1    ; register-to-register arithmetic
+mov_imm r0, 100
+iadd r2, r0, r1
 ```
 
-## Load and Store Operations
+## Load and store operations
 
 ### Widths
 
-Both `local_load`/`local_store` and `device_load`/`device_store` support five widths:
+Device loads and stores support `u8`, `u16`, `u32`, `u64`, and `u128`. Local loads and stores support `u8`, `u16`, `u32`, and `u64`.
 
-| Suffix | Width | Use case |
-|---|---|---|
-| `u8` | 8-bit | Byte-level data, characters |
-| `u16` | 16-bit | Half-precision floats, short integers |
-| `u32` | 32-bit | Standard floats and integers |
-| `u64` | 64-bit | Doubles, 64-bit addresses, pointers |
-| `u128` | 128-bit | Wide loads for throughput (4 packed floats) |
+Loads name the destination before the address. Stores name the address before the value:
 
 ```asm
-device_load.u32  r0, r1      ; load 32 bits from device address in r1
-device_load.u128 r0, r1      ; load 128 bits (fills r0–r3)
-local_load.u32   r0, r1      ; load 32 bits from local address in r1
-device_store.u64 r0, r1      ; store 64 bits (r0–r1) to device address
+device_load_u32 r0, r1       ; load from address r1 into r0
+device_load_u128 r4, r1      ; load four words into r4 through r7
+local_load_u32 r0, r1
+device_store_u64 r2, r4      ; store r4 and r5 at address r2
 ```
 
-### Cache Hints
+Multiword operations use consecutive registers. Keep the accessed range inside the allocation and satisfy the instruction's alignment requirements.
 
-Every device memory operation accepts an optional cache hint that controls caching behavior:
+### Cache hints
 
-| Hint | Value | Meaning |
-|---|---|---|
-| `cached` | 0 | Default. Use the cache hierarchy normally. |
-| `uncached` | 1 | Bypass caches. Use for data that will not be reused. |
-| `streaming` | 2 | Cache with low priority. Use for data accessed once in a streaming pattern. |
+Device operations accept cache hints:
+
+| Hint | Intent |
+|---|---|
+| `cached` | Reuse data through the cache hierarchy |
+| `uncached` | Request cache bypass |
+| `streaming` | Give streaming data lower cache priority |
 
 ```asm
-device_load.u32.cached    r0, r1   ; normal caching (default)
-device_load.u32.uncached  r0, r1   ; bypass cache
-device_load.u32.streaming r0, r1   ; streaming / low-priority cache
+device_load_u32.cached r0, r1
+device_load_u32.uncached r0, r1
+device_load_u32.streaming r0, r1
 ```
 
-**When to use each hint:**
-- Use `cached` (or omit the hint) for data that may be read multiple times.
-- Use `streaming` for large sequential scans where each element is touched once.
-- Use `uncached` for data written by other workgroups that you need to read fresh.
+Hints express cache policy. They do not replace atomic operations, fences, or barriers needed for synchronization. A backend maps them to the policies its target supports.
 
-## Local Memory (Shared Memory)
+## Local memory: shared memory
 
-Local memory is shared among all threads in a workgroup. It is small (48–96 KB), fast (~20 cycle latency), and byte-addressable. Common uses include:
-
-- Staging data from device memory for repeated access
-- Communication between threads in the same workgroup
-- Building partial results (e.g., reduction scratch space)
+Threads in a workgroup share local memory. Use it to exchange values, stage tiles, or store partial results.
 
 ```asm
-; Thread 0 writes a value; all threads in the workgroup can read it.
-mov_imm r0, 42
-local_store.u32 r0, r1          ; store r0 at local address r1
-
-barrier                          ; ensure all threads see the write
-
-local_load.u32 r2, r1           ; any thread can now load the value
+mov_sr r0, sr_thread_id_x
+mov_imm r1, 4
+imul r2, r0, r1
+local_store_u32 r2, r3
+barrier
+local_load_u32 r4, r2
 ```
 
-**Important:** You must insert a `barrier` between a local store and a local load from a different thread. Without the barrier, a thread may read stale or uninitialized data.
+The kernel must declare enough local memory for all participating threads. Insert a barrier before another thread reads the stored values.
 
-### Example: Cooperative Device-to-Local Tiling
+### Example: cooperative device-to-local tiling
 
-A common pattern is for each thread to load one element from device memory into local memory, synchronize, then have every thread read from the faster local copy:
+Each thread loads one word and stores it at its own local offset. After the barrier, threads may read the tile:
 
 ```asm
-; Each thread loads one element from device memory into local memory
-mov_sr  r0, sr_thread_id_x
-shl     r1, r0, 2               ; local byte offset = tid * 4
-iadd    r2, r10, r1             ; device address = base + offset
-device_load.u32 r3, r2          ; load from device memory
-local_store.u32 r3, r1          ; store into local memory
+mov_sr r0, sr_thread_id_x
+mov_imm r1, 4
+imul r2, r0, r1
+iadd r3, r10, r2
+device_load_u32 r4, r3
+local_store_u32 r2, r4
+barrier
 
-barrier                          ; wait for all threads to finish writing
-
-; Now every thread can read any element from local memory
-; e.g., read the neighbor's value
-iadd    r4, r0, 1               ; neighbor index = tid + 1
-shl     r5, r4, 2               ; neighbor byte offset
-local_load.u32 r6, r5           ; load neighbor's value from local memory
+; Read the next thread's value, wrapping at the workgroup boundary.
+mov_imm r5, 1
+iadd r6, r0, r5
+mov_sr r7, sr_workgroup_size_x
+imod r6, r6, r7
+imul r6, r6, r1
+local_load_u32 r8, r6
 ```
 
-## Atomic Operations
+Here `r10` contains the device tile's base offset. The allocation must contain one word per thread.
 
-Atomics perform read-modify-write on a single memory location indivisibly. They work on both local and device memory.
+## Atomic operations
 
-### Available Atomic Operations
+An atomic operation updates one memory location indivisibly. Local atomics use `local_atomic_*`; device atomics use `atomic_*` with a scope.
 
-| Operation | Syntax | Description |
-|---|---|---|
-| Add | `atomic_add` | `*addr += val` |
-| Sub | `atomic_sub` | `*addr -= val` |
-| Min | `atomic_min` | `*addr = min(*addr, val)` |
-| Max | `atomic_max` | `*addr = max(*addr, val)` |
-| And | `atomic_and` | `*addr &= val` |
-| Or | `atomic_or` | `*addr \|= val` |
-| Xor | `atomic_xor` | `*addr ^= val` |
-| Exchange | `atomic_exchange` | `old = *addr; *addr = val; return old` |
-| CAS | `atomic_cas` | Compare-and-swap |
+### Available atomic operations
+
+| Operation | Device mnemonic |
+|---|---|
+| Add | `atomic_add` |
+| Subtract | `atomic_sub` |
+| Minimum | `atomic_min` |
+| Maximum | `atomic_max` |
+| Bitwise AND | `atomic_and` |
+| Bitwise OR | `atomic_or` |
+| Bitwise XOR | `atomic_xor` |
+| Exchange | `atomic_exchange` |
+| Compare and swap | `atomic_cas` |
 
 ```asm
-; Atomically add r0 to the value at device address r1
-; Result (old value) returned in r2
-atomic_add r2, r1, r0
-
-; Compare-and-swap: if *r1 == r0, set *r1 = r3; old value in r2
-atomic_cas r2, r1, r0, r3
+atomic_add r2, r1, r0, .device
+atomic_cas r2, r1, r0, r3, .device
 ```
 
-## Memory Scopes
+Both examples return the previous value in `r2`. The compare-and-swap stores `r3` only when the value at address `r1` equals `r0`.
 
-Every atomic and fence operation has a **scope** that determines which threads are guaranteed to observe the effect:
+## Memory scopes
 
-| Scope | Value | Visibility |
-|---|---|---|
-| `wave` | 0 | Threads within the same wave |
-| `workgroup` | 1 | Threads within the same workgroup |
-| `device` | 2 | All threads on the GPU |
-| `system` | 3 | GPU and CPU (host) |
+A scope identifies the participants covered by an atomic operation or fence:
 
-Choose the narrowest scope that satisfies your correctness requirements. Wider scopes are more expensive because the hardware must flush or invalidate more caches.
+| Scope | Participants |
+|---|---|
+| `wave` | Lanes in one wave |
+| `workgroup` | Threads in one workgroup |
+| `device` | Threads on the device |
+| `system` | Device and host participants |
+
+Choose the scope required by the communication pattern and supported by the target.
 
 ## Fences
 
-Fences enforce ordering of memory operations without operating on a specific address. WAVE provides three fence types:
+Fences order memory operations. They do not wait for other threads to arrive.
 
-| Fence | Guarantees |
+| Fence | Ordering |
 |---|---|
-| `fence_acquire` | All loads after this fence see writes that happened before a matching release. |
-| `fence_release` | All writes before this fence are visible to threads that perform a matching acquire. |
-| `fence_acq_rel` | Both acquire and release semantics combined. |
-
-Each fence takes a scope:
+| `fence_acquire` | Acquire ordering |
+| `fence_release` | Release ordering |
+| `fence_acq_rel` | Acquire and release ordering |
 
 ```asm
-fence_release.workgroup     ; make all prior writes visible within the workgroup
-barrier                      ; synchronize threads
-fence_acquire.workgroup     ; see all writes from before the barrier
+fence_release .workgroup
+barrier
+fence_acquire .workgroup
 ```
 
-### When to Use Each Scope
+### When to use each scope
 
-- **`wave`**: Communication between lanes in the same wave (usually handled by wave ops instead).
-- **`workgroup`**: The most common scope. Use with `barrier` for local memory synchronization.
-- **`device`**: Cross-workgroup communication through device memory (e.g., global counters, producer-consumer between workgroups).
-- **`system`**: When the CPU needs to observe GPU writes, or vice versa (e.g., signaling completion to the host).
+- Use `wave` for communication within a wave.
+- Use `workgroup` for communication within a workgroup.
+- Use `device` for communication between workgroups.
+- Use `system` when the synchronization protocol includes the host.
 
-### Example: Device-Scope Counter
+### Example: device-scope counter
 
 ```asm
-; Atomically increment a global counter visible to all workgroups
 mov_imm r0, 1
-atomic_add r1, r10, r0      ; r10 = address of global counter
-
-; Ensure subsequent reads see the updated counter across the device
-fence_acq_rel.device
+atomic_add r1, r10, r0, .device
 ```
+
+The operation increments the counter at `r10`. Publishing other memory through a counter also requires a suitable ordering protocol; atomicity alone is insufficient.
 
 ## Barrier
 
-`barrier` is a workgroup-level synchronization point. When a thread reaches a barrier, it waits until every thread in the workgroup has also reached it. This is the standard way to synchronize local memory access.
-
-**Rule of thumb:** if one thread writes to local memory and another thread reads that address, there must be a `barrier` between the write and the read.
-
-```asm
-local_store.u32 r0, r1      ; write
-barrier                       ; all threads sync here
-local_load.u32 r2, r3        ; safe to read any thread's write
-```
+`barrier` synchronizes workgroup threads. All participating threads must reach the same barrier. Use it between shared-memory writes and reads by other threads, and before overwriting storage that other threads may still be reading.
 
 ## Summary
 
-| Operation | Local Memory | Device Memory |
+| Operation | Local memory | Device memory |
 |---|---|---|
-| Load | `local_load.{u8–u128}` | `device_load.{u8–u128}[.hint]` |
-| Store | `local_store.{u8–u128}` | `device_store.{u8–u128}[.hint]` |
-| Atomics | `atomic_*` on local addr | `atomic_*` on device addr |
-| Synchronization | `barrier` + fences | Fences with `device`/`system` scope |
+| Load | `local_load_*` | `device_load_*` |
+| Store | `local_store_*` | `device_store_*` |
+| Atomic update | `local_atomic_*` | `atomic_*` |
+| Synchronization | Workgroup barriers and fences | Scoped atomic protocols and fences |
 
-Next: [Control Flow](/guides/control-flow/) - learn how branching, loops, and divergence work in WAVE assembly.
+Next: [Control flow](/guides/control-flow/).

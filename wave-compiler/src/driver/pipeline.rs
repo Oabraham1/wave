@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Full compilation pipeline orchestration.
-//!
-//! Wires together all compiler stages: frontend parsing, HIR validation,
-//! lowering to MIR, optimization, lowering to LIR, register allocation,
+//! Full compilation pipeline orchestration. Wires together all compiler stages: frontend
+//! parsing, HIR validation lowering to MIR, optimization, lowering to LIR, register allocation
 //! and WAVE binary emission.
 
 use crate::diagnostics::CompileError;
@@ -19,7 +17,7 @@ use crate::regalloc::{allocate_registers, max_register_used};
 
 use super::config::CompilerConfig;
 
-/// Compile an HIR kernel to a WAVE binary (.wbin).
+/// Compile an HIR kernel to a WAVE binary.
 ///
 /// # Errors
 ///
@@ -28,13 +26,13 @@ pub fn compile_kernel(kernel: &Kernel, config: &CompilerConfig) -> Result<Vec<u8
     let mut mir = lower_kernel(kernel)?;
 
     if config.dump_mir {
-        eprintln!("=== MIR (before opt) ===\n{}", display_function(&mir));
+        eprintln!("=== MIR input ===\n{}", display_function(&mir));
     }
 
     optimize(&mut mir, config.opt_level);
 
     if config.dump_mir {
-        eprintln!("=== MIR (after opt) ===\n{}", display_function(&mir));
+        eprintln!("=== Optimized MIR ===\n{}", display_function(&mir));
     }
 
     let lir = lower_function(&mir)?;
@@ -43,9 +41,17 @@ pub fn compile_kernel(kernel: &Kernel, config: &CompilerConfig) -> Result<Vec<u8
         eprintln!("=== LIR ===\n{}", display_lir(&lir));
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    let num_params = kernel.params.len() as u32;
-    let reg_map = allocate_registers(&lir, num_params, config.max_registers);
+    let num_params =
+        u32::try_from(kernel.params.len()).map_err(|_| CompileError::RegAllocError {
+            message: "too many kernel parameters".into(),
+        })?;
+    if num_params > config.max_registers || config.max_registers > 256 || config.max_registers == 0
+    {
+        return Err(CompileError::RegAllocError {
+            message: "register limit must be 1 to 256 and cover all kernel parameters".into(),
+        });
+    }
+    let reg_map = allocate_registers(&lir, num_params, config.max_registers)?;
     let reg_count = max_register_used(&reg_map);
 
     generate_wbin(&kernel.name, &lir, &reg_map, reg_count)
@@ -168,7 +174,6 @@ mod tests {
 
         let code = parsed.code();
         let decoded = wave_decode::decode_all(code).unwrap();
-        assert!(!decoded.is_empty());
 
         let has_halt = decoded
             .iter()

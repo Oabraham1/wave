@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sparse conditional constant propagation pass.
-//!
-//! Combines constant propagation with unreachable code detection. More
-//! powerful than simple constant folding because it tracks which branches
-//! are always taken and can prove code unreachable.
+//! Propagate constants and use constant branch conditions to remove unreachable code.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -24,6 +20,7 @@ enum Lattice {
     Bottom,
 }
 
+#[derive(Debug)]
 /// Sparse conditional constant propagation pass.
 pub struct Sccp;
 
@@ -45,9 +42,8 @@ impl Pass for Sccp {
         worklist.push_back(func.entry);
 
         while let Some(bid) = worklist.pop_front() {
-            let block = match func.block(bid) {
-                Some(b) => b.clone(),
-                None => continue,
+            let Some(block) = func.block(bid) else {
+                continue;
             };
 
             for inst in &block.instructions {
@@ -106,6 +102,25 @@ impl Pass for Sccp {
             }
         }
 
+        for block in &mut func.blocks {
+            if let Terminator::CondBranch {
+                cond,
+                true_target,
+                false_target,
+            } = block.terminator
+            {
+                if let Some(Lattice::Constant(value)) = lattice.get(&cond) {
+                    block.terminator = Terminator::Branch {
+                        target: if *value == 0 {
+                            false_target
+                        } else {
+                            true_target
+                        },
+                    };
+                    changed = true;
+                }
+            }
+        }
         let original_count = func.blocks.len();
         func.blocks
             .retain(|b| executable.contains(&b.id) || b.id == func.entry);
@@ -113,6 +128,16 @@ impl Pass for Sccp {
             changed = true;
         }
 
+        let predecessors = func.predecessors();
+        for block in &mut func.blocks {
+            for phi in &mut block.phis {
+                phi.incoming.retain(|(source, _)| {
+                    predecessors
+                        .get(&block.id)
+                        .is_some_and(|preds| preds.contains(source))
+                });
+            }
+        }
         changed
     }
 }
@@ -129,8 +154,12 @@ fn evaluate_instruction(inst: &MirInst, lattice: &mut HashMap<ValueId, Lattice>)
             lattice.insert(*dest, Lattice::Constant(v));
         }
         MirInst::BinOp {
-            dest, op, lhs, rhs, ..
-        } => {
+            dest,
+            op,
+            lhs,
+            rhs,
+            ty,
+        } if !ty.is_float() => {
             let l = lattice.get(lhs).cloned().unwrap_or(Lattice::Bottom);
             let r = lattice.get(rhs).cloned().unwrap_or(Lattice::Bottom);
 

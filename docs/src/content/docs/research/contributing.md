@@ -1,82 +1,41 @@
 ---
 title: Contributing
-description: How to build WAVE from source, run tests, and contribute to the project.
+description: Build, test, and contribute to WAVE.
 ---
 
-WAVE is open source and hosted on GitHub at [github.com/Oabraham1/wave](https://github.com/Oabraham1/wave). Contributions are welcome across the entire project.
+Contributions are managed in the [WAVE repository](https://github.com/Oabraham1/wave).
 
-## Building from Source
+## Build and test
 
-WAVE is written in Rust. You need a working Rust toolchain installed via [rustup](https://rustup.rs/).
+Follow [Installation](/getting-started/installation/) to build the toolchain. Each package has its own manifest. From the repository root, run the relevant package's checks:
 
-```bash
-git clone https://github.com/Oabraham1/wave.git
-cd wave
-cargo build --release
+```sh
+cargo fmt --manifest-path wave-compiler/Cargo.toml --check
+cargo clippy --manifest-path wave-compiler/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path wave-compiler/Cargo.toml
 ```
 
-This builds all crates in the workspace: the compiler (`wave-compiler`), the emulator (`wave-emu`), the runtime (`wave-runtime`), and the language SDKs.
+For changes to instruction encoding, execution, or translation, also run the integration checks:
 
-## Running Tests
-
-Each crate has its own test suite. Run tests for a specific crate from the workspace root:
-
-```bash
-cargo test -p wave-compiler
-cargo test -p wave-emu
-cargo test -p wave-runtime
+```sh
+bash tests/ci/run_emulator_tests.sh
+bash tests/ci/run_backend_tests.sh
+cargo run --manifest-path tests/spec-verification/Cargo.toml
 ```
 
-Or run the full test suite:
+CI checks formatting, linting, package tests, SDK tests, and emulator and backend integration tests. The [workflow](https://github.com/Oabraham1/wave/blob/main/.github/workflows/ci.yml) contains the commands for each language.
 
-```bash
-cargo test
-```
+## Changes
 
-## Continuous Integration
+Compiler and backend changes must preserve the ISA's behavior. Include a test that exercises the affected behavior. Performance claims need measurements and correctness checks on the named hardware. See [Hardware verification](/research/hardware-verification/) for the benchmark methods.
 
-The CI pipeline runs on every pull request and checks:
+Specification proposals should identify the operation or rule being changed and explain its effect on each backend. SDK and documentation changes should include examples that work with the current interfaces.
 
-- **Lint** - `cargo clippy` across all crates.
-- **Format** - `cargo fmt --check` to enforce consistent style.
-- **SDK tests** - test suites for all language SDKs (Rust, Python, TypeScript, C++).
+## Pull requests
 
-All CI checks must pass before a pull request can be merged.
+1. Create a branch from `main`.
+2. Make the change and run the relevant checks.
+3. Describe the problem, resulting behavior, and validation in the pull request.
+4. Address CI failures before requesting review.
 
-## Areas of Contribution
-
-There are several areas where contributions have high impact:
-
-### New Backends
-
-WAVE currently compiles to Metal IR, PTX, and GCN ISA. Adding support for additional targets - particularly Intel Xe - would expand hardware coverage. Backend work lives in `wave-compiler`.
-
-### Compiler Optimizations
-
-The compiler performs ahead-of-time translation from WAVE's portable encoding to vendor-native instructions. There are opportunities for optimization passes such as instruction scheduling, register allocation improvements, and vendor-specific peephole optimizations.
-
-### Hardware Verification
-
-If you have access to GPU hardware that WAVE targets - especially Intel Xe - running the verification suite and reporting results is a valuable contribution. See the [Hardware Verification](/research/hardware-verification/) page for the methodology.
-
-### Spec Improvements
-
-The WAVE specification defines the portable instruction set and binary format. Proposals to extend the spec with new primitives, refine edge-case semantics, or improve clarity are welcome as issues or pull requests.
-
-### Documentation
-
-Improvements to these docs, additional examples, and tutorials for the language SDKs are always appreciated.
-
-## Code Style
-
-- Rust code follows `rustfmt` defaults. Run `cargo fmt` before committing.
-- All public items should have doc comments.
-- Address `clippy` warnings - CI will reject code that produces them.
-
-## Pull Request Process
-
-1. Fork the repository and create a feature branch from `main`.
-2. Make your changes, ensuring that `cargo test`, `cargo fmt --check`, and `cargo clippy` all pass locally.
-3. Write a clear commit message describing what the change does and why.
-4. Open a pull request against `main`. The PR description should summarize the motivation and any design decisions.
-5. CI will run automatically. Address any failures before requesting review.
+Use `rustfmt` defaults, document public interfaces, and fix Clippy warnings at their source.

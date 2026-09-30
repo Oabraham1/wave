@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration tests for full WAVE program compilation. Builds complete WBIN files
-//!
-//! containing multi-instruction programs, compiles them to PTX, and verifies the
-//! output is structurally correct with proper entry declarations, register setups,
-//! instruction sequences, and control flow labels.
+//! Check PTX output for complete WAVE programs.
 
 use wave_ptx::compile;
 
@@ -53,9 +49,9 @@ fn build_wbin(name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -112,7 +108,7 @@ fn test_vector_add_program() {
     assert!(ptx.contains("mul.lo.s32 %r3, %r1, %r2;"), "PTX: {ptx}");
     assert!(ptx.contains("add.s32 %r4, %r3, %r0;"), "PTX: {ptx}");
     assert!(ptx.contains("ld.global.u32 %r7, [%rd1];"), "PTX: {ptx}");
-    assert!(ptx.contains("add.f32 %f11, %f7, %f10;"), "PTX: {ptx}");
+    assert!(ptx.contains("add.rn.f32 %f11, %f7, %f10;"), "PTX: {ptx}");
     assert!(ptx.contains("st.global.u32 [%rd1], %r11;"), "PTX: {ptx}");
 }
 

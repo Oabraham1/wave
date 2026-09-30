@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! PTX register naming and special register mapping. WAVE general-purpose registers
-//!
-//! map to %r (b32) and %f (f32 shadow) PTX registers. Predicates map to %p (pred).
-//! Address computation uses %rd (b64) registers. Special registers map to PTX built-in
-//! registers like %tid.x, %ctaid.x, %laneid. Computed specials (`wave_id`, `num_waves`)
-//! emit multi-instruction sequences using temporary registers.
+//! Map WAVE registers and thread identity values to PTX.
 
 use std::fmt::Write;
 
@@ -76,28 +71,29 @@ pub fn emit_special_reg(rd: u8, sr_index: u8) -> Vec<String> {
 pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
     let mut out = String::new();
 
-    writeln!(out, "    .reg .b32 %r<{reg_count}>;").unwrap();
-    writeln!(out, "    .reg .f32 %f<{reg_count}>;").unwrap();
-    writeln!(out, "    .reg .pred %p<4>;").unwrap();
-    writeln!(out, "    .reg .b64 %rd<4>;").unwrap();
-    writeln!(out, "    .reg .b32 %t<8>;").unwrap();
-    writeln!(out, "    .reg .f32 %ft<4>;").unwrap();
-    writeln!(out, "    .reg .pred %pt<2>;").unwrap();
-    writeln!(out, "    .reg .b32 %mA<8>;").unwrap();
-    writeln!(out, "    .reg .b32 %mB<8>;").unwrap();
-    writeln!(out, "    .reg .f32 %mC<8>;").unwrap();
-    writeln!(out, "    .reg .f32 %mD<8>;").unwrap();
+    writeln!(out, "    .reg .b32 %r<{reg_count}>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .f32 %f<{reg_count}>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .pred %p<4>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .b64 %rd<4>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .b32 %t<8>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .f32 %ft<4>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .pred %pt<2>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .b32 %mA<8>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .b32 %mB<8>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .f32 %mC<8>;").expect("writing to String cannot fail");
+    writeln!(out, "    .reg .f32 %mD<8>;").expect("writing to String cannot fail");
 
     if local_mem_size > 0 {
         writeln!(
             out,
             "    .shared .align 4 .b8 _shared_mem[{local_mem_size}];"
         )
-        .unwrap();
+        .expect("writing to String cannot fail");
     }
 
-    writeln!(out).unwrap();
-    writeln!(out, "    ld.param.u64 %rd0, [_device_mem_ptr];").unwrap();
+    writeln!(out).expect("writing to String cannot fail");
+    writeln!(out, "    ld.param.u64 %rd0, [_device_mem_ptr];")
+        .expect("writing to String cannot fail");
 
     out
 }

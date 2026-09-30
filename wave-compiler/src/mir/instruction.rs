@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! MIR instruction definitions in SSA form.
-//!
-//! Each instruction operates on SSA values (virtual registers) and
-//! produces at most one result value. Instructions include arithmetic,
-//! memory operations, comparisons, conversions, and GPU intrinsics.
+//! Typed MIR instructions in SSA form, covering arithmetic, memory, comparisons, conversions,
+//! and GPU operations.
 
 use super::types::MirType;
 use super::value::ValueId;
@@ -41,8 +38,7 @@ impl ConstValue {
     #[must_use]
     pub fn to_bits(&self) -> u32 {
         match self {
-            #[allow(clippy::cast_sign_loss)]
-            Self::I32(v) => *v as u32,
+            Self::I32(v) => (*v).cast_unsigned(),
             Self::U32(v) => *v,
             Self::F32(v) => v.to_bits(),
             Self::Bool(v) => u32::from(*v),
@@ -135,7 +131,7 @@ pub enum MirInst {
         /// Shuffle mode.
         mode: ShuffleMode,
     },
-    /// Read a special register (`thread_id`, `workgroup_id`, etc.).
+    /// Read a special register, `thread_id`, `workgroup_id`, etc..
     ReadSpecialReg {
         /// Destination value.
         dest: ValueId,
@@ -144,7 +140,7 @@ pub enum MirInst {
     },
     /// Atomic read-modify-write.
     AtomicRmw {
-        /// Destination value (old value).
+        /// Destination value, old value.
         dest: ValueId,
         /// Address.
         addr: ValueId,
@@ -185,20 +181,72 @@ impl MirInst {
     /// Returns all value IDs used as operands by this instruction.
     #[must_use]
     pub fn operands(&self) -> Vec<ValueId> {
-        match self {
-            Self::BinOp { lhs, rhs, .. } => vec![*lhs, *rhs],
-            Self::UnaryOp { operand, .. } => vec![*operand],
-            Self::Load { addr, .. } => vec![*addr],
+        self.operand_iter().collect()
+    }
+
+    /// Iterate over source operands without allocating.
+    pub(crate) fn operand_iter(&self) -> impl Iterator<Item = ValueId> + '_ {
+        let operands = match self {
+            Self::BinOp { lhs, rhs, .. } => [Some(*lhs), Some(*rhs)],
+            Self::UnaryOp { operand, .. } => [Some(*operand), None],
+            Self::Load { addr, .. } => [Some(*addr), None],
             Self::Store { addr, value, .. } | Self::AtomicRmw { addr, value, .. } => {
-                vec![*addr, *value]
+                [Some(*addr), Some(*value)]
             }
-            Self::Call { args, .. } => args.clone(),
-            Self::Cast { value, .. } => vec![*value],
+            Self::Cast { value, .. } => [Some(*value), None],
+            Self::Call { .. }
+            | Self::Const { .. }
+            | Self::ReadSpecialReg { .. }
+            | Self::Barrier
+            | Self::Fence { .. } => [None, None],
+            Self::Shuffle { value, lane, .. } => [Some(*value), Some(*lane)],
+        };
+        let args = match self {
+            Self::Call { args, .. } => args.as_slice(),
+            _ => &[],
+        };
+        operands.into_iter().flatten().chain(args.iter().copied())
+    }
+
+    /// Rewrite operand references, leaving the destination unchanged.
+    pub(crate) fn map_operands(&mut self, mut map: impl FnMut(ValueId) -> ValueId) {
+        match self {
+            Self::BinOp { lhs, rhs, .. } => {
+                *lhs = map(*lhs);
+                *rhs = map(*rhs);
+            }
+            Self::UnaryOp { operand, .. } => *operand = map(*operand),
+            Self::Load { addr, .. } => *addr = map(*addr),
+            Self::Store { addr, value, .. } | Self::AtomicRmw { addr, value, .. } => {
+                *addr = map(*addr);
+                *value = map(*value);
+            }
+            Self::Call { args, .. } => args.iter_mut().for_each(|value| *value = map(*value)),
+            Self::Cast { value, .. } => *value = map(*value),
+            Self::Shuffle { value, lane, .. } => {
+                *value = map(*value);
+                *lane = map(*lane);
+            }
             Self::Const { .. }
             | Self::ReadSpecialReg { .. }
             | Self::Barrier
-            | Self::Fence { .. } => vec![],
-            Self::Shuffle { value, lane, .. } => vec![*value, *lane],
+            | Self::Fence { .. } => {}
+        }
+    }
+
+    /// Rewrite the destination, leaving operands unchanged.
+    pub(crate) fn map_dest(&mut self, mut map: impl FnMut(ValueId) -> ValueId) {
+        match self {
+            Self::BinOp { dest, .. }
+            | Self::UnaryOp { dest, .. }
+            | Self::Load { dest, .. }
+            | Self::Cast { dest, .. }
+            | Self::Const { dest, .. }
+            | Self::Shuffle { dest, .. }
+            | Self::ReadSpecialReg { dest, .. }
+            | Self::AtomicRmw { dest, .. } => *dest = map(*dest),
+            Self::Call { dest, .. } => *dest = dest.map(map),
+            Self::Store { .. } | Self::Barrier | Self::Fence { .. } => {}
         }
     }
 
@@ -260,6 +308,6 @@ mod tests {
         let inst = MirInst::Barrier;
         assert!(inst.has_side_effects());
         assert_eq!(inst.dest(), None);
-        assert!(inst.operands().is_empty());
+        assert_eq!(inst.operands(), [] as [ValueId; 0]);
     }
 }

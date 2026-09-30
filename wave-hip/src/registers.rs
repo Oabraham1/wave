@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Register naming and special register mapping for HIP. WAVE general-purpose registers
-//!
-//! become `uint32_t` locals (r0, r1, ...) and predicates become bool locals (p0-p3).
-//! Special registers map to HIP built-in variables: threadIdx for thread IDs, blockIdx
-//! for workgroup IDs, blockDim for workgroup sizes, gridDim for grid sizes, `__lane_id()`
-//! for lane ID, and warpSize for wavefront width (32 on RDNA, 64 on CDNA).
+//! Map WAVE registers and thread identity values to HIP C++.
 
 use std::fmt::Write;
 
@@ -48,10 +43,11 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
     let mut out = String::new();
 
     if has_local_mem {
-        writeln!(out, "    extern __shared__ uint8_t local_mem[];").unwrap();
-        writeln!(out, "    float _mma_a[16] = {{}};").unwrap();
-        writeln!(out, "    float _mma_b[16] = {{}};").unwrap();
-        writeln!(out, "    float _mma_c[16] = {{}};").unwrap();
+        writeln!(out, "    extern __shared__ uint8_t local_mem[];")
+            .expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_a[16] = {{}};").expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_b[16] = {{}};").expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_c[16] = {{}};").expect("writing to String cannot fail");
     }
 
     if reg_count > 0 {
@@ -59,14 +55,14 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
         let mut i = 0u32;
         while i < reg_count {
             let end = (i + regs_per_line).min(reg_count);
-            write!(out, "    uint32_t").unwrap();
+            write!(out, "    uint32_t").expect("writing to String cannot fail");
             for j in i..end {
                 if j > i {
-                    write!(out, ",").unwrap();
+                    write!(out, ",").expect("writing to String cannot fail");
                 }
-                write!(out, " r{j} = 0").unwrap();
+                write!(out, " r{j} = 0").expect("writing to String cannot fail");
             }
-            writeln!(out, ";").unwrap();
+            writeln!(out, ";").expect("writing to String cannot fail");
             i = end;
         }
     }
@@ -75,17 +71,17 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
         out,
         "    bool p0 = false, p1 = false, p2 = false, p3 = false;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
     writeln!(
         out,
         "    uint32_t wave_id = (threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y) / warpSize;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
     writeln!(
         out,
         "    uint32_t wave_count = (blockDim.x * blockDim.y * blockDim.z + warpSize - 1) / warpSize;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
 
     out
 }

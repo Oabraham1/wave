@@ -1,25 +1,23 @@
 ---
-title: Control Flow
-description: Structured branching, loops, predicate registers, and divergence behavior in WAVE assembly.
+title: "Control flow"
+description: "Predicates, branches, loops, and divergence in WAVE assembly."
 ---
 
-WAVE uses structured control flow - every branch and loop has explicit begin and end markers - and handles divergence automatically through per-wave active masks.
+WAVE branches and loops use explicit begin and end markers. An active mask determines which lanes execute each instruction.
 
-## Predicate Registers
+## Predicate registers
 
-Before branching, you need a condition. Compare instructions write their result to one of the four predicate registers (`p0`–`p3`):
+Comparisons write to `p0` through `p3`:
 
 ```asm
-icmp.lt p0, r0, r1    ; p0 = (r0 < r1)  - signed integer compare
-ucmp.ge p1, r2, r3    ; p1 = (r2 >= r3) - unsigned integer compare
-fcmp.eq p2, r4, r5    ; p2 = (r4 == r5) - float compare
+icmp_lt p0, r0, r1    ; signed comparison
+ucmp_le p1, r2, r3    ; unsigned comparison
+fcmp_eq p2, r4, r5    ; floating-point comparison
 ```
 
-### Comparison Conditions
+### Comparison conditions
 
-All compare instructions support these conditions:
-
-| Condition | Meaning |
+| Suffix | Meaning |
 |---|---|
 | `eq` | Equal |
 | `ne` | Not equal |
@@ -28,173 +26,135 @@ All compare instructions support these conditions:
 | `gt` | Greater than |
 | `ge` | Greater than or equal |
 
-Float compares additionally support:
-- `ord` - both operands are not NaN (ordered)
-- `unord` - at least one operand is NaN (unordered)
+Signed integer comparisons support all six suffixes. Unsigned comparisons use `ucmp_lt` and `ucmp_le`; reverse the operands for greater-than comparisons. Floating-point comparisons support `eq`, `ne`, `lt`, `le`, and `gt`. They also support `ord` when neither operand is NaN and `unord` when at least one is NaN.
 
-## If / Else / Endif
-
-The basic conditional block:
+## If / else / endif
 
 ```asm
-icmp.lt p0, r0, r1       ; p0 = (r0 < r1)
+icmp_lt p0, r0, r1
 if p0
-  ; executed when p0 is true
-  iadd r2, r0, r1
+    iadd r2, r0, r1
 else
-  ; executed when p0 is false
-  isub r2, r0, r1
+    isub r2, r0, r1
 endif
 ```
 
-The `else` block is optional:
+The `else` block is optional. This example clamps negative floats to zero:
 
 ```asm
-fcmp.gt p0, r0, r1
+mov_imm r1, 0
+fcmp_lt p0, r0, r1
 if p0
-  mov_imm r0, 0           ; clamp negative values to zero
+    mov_imm r0, 0
 endif
 ```
 
-### What Happens at the Hardware Level
+### What happens at the hardware level
 
-A wave (typically 32 or 64 threads) executes instructions in lockstep. When the threads in a wave disagree on a branch condition - some have `p0 = true`, others `p0 = false` - the wave **diverges**:
+A wave diverges when its lanes disagree on a branch condition. The execution model applies a mask to each branch:
 
-1. The hardware pushes the current active mask onto the divergence stack.
-2. The `if`-branch executes with only the true-lanes active. False-lanes are masked off (they do not execute, do not write registers, and do not access memory).
-3. At `else`, the mask flips: false-lanes become active, true-lanes are masked.
-4. At `endif`, the original mask is restored from the stack.
+1. `if` records the entering mask and activates lanes whose predicate is true.
+2. `else` activates the entering lanes whose predicate was false.
+3. `endif` restores the entering mask, subject to lanes that exited or continued a surrounding loop.
 
-**Both paths always execute** when a wave diverges. If every lane agrees, only the taken path executes - no penalty.
+Both paths contain work when lanes disagree. A uniform branch needs only the selected path. The backend determines how these masks map to hardware instructions.
 
-```
-Threads:     T0  T1  T2  T3   (4-lane wave for illustration)
-Condition:    T   F   T   F
-
-if p0        [T0, --, T2, --]  ← true lanes active
-  iadd ...   T0 and T2 execute
-else         [--, T1, --, T3]  ← false lanes active
-  isub ...   T1 and T3 execute
-endif        [T0, T1, T2, T3]  ← all lanes restored
+```text
+Lane:         0   1   2   3
+Predicate:    T   F   T   F
+if:          [0,  -,  2,  -]
+else:        [-,  1,  -,  3]
+endif:       [0,  1,  2,  3]
 ```
 
 ## Loops
 
-Loops use `loop` / `endloop` with conditional `break` and `continue`:
+Use `loop` and `endloop` with a predicated exit:
 
 ```asm
-mov_imm r0, 0               ; r0 = i = 0
-mov_imm r1, 100             ; r1 = limit
-
+mov_imm r0, 0
+mov_imm r1, 100
+mov_imm r2, 0
+mov_imm r3, 1
 loop
-  icmp.ge p0, r0, r1        ; p0 = (i >= 100)
-  break p0                   ; exit loop if p0 is true
-
-  ; loop body
-  iadd r2, r2, r0            ; accumulate sum
-
-  iadd r0, r0, 1             ; i++
+    icmp_ge p0, r0, r1
+    break p0
+    iadd r2, r2, r0
+    iadd r0, r0, r3
 endloop
 ```
 
-### Break and Continue
+This loop sums the integers from 0 through 99.
 
-Both `break` and `continue` are **predicated** - they take a predicate register and only affect lanes where that predicate is true:
+### Break and continue
+
+`break p0` exits the loop for lanes where `p0` is true. `continue p0` skips the rest of the current iteration for those lanes. Advance loop state before a `continue` that would skip the update.
 
 ```asm
+mov_imm r0, 0
+mov_imm r1, 100
+mov_imm r2, 0
+mov_imm r3, 1
+mov_imm r4, 0
 loop
-  ; ... compute some condition ...
-  icmp.eq p0, r3, 0
-  continue p0               ; skip rest of body for lanes where r3 == 0
-
-  ; only lanes with r3 != 0 reach here
-  ; ... expensive computation ...
-
-  icmp.ge p1, r0, r1
-  break p1                   ; exit for lanes where i >= limit
+    icmp_ge p0, r0, r1
+    break p0
+    iadd r0, r0, r3
+    and r5, r0, r3
+    icmp_eq p1, r5, r4
+    continue p1
+    iadd r2, r2, r0
 endloop
 ```
 
-When some lanes `break` but others do not, the broken lanes are masked off for all subsequent iterations. The loop continues until every lane has broken or the condition is universally false.
+This loop adds the odd integers from 1 through 99.
 
-### Loop Divergence
+### Loop divergence
 
-Loops interact with the divergence stack the same way conditionals do:
+Lanes that break stay inactive for subsequent iterations and rejoin after the loop. Lanes that continue rejoin at the next iteration. The loop finishes when all participating lanes have exited.
 
-1. At `loop`, the hardware records the active mask.
-2. `break p0` removes the true-lanes from the active set. They are "parked" and will rejoin after `endloop`.
-3. `continue p0` temporarily deactivates the true-lanes for the remainder of the current iteration. They rejoin at the top of the next iteration.
-4. At `endloop`, if any lanes are still active, execution jumps back to `loop`. If all lanes have broken, execution falls through.
+### Nested control flow
 
-## Nested Control Flow
-
-`if`/`else`/`endif` and `loop`/`endloop` can nest arbitrarily. Each nesting level pushes an additional entry onto the divergence stack.
+Branches and loops can nest. Each level needs its matching closing instruction:
 
 ```asm
-loop
-  icmp.ge p0, r0, r1
-  break p0
-
-  ; Outer condition
-  icmp.gt p1, r2, r3
-  if p1
-    ; Inner condition
-    fcmp.lt p2, r4, r5
-    if p2
-      fadd r6, r6, r4
+icmp_lt p0, r0, r1
+if p0
+    fcmp_lt p1, r2, r3
+    if p1
+        fadd r4, r2, r3
     else
-      fsub r6, r6, r4
+        fsub r4, r2, r3
     endif
-  endif
-
-  iadd r0, r0, 1
-endloop
-```
-
-At maximum nesting, up to three masks may be stacked (outer loop, outer if, inner if). Deep nesting increases divergence stack pressure and can reduce performance, so keep nesting shallow when possible.
-
-## The Select Instruction
-
-For simple conditional assignments, `select` avoids branching entirely. It picks one of two values based on a predicate - all lanes execute it, no divergence occurs:
-
-```asm
-icmp.lt p0, r0, r1
-select r2, p0, r3, r4     ; r2 = p0 ? r3 : r4
-```
-
-Use `select` instead of `if`/`else`/`endif` when both sides are cheap single-value computations. It is always faster than branching when the bodies are one instruction each.
-
-## Practical Guidelines
-
-**Minimize divergence.** When threads in a wave take different paths, both paths execute sequentially. If your branch splits the wave 50/50, you pay the cost of both sides.
-
-**Prefer `select` over short branches.** A branchless `select` costs one instruction. An `if`/`else`/`endif` with one instruction per side costs the same number of ALU instructions but adds mask manipulation overhead and potential divergence.
-
-**Structure loops so threads exit together.** If most lanes break at the same iteration, only one iteration runs with reduced occupancy. If lanes break at scattered iterations, the loop runs at reduced throughput for many iterations.
-
-**Avoid deep nesting.** Each nesting level adds divergence stack overhead. Flatten conditions with `and`/`or` where possible:
-
-```asm
-; Instead of nested ifs:
-;   if p0
-;     if p1
-;       ...
-; Use:
-and p2, p0, p1
-if p2
-  ; ...
 endif
 ```
 
-**Use predicated break/continue.** They are more efficient than wrapping the loop body in an `if` block because they directly modify the active mask without pushing a new stack entry.
+## The select instruction
+
+`select` chooses between register values without branching:
+
+```asm
+icmp_lt p0, r0, r1
+select r2, p0, r3, r4    ; choose r3 when true, otherwise r4
+```
+
+Use it when both input values are available and computing them unconditionally is safe. Whether it is faster than a branch depends on the target and surrounding code.
+
+## Practical guidelines
+
+- Group work so neighboring lanes tend to follow the same branches.
+- Keep loop iteration counts similar across lanes when the algorithm permits it.
+- Use `select` for short assignments with safe unconditional inputs.
+- Keep barriers outside divergent branches unless every workgroup thread reaches the same barrier.
+- Measure changes on the target GPU. Source instruction counts do not determine execution time.
 
 ## Summary
 
-| Construct | Syntax | Divergence cost |
+| Construct | Syntax | Lane behavior |
 |---|---|---|
-| Conditional | `if p / else / endif` | Both paths execute when lanes disagree |
-| Loop | `loop / break p / continue p / endloop` | Runs until all lanes exit |
-| Branchless select | `select r, p, a, b` | None - always executes in one step |
-| Nesting | Arbitrary | Each level adds one divergence stack entry |
+| Conditional | `if p / else / endif` | Select lanes by predicate |
+| Loop | `loop / break p / continue p / endloop` | Run until participating lanes exit |
+| Select | `select r, p, a, b` | Choose a value without changing the active mask |
+| Nesting | Matched blocks | Preserve the surrounding control state |
 
-Next: [Optimization](/guides/optimization/) - learn how to get the most performance out of your WAVE kernels.
+Next: [Optimization](/guides/optimization/).

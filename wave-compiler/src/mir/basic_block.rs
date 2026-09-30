@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Basic blocks with terminators for MIR control flow graphs.
-//!
-//! A basic block is a straight-line sequence of instructions ending
-//! with a terminator that transfers control to one or more successor blocks.
+//! Basic blocks with terminators for MIR control flow graphs. A basic block is a straight-line
+//! sequence of instructions ending with a terminator that transfers control to one or more
+//! successor blocks.
 
 use super::instruction::MirInst;
 use super::value::{BlockId, ValueId};
@@ -31,7 +30,7 @@ pub enum Terminator {
     },
     /// Conditional branch.
     CondBranch {
-        /// Condition (must be Bool type).
+        /// Condition, must be Bool type.
         cond: ValueId,
         /// Target if condition is true.
         true_target: BlockId,
@@ -60,10 +59,16 @@ impl Terminator {
     /// Returns all value IDs used by this terminator.
     #[must_use]
     pub fn operands(&self) -> Vec<ValueId> {
-        match self {
-            Self::Branch { .. } | Self::Return => vec![],
-            Self::CondBranch { cond, .. } => vec![*cond],
-        }
+        self.operand_iter().collect()
+    }
+
+    /// Iterate over source operands without allocating.
+    pub(crate) fn operand_iter(&self) -> impl Iterator<Item = ValueId> + '_ {
+        let operands = match self {
+            Self::Branch { .. } | Self::Return => [None],
+            Self::CondBranch { cond, .. } => [Some(*cond)],
+        };
+        operands.into_iter().flatten()
     }
 }
 
@@ -98,7 +103,7 @@ impl BasicBlock {
         self.terminator.successors()
     }
 
-    /// Returns all value IDs defined in this block (phi dests + instruction dests).
+    /// Returns all value IDs defined in this block, phi dests + instruction dests.
     #[must_use]
     pub fn defs(&self) -> Vec<ValueId> {
         let mut defs: Vec<ValueId> = self.phis.iter().map(|phi| phi.dest).collect();
@@ -120,9 +125,9 @@ impl BasicBlock {
             }
         }
         for inst in &self.instructions {
-            uses.extend(inst.operands());
+            uses.extend(inst.operand_iter());
         }
-        uses.extend(self.terminator.operands());
+        uses.extend(self.terminator.operand_iter());
         uses
     }
 }
@@ -185,6 +190,6 @@ mod tests {
         assert_eq!(term.operands(), vec![ValueId(5)]);
 
         let ret = Terminator::Return;
-        assert!(ret.operands().is_empty());
+        assert_eq!(ret.operands(), [] as [ValueId; 0]);
     }
 }

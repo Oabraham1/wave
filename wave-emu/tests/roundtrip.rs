@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Round-trip integration tests. Assembles WAVE source code using wave-asm,
-//!
-//! loads the binary into wave-emu, executes it, and verifies the results.
+//! Round-trip integration tests. Assembles WAVE source code using wave-asm loads the binary into
+//! wave-emu, executes it, and verifies the results.
 
 use wave_asm::assemble;
 use wave_emu::{Emulator, EmulatorConfig};
@@ -19,8 +18,35 @@ fn assemble_and_run(source: &str, config: EmulatorConfig) -> Emulator {
 }
 
 #[test]
+fn compare_and_swap_returns_old_value_and_updates_only_on_match() {
+    for (store, load, atomic, scope) in [
+        (
+            "device_store_u32",
+            "device_load_u32",
+            "atomic_cas",
+            ", .device",
+        ),
+        ("local_store_u32", "local_load_u32", "local_atomic_cas", ""),
+    ] {
+        let source = format!(
+            ".kernel cas\n.registers 12\n.local_memory 16\n.workgroup_size 1, 1, 1\n\
+             mov_imm r1, 0\nmov_imm r2, 5\n{store} r1, r2\n\
+             mov_imm r3, 10\n{atomic} r4, r1, r2, r3{scope}\n\
+             mov_imm r2, 6\nmov_imm r3, 20\n{atomic} r5, r1, r2, r3{scope}\n\
+             {load} r6, r1\nmov_imm r7, 64\ndevice_store_u32 r7, r4\n\
+             mov_imm r7, 68\ndevice_store_u32 r7, r5\n\
+             mov_imm r7, 72\ndevice_store_u32 r7, r6\nhalt\n.end\n"
+        );
+        let emulator = assemble_and_run(&source, EmulatorConfig::default());
+        assert_eq!(emulator.device_memory().read_u32(64).unwrap(), 5);
+        assert_eq!(emulator.device_memory().read_u32(68).unwrap(), 10);
+        assert_eq!(emulator.device_memory().read_u32(72).unwrap(), 10);
+    }
+}
+
+#[test]
 fn test_roundtrip_special_register_lane_id() {
-    let source = r#"
+    let source = r"
 .kernel test_lane_id
 .registers 8
 .workgroup_size 4, 1, 1
@@ -30,7 +56,7 @@ fn test_roundtrip_special_register_lane_id() {
     device_store_u32 r2, r0  ; store lane_id at address (lane_id * 4)
     halt
 .end
-"#;
+";
 
     let config = EmulatorConfig {
         grid_dim: [1, 1, 1],
@@ -46,7 +72,7 @@ fn test_roundtrip_special_register_lane_id() {
         let value = emulator.device_memory().read_u32(i * 4).unwrap();
         assert_eq!(
             value,
-            i as u32,
+            u32::try_from(i).unwrap(),
             "Address {} should contain lane_id {}",
             i * 4,
             i
@@ -56,7 +82,7 @@ fn test_roundtrip_special_register_lane_id() {
 
 #[test]
 fn test_roundtrip_special_register_thread_id() {
-    let source = r#"
+    let source = r"
 .kernel test_thread_id
 .registers 8
 .workgroup_size 4, 2, 1
@@ -80,7 +106,7 @@ fn test_roundtrip_special_register_thread_id() {
 
     halt
 .end
-"#;
+";
 
     let config = EmulatorConfig {
         grid_dim: [1, 1, 1],
@@ -112,7 +138,7 @@ fn test_roundtrip_special_register_thread_id() {
 
 #[test]
 fn test_roundtrip_special_register_wave_width() {
-    let source = r#"
+    let source = r"
 .kernel test_wave_width
 .registers 4
 .workgroup_size 4, 1, 1
@@ -121,7 +147,7 @@ fn test_roundtrip_special_register_wave_width() {
     device_store_u32 r1, r0  ; All threads store wave_width at address 0
     halt
 .end
-"#;
+";
 
     let config = EmulatorConfig {
         grid_dim: [1, 1, 1],
@@ -139,7 +165,7 @@ fn test_roundtrip_special_register_wave_width() {
 
 #[test]
 fn test_roundtrip_special_register_workgroup_id() {
-    let source = r#"
+    let source = r"
 .kernel test_workgroup_id
 .registers 8
 .workgroup_size 1, 1, 1
@@ -168,7 +194,7 @@ fn test_roundtrip_special_register_workgroup_id() {
 
     halt
 .end
-"#;
+";
 
     let config = EmulatorConfig {
         grid_dim: [2, 2, 1], // 4 workgroups
@@ -205,7 +231,7 @@ fn test_roundtrip_special_register_workgroup_id() {
 
 #[test]
 fn test_roundtrip_all_special_registers() {
-    let source = r#"
+    let source = r"
 .kernel test_all_sr
 .registers 32
 .workgroup_size 1, 1, 1
@@ -263,7 +289,7 @@ fn test_roundtrip_all_special_registers() {
 
     halt
 .end
-"#;
+";
 
     let config = EmulatorConfig {
         grid_dim: [2, 3, 1],

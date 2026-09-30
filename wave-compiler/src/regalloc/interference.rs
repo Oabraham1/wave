@@ -1,13 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Interference graph construction.
-//!
-//! Two virtual registers interfere if their live ranges overlap.
-//! The interference graph has `VReg`s as nodes and edges between
-//! interfering registers. Move-related pairs are tracked for coalescing.
-//! Parameter `VReg`s have live ranges extended to start at instruction 0
-//! since they are live from function entry.
+//! Connect virtual registers with overlapping live ranges. Parameter ranges start at function
+//! entry.
 
 use std::collections::{HashMap, HashSet};
 
@@ -15,11 +10,12 @@ use super::live_range::{compute_live_ranges, LiveRange};
 use crate::lir::instruction::LirInst;
 use crate::lir::operand::VReg;
 
+#[derive(Debug)]
 /// Interference graph for register allocation.
 pub struct InterferenceGraph {
     /// Adjacency sets: for each `VReg`, the set of interfering `VReg`s.
     pub adj: HashMap<VReg, HashSet<VReg>>,
-    /// Move pairs (dest, src) for coalescing.
+    /// Move pairs, dest, src, for coalescing.
     pub moves: Vec<(VReg, VReg)>,
     /// Live ranges for each `VReg`.
     pub ranges: HashMap<VReg, LiveRange>,
@@ -48,21 +44,18 @@ impl InterferenceGraph {
         let mut adj: HashMap<VReg, HashSet<VReg>> = HashMap::new();
         let mut moves = Vec::new();
 
-        let vregs: Vec<VReg> = ranges.keys().copied().collect();
-
-        for &vreg in &vregs {
-            adj.entry(vreg).or_default();
-        }
-
-        for i in 0..vregs.len() {
-            for j in (i + 1)..vregs.len() {
-                let a = vregs[i];
-                let b = vregs[j];
-                if ranges[&a].overlaps(&ranges[&b]) {
-                    adj.entry(a).or_default().insert(b);
-                    adj.entry(b).or_default().insert(a);
-                }
+        let mut intervals: Vec<_> = ranges.iter().map(|(&vreg, range)| (vreg, range)).collect();
+        intervals.sort_unstable_by_key(|(vreg, range)| (range.start, *vreg));
+        let mut active: Vec<(VReg, &LiveRange)> = Vec::new();
+        for (vreg, range) in intervals {
+            active.retain(|(_, other)| other.end >= range.start);
+            let mut neighbors = HashSet::with_capacity(active.len());
+            for &(other, _) in &active {
+                neighbors.insert(other);
+                adj.entry(other).or_default().insert(vreg);
             }
+            adj.insert(vreg, neighbors);
+            active.push((vreg, range));
         }
 
         for inst in instructions {
@@ -76,7 +69,7 @@ impl InterferenceGraph {
         Self { adj, moves, ranges }
     }
 
-    /// Returns the degree (number of neighbors) of a `VReg`.
+    /// Returns the degree, number of neighbors, of a `VReg`.
     #[must_use]
     pub fn degree(&self, vreg: VReg) -> usize {
         self.adj.get(&vreg).map_or(0, HashSet::len)
@@ -155,7 +148,7 @@ mod tests {
         ];
 
         let ig = InterferenceGraph::build(&insts);
-        assert!(ig.moves.is_empty());
+        assert_eq!(ig.moves, [] as [(VReg, VReg); 0]);
     }
 
     #[test]
@@ -181,5 +174,30 @@ mod tests {
         let ig = InterferenceGraph::build_with_params(&insts, 2);
         assert!(ig.interferes(VReg(0), VReg(2)));
         assert!(ig.interferes(VReg(1), VReg(2)));
+    }
+    #[test]
+    fn interference_matches_inclusive_live_ranges() {
+        let mut instructions = Vec::new();
+        for index in 0..128 {
+            instructions.push(LirInst::MovImm {
+                dest: VReg(index + 4),
+                value: index,
+            });
+            instructions.push(LirInst::Iadd {
+                dest: VReg(index + 132),
+                src1: VReg(index + 4),
+                src2: VReg(index % 4),
+            });
+        }
+        let graph = InterferenceGraph::build_with_params(&instructions, 4);
+        for (&a, range_a) in &graph.ranges {
+            for (&b, range_b) in &graph.ranges {
+                assert_eq!(
+                    graph.interferes(a, b),
+                    a != b && range_a.overlaps(range_b),
+                    "{a:?}, {b:?}"
+                );
+            }
+        }
     }
 }

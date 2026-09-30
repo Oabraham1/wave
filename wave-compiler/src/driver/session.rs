@@ -1,14 +1,13 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Compilation session state tracking.
-//!
-//! Maintains state across the compilation pipeline including
+//! Compilation session state tracking. Maintains state across the compilation pipeline including
 //! configuration, source information, and compilation statistics.
 
 use super::config::CompilerConfig;
 use crate::diagnostics::SourceMap;
 
+#[derive(Debug)]
 /// Compilation session holding all state for a single compilation.
 pub struct Session {
     /// Compiler configuration.

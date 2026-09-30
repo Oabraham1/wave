@@ -1,13 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! PTX memory operation emission. Generates load/store instructions for global (device)
-//!
-//! and shared (local/threadgroup) memory spaces. Global accesses compute 64-bit
-//! addresses by zero-extending the 32-bit WAVE byte offset and adding it to the base
-//! pointer in %rd0. Shared accesses offset from the `_shared_mem` symbol. Atomics map
-//! to PTX atom.global/atom.shared instructions; `atomic_sub` is implemented via negation
-//! followed by atom.add since PTX has no atom.sub.
+//! Emit PTX loads, stores, and atomics for device and local memory.
 
 use crate::registers::reg;
 use wave_decode::opcodes::{AtomicOp, MemWidth};

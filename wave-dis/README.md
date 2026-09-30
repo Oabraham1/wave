@@ -2,7 +2,7 @@
 
 Disassembler for the WAVE ISA.
 
-Reads WAVE binaries (`.wbin`) and produces human-readable assembly text. Inverse of `wave-asm`.
+Reads WAVE binaries, `.wbin`, and produces human-readable assembly text. Inverse of `wave-asm`.
 
 Spec: https://ojima.me/spec.html
 
@@ -24,7 +24,7 @@ wave-dis program.wbin --offsets --raw
 
 | Flag | Description |
 |------|-------------|
-| `-o <file>` | Output file (default: stdout) |
+| `-o <file>` | Output file; default: stdout |
 | `--offsets` | Show byte offsets |
 | `--raw` | Show raw hex encoding |
 | `--no-directives` | Omit `.kernel`/`.registers`/`.end` directives |
@@ -40,6 +40,6 @@ diff tmp.wbin roundtrip.wbin  # must be identical
 
 ## License
 
-Copyright (c) 2026 Ojima Abraham. All rights reserved.
+Copyright © 2026 Ojima Abraham. All rights reserved.
 
 Apache License, Version 2.0. See [LICENSE](../LICENSE) for terms.

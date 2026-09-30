@@ -1,16 +1,15 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WAVE disassembler library. Provides public API for converting WAVE binary
-//!
-//! files into human-readable assembly text. Delegates all decoding to wave-decode
-//! and focuses on text formatting and output generation.
+//! WAVE disassembler library. Provides public API for converting WAVE binary files into human-
+//! readable assembly text. Delegates all decoding to wave-decode and focuses on text formatting
+//! and output generation.
 
 pub mod format;
 
 use format::{format_offset_only, format_with_offset};
 use thiserror::Error;
-use wave_decode::{decode_all, DecodeError, KernelInfo, WbinError, WbinFile};
+use wave_decode::{DecodeError, Decoder, KernelInfo, WbinError, WbinFile};
 
 #[derive(Debug, Error)]
 pub enum DisassembleError {
@@ -22,6 +21,7 @@ pub enum DisassembleError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
 pub struct DisassemblyOptions {
     pub show_offsets: bool,
     pub show_raw: bool,
@@ -38,6 +38,7 @@ impl Default for DisassemblyOptions {
     }
 }
 
+#[derive(Debug)]
 pub struct DisassembledLine {
     pub offset: Option<u32>,
     pub text: String,
@@ -59,11 +60,7 @@ pub fn disassemble_wbin(
     let mut lines = Vec::new();
 
     if wbin.kernels.is_empty() {
-        let instructions = decode_all(code)?;
-        for inst in &instructions {
-            let line = format_line(inst, code, code_base, options);
-            lines.push(line);
-        }
+        append_code(&mut lines, code, code_base, options)?;
     } else {
         for (i, kernel) in wbin.kernels.iter().enumerate() {
             if options.emit_directives {
@@ -71,13 +68,8 @@ pub fn disassemble_wbin(
             }
 
             if let Some(kernel_code) = wbin.kernel_code(i) {
-                let instructions = decode_all(kernel_code)?;
                 let kernel_base = code_base + kernel.code_offset;
-
-                for inst in &instructions {
-                    let line = format_kernel_line(inst, kernel_code, kernel_base, options);
-                    lines.push(line);
-                }
+                append_code(&mut lines, kernel_code, kernel_base, options)?;
             }
 
             if options.emit_directives {
@@ -101,15 +93,23 @@ pub fn disassemble_code(
     code: &[u8],
     options: &DisassemblyOptions,
 ) -> Result<Vec<String>, DisassembleError> {
-    let instructions = decode_all(code)?;
     let mut lines = Vec::new();
-
-    for inst in &instructions {
-        let line = format_line(inst, code, 0, options);
-        lines.push(line);
-    }
-
+    append_code(&mut lines, code, 0, options)?;
     Ok(lines)
+}
+
+fn append_code(
+    lines: &mut Vec<String>,
+    code: &[u8],
+    code_base: u32,
+    options: &DisassemblyOptions,
+) -> Result<(), DecodeError> {
+    let mut decoder = Decoder::new(code);
+    while decoder.has_more() {
+        let inst = decoder.decode_next()?;
+        lines.push(format_line(&inst, code, code_base, options));
+    }
+    Ok(())
 }
 
 fn format_kernel_header(kernel: &KernelInfo) -> Vec<String> {
@@ -138,21 +138,6 @@ fn format_kernel_header(kernel: &KernelInfo) -> Vec<String> {
 }
 
 fn format_line(
-    inst: &wave_decode::DecodedInstruction,
-    code: &[u8],
-    code_base: u32,
-    options: &DisassemblyOptions,
-) -> String {
-    if options.show_offsets && options.show_raw {
-        format_with_offset(inst, code, code_base)
-    } else if options.show_offsets {
-        format_offset_only(inst, code_base)
-    } else {
-        format!("    {}", format::format_instruction(inst))
-    }
-}
-
-fn format_kernel_line(
     inst: &wave_decode::DecodedInstruction,
     code: &[u8],
     code_base: u32,

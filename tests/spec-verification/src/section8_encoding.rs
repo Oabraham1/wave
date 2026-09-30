@@ -1,9 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 8: Binary Encoding tests
-//!
-//! Verifies WBIN format correctness and instruction encoding.
+//! Section 8: Binary Encoding tests Verifies WBIN format correctness and instruction encoding.
 
 use crate::harness::*;
 
@@ -21,7 +19,7 @@ pub fn run_tests() -> Vec<TestResult> {
 fn test_wbin_magic() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 8.1 WBIN Format
-; Claim: "WBIN files begin with magic 0x4E494257 ('WBIN')."
+; Claim: "WBIN files begin with magic 0x45564157, ASCII WAVE."
 
 .kernel test_wbin_magic
 .registers 4
@@ -148,7 +146,7 @@ fn test_instruction_alignment() -> TestResult {
                 details: if passed {
                     "All instructions executed correctly (alignment OK)".to_string()
                 } else {
-                    format!("Result = {} (expected 10)", value)
+                    format!("Result = {}; expected 10", value)
                 },
                 cycles: result.cycles,
             }
@@ -248,7 +246,7 @@ fn test_register_encoding() -> TestResult {
 
 .kernel test_register_encoding
 .registers 32
-    ; Test various register numbers (0-31 supported by assembler)
+    ; Test various register numbers from r0 through r31
     mov_imm r0, 0
     mov_imm r1, 1
     mov_imm r15, 15
@@ -289,7 +287,7 @@ fn test_register_encoding() -> TestResult {
                 details: if passed {
                     "All register numbers encoded correctly".to_string()
                 } else {
-                    format!("Results: {}, {}, {} (expected 1, 31, 61)", v0, v4, v8)
+                    format!("Results: {}, {}, {}; expected 1, 31, 61", v0, v4, v8)
                 },
                 cycles: result.cycles,
             }

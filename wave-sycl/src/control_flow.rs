@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Control flow SYCL emission. Translates WAVE structured control flow instructions
-//!
-//! into equivalent C++ control flow statements. SYCL supports structured control
-//! flow natively inside kernel lambdas so the mapping is direct, identical to the
-//! Metal and HIP backends.
+//! Translate structured WAVE branches and loops into SYCL C++ control flow.
 
 use crate::registers::pred;
 

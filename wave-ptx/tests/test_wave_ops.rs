@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for warp-level intrinsic codegen. Verifies that WAVE wave operations
-//!
-//! (shuffle, broadcast, ballot, vote, reduce, prefix sum) emit correct PTX shfl.sync,
-//! vote.sync, and butterfly reduction sequences with the full-warp 0xFFFFFFFF mask.
+//! Check PTX shuffle, vote, prefix-sum, and reduction emission.
 
 use wave_ptx::compile;
 
@@ -42,9 +39,9 @@ fn build_wbin(code: &[u8]) -> Vec<u8> {
     let mut data = Vec::new();
     let name = b"test_kernel\0";
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name.len() as u32;
+    let symbol_size = u32::try_from(name.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -82,7 +79,7 @@ fn compile_instrs(instructions: &[u8]) -> String {
 fn test_wave_shuffle() {
     let ptx = compile_instrs(&extended(0x3E, 3, 1, 2, 0, 0));
     assert!(
-        ptx.contains("shfl.sync.idx.b32 %r3, %r1, %r2, 31, 0xFFFFFFFF;"),
+        ptx.contains("shfl.sync.idx.b32 %wave_value, %wave_source, %wave_index, 31, 0xFFFFFFFF;"),
         "PTX: {ptx}"
     );
 }

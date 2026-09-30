@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Register naming and special register mapping for SYCL. WAVE general-purpose
-//!
-//! registers become `uint32_t` locals and predicates become bool locals. Special
-//! registers map to SYCL `nd_item` accessors (`get_local_id`, `get_group`, `get_local_range`,
-//! `get_group_range`) and `sub_group` accessors (`get_local_id`, `get_group_id`,
-//! `get_max_local_range`, `get_group_range`) for lane/wave queries.
+//! Map WAVE registers and thread identity values to SYCL C++.
 
 use std::fmt::Write;
 
@@ -52,14 +47,14 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
         let mut i = 0u32;
         while i < reg_count {
             let end = (i + regs_per_line).min(reg_count);
-            write!(out, "                uint32_t").unwrap();
+            write!(out, "                uint32_t").expect("writing to String cannot fail");
             for j in i..end {
                 if j > i {
-                    write!(out, ",").unwrap();
+                    write!(out, ",").expect("writing to String cannot fail");
                 }
-                write!(out, " r{j} = 0").unwrap();
+                write!(out, " r{j} = 0").expect("writing to String cannot fail");
             }
-            writeln!(out, ";").unwrap();
+            writeln!(out, ";").expect("writing to String cannot fail");
             i = end;
         }
     }
@@ -68,12 +63,15 @@ pub fn emit_declarations(reg_count: u32, has_local_mem: bool) -> String {
         out,
         "                bool p0 = false, p1 = false, p2 = false, p3 = false;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
 
     if has_local_mem {
-        writeln!(out, "                float _mma_a[16] = {{}};").unwrap();
-        writeln!(out, "                float _mma_b[16] = {{}};").unwrap();
-        writeln!(out, "                float _mma_c[16] = {{}};").unwrap();
+        writeln!(out, "                float _mma_a[16] = {{}};")
+            .expect("writing to String cannot fail");
+        writeln!(out, "                float _mma_b[16] = {{}};")
+            .expect("writing to String cannot fail");
+        writeln!(out, "                float _mma_c[16] = {{}};")
+            .expect("writing to String cannot fail");
     }
 
     out

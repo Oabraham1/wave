@@ -3,9 +3,10 @@
 
 """GPU detection for the WAVE Python SDK."""
 
+from __future__ import annotations
+
 import platform
 import subprocess
-from typing import Tuple
 
 
 class DeviceInfo:
@@ -19,7 +20,7 @@ class DeviceInfo:
         return self.name
 
 
-def detect_gpu() -> Tuple[str, str]:
+def detect_gpu() -> tuple[str, str]:
     """Detect the best available GPU.
 
     Returns a (vendor, name) tuple. Vendor is one of: 'apple', 'nvidia',

@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Optimization pass trait definition.
-//!
-//! All optimization passes implement this trait, allowing them to be
-//! composed in a pipeline and run until a fixed point is reached.
+//! Optimization pass trait definition. All optimization passes implement this trait, allowing
+//! them to be composed in a pipeline and run until a fixed point is reached.
 
 use crate::mir::function::MirFunction;
 
@@ -22,6 +20,7 @@ mod tests {
     use super::*;
     use crate::mir::value::BlockId;
 
+    #[derive(Debug)]
     struct NoopPass;
     impl Pass for NoopPass {
         fn name(&self) -> &'static str {

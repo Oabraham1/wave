@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIR kernel definition for WAVE GPU kernels.
-//!
-//! A kernel is the top-level compilation unit, containing parameters,
-//! body statements, and optional attributes that control compilation.
+//! HIR kernel definition for WAVE GPU kernels. A kernel is the top-level compilation unit,
+//! containing parameters body statements, and optional attributes that control compilation.
 
 use super::stmt::Stmt;
 use super::types::{AddressSpace, Type};

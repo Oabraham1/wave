@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Execution statistics tracking. Counts instructions by category (integer, float,
-//!
-//! memory, control, wave ops, atomics), memory accesses, barriers, and divergent
-//! branches. Aggregated across waves and workgroups for final reporting.
+//! Count instructions, memory accesses, barriers, and divergent branches across waves and
+//! workgroups.
 
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionStats {
@@ -34,6 +32,7 @@ pub struct ExecutionStats {
 }
 
 impl ExecutionStats {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -118,11 +117,13 @@ pub enum InstructionCategory {
     Atomic,
 }
 
+#[derive(Debug)]
 pub struct TraceWriter {
     enabled: bool,
 }
 
 impl TraceWriter {
+    #[must_use]
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
     }
@@ -136,6 +137,7 @@ impl TraceWriter {
         }
     }
 
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }

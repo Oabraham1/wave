@@ -1,19 +1,17 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Dead code elimination pass.
-//!
-//! Marks all instructions whose results are used. Removes unmarked
-//! instructions that have no side effects (stores, barriers, atomics
-//! are always considered live).
+//! Remove unused SSA instructions and phi nodes. Terminators and side effects keep their
+//! transitive dependencies live.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::pass::Pass;
 use crate::mir::function::MirFunction;
 use crate::mir::value::ValueId;
 
 /// Dead code elimination pass.
+#[derive(Debug)]
 pub struct Dce;
 
 impl Pass for Dce {
@@ -22,47 +20,51 @@ impl Pass for Dce {
     }
 
     fn run(&self, func: &mut MirFunction) -> bool {
-        let used_values = collect_used_values(func);
+        let live = live_values(func);
         let mut changed = false;
-
         for block in &mut func.blocks {
-            let original_len = block.instructions.len();
+            let original_len = block.instructions.len() + block.phis.len();
             block.instructions.retain(|inst| {
-                if inst.has_side_effects() {
-                    return true;
-                }
-                match inst.dest() {
-                    Some(dest) => used_values.contains(&dest),
-                    None => true,
-                }
+                inst.has_side_effects() || inst.dest().is_none_or(|dest| live.contains(&dest))
             });
-            if block.instructions.len() != original_len {
-                changed = true;
-            }
+            block.phis.retain(|phi| live.contains(&phi.dest));
+            changed |= original_len != block.instructions.len() + block.phis.len();
         }
-
         changed
     }
 }
 
-fn collect_used_values(func: &MirFunction) -> HashSet<ValueId> {
-    let mut used = HashSet::new();
+fn live_values(func: &MirFunction) -> HashSet<ValueId> {
+    let mut instructions = HashMap::new();
+    let mut phis = HashMap::new();
+    let mut pending = Vec::new();
     for block in &func.blocks {
         for phi in &block.phis {
-            for (_, val) in &phi.incoming {
-                used.insert(*val);
-            }
+            phis.insert(phi.dest, phi);
         }
         for inst in &block.instructions {
-            for operand in inst.operands() {
-                used.insert(operand);
+            if let Some(dest) = inst.dest() {
+                instructions.insert(dest, inst);
+            }
+            if inst.has_side_effects() || inst.dest().is_none() {
+                pending.extend(inst.operand_iter());
             }
         }
-        for operand in block.terminator.operands() {
-            used.insert(operand);
+        pending.extend(block.terminator.operand_iter());
+    }
+
+    let mut live = HashSet::new();
+    while let Some(value) = pending.pop() {
+        if !live.insert(value) {
+            continue;
+        }
+        if let Some(inst) = instructions.get(&value) {
+            pending.extend(inst.operand_iter());
+        } else if let Some(phi) = phis.get(&value) {
+            pending.extend(phi.incoming.iter().map(|&(_, value)| value));
         }
     }
-    used
+    live
 }
 
 #[cfg(test)]
@@ -92,7 +94,7 @@ mod tests {
         let pass = Dce;
         let changed = pass.run(&mut func);
         assert!(changed);
-        assert!(func.blocks[0].instructions.is_empty());
+        assert_eq!(func.blocks[0].instructions, [] as [MirInst; 0]);
     }
 
     #[test]

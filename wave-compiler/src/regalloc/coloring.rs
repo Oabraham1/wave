@@ -1,17 +1,15 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Graph coloring register allocator following Chaitin-Briggs.
-//!
-//! Assigns physical registers to virtual registers by coloring the
-//! interference graph. Pre-colors parameter registers per Rule 9:
-//! VReg(0)→PhysReg(0), VReg(1)→PhysReg(1), etc.
+//! Assign physical registers by coloring the interference graph. Parameter registers keep their
+//! argument indices.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use super::interference::InterferenceGraph;
 use crate::lir::operand::{PhysReg, VReg};
 
+#[derive(Debug)]
 /// Result of graph coloring.
 pub struct ColoringResult {
     /// Mapping from `VReg` to assigned `PhysReg`.
@@ -26,50 +24,43 @@ pub struct ColoringResult {
 /// PhysReg(0)..PhysReg(num_params-1) per Rule 9.
 #[must_use]
 pub fn color(ig: &InterferenceGraph, max_regs: u32, num_params: u32) -> ColoringResult {
-    let mut assignment: HashMap<VReg, PhysReg> = HashMap::new();
+    let mut assignment: HashMap<VReg, PhysReg> = HashMap::with_capacity(ig.adj.len());
     let mut spilled = Vec::new();
 
-    for i in 0..num_params {
-        let vreg = VReg(i);
+    for physical in (0..=u8::MAX).take(num_params.min(max_regs).min(256) as usize) {
+        let vreg = VReg(u32::from(physical));
         if ig.adj.contains_key(&vreg) {
-            #[allow(clippy::cast_possible_truncation)]
-            assignment.insert(vreg, PhysReg(i as u8));
+            assignment.insert(vreg, PhysReg(physical));
         }
     }
 
     let mut nodes: Vec<VReg> = ig.nodes();
-    nodes.sort_by_key(|v| std::cmp::Reverse(ig.degree(*v)));
+    nodes.sort_unstable_by_key(|v| (std::cmp::Reverse(ig.degree(*v)), *v));
 
-    let mut stack: Vec<VReg> = Vec::new();
-    let mut removed: HashSet<VReg> = HashSet::new();
+    let mut stack = Vec::with_capacity(nodes.len());
 
     for &vreg in &nodes {
         if !assignment.contains_key(&vreg) {
             stack.push(vreg);
-            removed.insert(vreg);
         }
     }
 
     while let Some(vreg) = stack.pop() {
-        let mut used_colors: HashSet<u8> = HashSet::new();
+        let mut used_colors = [false; 256];
         if let Some(neighbors) = ig.adj.get(&vreg) {
             for &neighbor in neighbors {
                 if let Some(&phys) = assignment.get(&neighbor) {
-                    used_colors.insert(phys.0);
+                    used_colors[usize::from(phys.0)] = true;
                 }
             }
         }
 
-        let mut color_found = false;
-        for c in 0..max_regs.min(255) as u8 {
-            if !used_colors.contains(&c) {
-                assignment.insert(vreg, PhysReg(c));
-                color_found = true;
-                break;
-            }
-        }
-
-        if !color_found {
+        if let Some(available) = (0..=u8::MAX)
+            .take(max_regs.min(256) as usize)
+            .find(|color| !used_colors[usize::from(*color)])
+        {
+            assignment.insert(vreg, PhysReg(available));
+        } else {
             spilled.push(vreg);
         }
     }
@@ -107,7 +98,7 @@ mod tests {
         let ig = InterferenceGraph::build(&insts);
         let result = color(&ig, 32, 0);
 
-        assert!(result.spilled.is_empty());
+        assert_eq!(result.spilled, [] as [VReg; 0]);
         assert!(result.assignment.contains_key(&VReg(0)));
         assert!(result.assignment.contains_key(&VReg(1)));
         assert!(result.assignment.contains_key(&VReg(2)));

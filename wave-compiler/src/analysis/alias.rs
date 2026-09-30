@@ -1,11 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Alias analysis for memory operations.
-//!
-//! Uses address space partitioning: local, device, and private memory
-//! never alias each other. Within the same address space, uses offset
-//! analysis to determine may-alias relationships.
+//! Alias analysis for memory operations. Uses address space partitioning: local, device, and
+//! private memory never alias each other. Within the same address space, uses offset analysis to
+//! determine may-alias relationships.
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,7 +17,7 @@ use crate::mir::value::ValueId;
 pub enum AliasResult {
     /// Definitely do not alias.
     NoAlias,
-    /// Might alias (conservative).
+    /// Might alias, conservative.
     MayAlias,
     /// Definitely alias the same location.
     MustAlias,
@@ -34,11 +32,12 @@ pub struct MemOp {
     pub space: AddressSpace,
 }
 
+#[derive(Debug)]
 /// Alias analysis results for a MIR function.
 pub struct AliasInfo {
     /// Memory operations indexed by their instruction position.
     mem_ops: Vec<MemOp>,
-    /// Map from value to its address space (if known).
+    /// Map from value to its address space, if known.
     addr_spaces: HashMap<ValueId, AddressSpace>,
 }
 

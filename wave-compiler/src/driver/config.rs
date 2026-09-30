@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Compiler configuration: optimization level, target parameters, and debug flags.
-//!
-//! Controls how the compiler behaves during compilation, including which
-//! optimization passes to run and what target constraints to enforce.
+//! Compiler configuration: optimization level, target parameters, and debug flags. Controls how
+//! the compiler behaves during compilation, including which optimization passes to run and what
+//! target constraints to enforce.
 
 /// Optimization level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +33,7 @@ impl OptLevel {
 }
 
 /// Source language of the input file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     /// Python source.
     Python,
@@ -69,7 +68,7 @@ pub struct CompilerConfig {
     pub opt_level: OptLevel,
     /// Maximum registers for allocation.
     pub max_registers: u32,
-    /// Wave width (SIMD lanes).
+    /// Wave width, SIMD lanes.
     pub wave_width: u32,
     /// Whether to dump HIR.
     pub dump_hir: bool,

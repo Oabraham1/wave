@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE PTX backend. Provides `compile()` to translate a complete
-//!
-//! WBIN binary file into PTX assembly text, and `compile_kernel()` for translating a
-//! single kernel's code section. The SM version (compute capability) is configurable
-//! to target different NVIDIA GPU generations.
+//! Translate WBIN files or individual WAVE kernels into PTX.
 
 pub mod codegen;
 pub mod control_flow;
@@ -31,6 +27,10 @@ pub enum CompileError {
     #[error("invalid kernel index: {0}")]
     InvalidKernel(usize),
 
+    /// Structured control flow has unmatched or misplaced instructions.
+    #[error("invalid control flow: {0}")]
+    InvalidControlFlow(&'static str),
+
     #[error("unsupported operation: {0}")]
     UnsupportedOperation(String),
 }
@@ -39,7 +39,7 @@ pub enum CompileError {
 ///
 /// # Errors
 ///
-/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels,
+/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels
 /// or contains unsupported instructions.
 pub fn compile(wbin_data: &[u8], sm_version: u32) -> Result<String, CompileError> {
     let wbin = WbinFile::parse(wbin_data)?;

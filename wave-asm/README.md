@@ -2,7 +2,7 @@
 
 Assembler for the WAVE ISA.
 
-Translates WAVE assembly (`.wave`) into WAVE binary (`.wbin`).
+Translates WAVE assembly, `.wave`, into WAVE binary, `.wbin`.
 
 Spec: https://ojima.me/spec.html
 
@@ -24,7 +24,7 @@ wave-asm input.wave --dump-ast
 
 | Flag | Description |
 |------|-------------|
-| `-o <path>` | Output file (default: input stem + `.wbin`) |
+| `-o <path>` | Output file; default: input stem + `.wbin` |
 | `-v` | Verbose encoding output |
 | `--dump-ast` | Print parsed AST |
 | `--dump-hex` | Hex dump alongside assembly |
@@ -33,6 +33,6 @@ wave-asm input.wave --dump-ast
 
 ## License
 
-Copyright (c) 2026 Ojima Abraham. All rights reserved.
+Copyright © 2026 Ojima Abraham. All rights reserved.
 
 Apache License, Version 2.0. See [LICENSE](LICENSE) for terms.

@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! SYCL memory operation emission. Generates load, store, and atomic operations for
-//!
-//! global (USM pointer `device_mem_usm`) and local (SLM pointer lm) memory spaces.
-//! Loads and stores use byte-offset pointer arithmetic with C-style casts. Atomics
-//! use `sycl::atomic_ref` with appropriate `memory_order`, `memory_scope`, and
-//! `address_space` template parameters for each operation.
+//! Emit SYCL C++ loads, stores, and atomics for device and local memory.
 
 use crate::registers::reg;
 use wave_decode::opcodes::{AtomicOp, MemWidth};

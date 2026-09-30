@@ -1,20 +1,17 @@
 # WAVE: Wide Architecture Virtual Encoding
 
-**The ARM of GPU computing. One binary, any GPU.**
-
 [![arXiv](https://img.shields.io/badge/arXiv-2603.28793-b31b1b)](https://arxiv.org/abs/2603.28793)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19163452-blue)](https://doi.org/10.5281/zenodo.19163452)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/wave-gpu)](https://pypi.org/project/wave-gpu/)
 
-WAVE is a vendor-neutral GPU instruction set architecture. Write GPU code once, run it on NVIDIA, AMD, Apple, and Intel GPUs unchanged. The same binary produces identical results on all four vendors. ARM defines what a CPU is so multiple vendors can build compatible chips. WAVE does the same for GPU computation.
+WAVE is a GPU instruction set with backends for NVIDIA, AMD, Apple, and Intel. Compile a kernel to a `.wbin` file, then translate it for the target GPU. Hardware experiments execute the same binaries on Apple M4 Pro and NVIDIA Tesla T4. AMD and Intel hardware execution is outside this evaluation.
 
 ## Highlights
 
-- **11** hardware-invariant primitives across 4 GPU vendors
-- **Verified** on Apple M4 Pro, NVIDIA T4, and AMD MI300X
-- **3,587 GFLOPS** F32 matrix multiply on M4 Pro (53.5% of Apple MPS)
-- **89.29%** CIFAR-10 accuracy via PyTorch integration, matching native exactly
+- Explicit registers, structured control flow, and wave operations
+- Shared binary format for the emulator and backend translators
+- GPU experiments with independent references and matched native kernels
 
 ## Install
 
@@ -68,44 +65,49 @@ wave-compiler ──> WAVE Binary (.wbin) ──> wave-emu (reference emulator)
 | Crate | Purpose |
 |-------|---------|
 | `wave-decode` | Shared instruction decoder and binary format |
-| `wave-asm` | Assembler (.wave text to .wbin binary) |
-| `wave-dis` | Disassembler (.wbin binary to .wave text) |
+| `wave-asm` | Assembler; .wave text to .wbin binary |
+| `wave-dis` | Disassembler; .wbin binary to .wave text |
 | `wave-emu` | Reference emulator |
-| `wave-compiler` | Multi-language compiler (Python/Rust/C++/TS to .wbin) |
+| `wave-compiler` | Multi-language compiler; Python/Rust/C++/TS to .wbin |
 | `wave-metal` | Apple Metal backend |
 | `wave-ptx` | NVIDIA PTX backend |
 | `wave-hip` | AMD HIP backend |
 | `wave-sycl` | Intel SYCL backend |
 | `wave-runtime` | SDK runtime with in-process compilation and kernel cache |
-| `sdk/python` | Python SDK (`pip install wave-gpu`) |
+| `sdk/python` | Python SDK; `pip install wave-gpu` |
 
 Each crate builds independently. No Cargo workspace.
 
 ## Benchmarks
 
-Auto-tuned results on Apple M4 Pro at 4096x4096 matrix size (MPS baseline: 6,710 GFLOPS):
+The [GPU benchmarks](benchmarks/gpu/) compare WAVE binaries with matched native Metal and CUDA kernels. Run the Metal benchmarks on macOS 15 or later with an Apple GPU, Cargo, and the Swift command-line tools:
 
-| Kernel | F32 GFLOPS | F16 GFLOPS | % of MPS |
-|--------|-----------|-----------|----------|
-| Blocked GEMM | 3,587 | 4,049 | 53.5% |
-| Fused GEMM+bias+ReLU | 3,562 | 4,027 | 53.1% |
-| Fused GEMM+bias+GELU | 3,514 | -- | 52.4% |
+```sh
+python3 benchmarks/gpu/run.py --output /private/tmp/wave-gpu-run
+```
 
-Cross-vendor hardware verification:
+For a comparison with Slang 2026.19:
 
-| Vendor | GPU | Status |
-|--------|-----|--------|
-| Apple | M4 Pro | Verified |
-| NVIDIA | T4 | Verified |
-| AMD | MI300X | Verified |
-| Intel | Arc | Pending |
+```sh
+python3 benchmarks/gpu/run_comparison.py --output /private/tmp/wave-gpu-comparison \
+  --slangc /path/to/slang-2026.19/bin/slangc
+```
+
+Package a Metal run for NVIDIA:
+
+```sh
+python3 benchmarks/gpu/nvidia/prepare.py --session /private/tmp/wave-gpu-run \
+  --output /private/tmp/wave-nvidia
+```
+
+Upload the generated `nvidia_colab.ipynb` to Colab, select a GPU runtime, and run its cells. Use a new output directory for each run. Results include complete output checks and raw timing samples.
+
+The [GEMM suite](benchmarks/autotune/README.md) compares explicit WAVE kernels with Metal Performance Shaders. Full output validation uses Accelerate SGEMM. Each run writes its configuration and timing samples to the selected output directory.
 
 ## Papers
 
-- [Toward a Universal GPU Instruction Set Architecture: A Cross-Vendor Analysis of Hardware-Invariant Computational Primitives in Parallel Processors](https://doi.org/10.5281/zenodo.19163452) (Zenodo, 2026)
+- [Toward a Universal GPU Instruction Set Architecture: A Cross-Vendor Analysis of Hardware-Invariant Computational Primitives in Parallel Processors](https://doi.org/10.5281/zenodo.19163452), Zenodo, 2026
 - arXiv preprint: [2603.28793](https://arxiv.org/abs/2603.28793)
-- Under review: International Journal of Parallel Programming (IJPP), April 2026
-- Venue targets: ASPLOS 2027, CGO 2026, MLSys, CAV
 
 ## Contributing
 
@@ -113,8 +115,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the fork-based workflow, code standar
 
 ## Authors
 
-- **Ojima Abraham** (Franklin & Marshall College) [![ORCID](https://img.shields.io/badge/ORCID-0009--0005--8667--4771-green)](https://orcid.org/0009-0005-8667-4771)
-- **Onyinye Okoli** (Cornell University) [![ORCID](https://img.shields.io/badge/ORCID-0009--0001--3374--2890-green)](https://orcid.org/0009-0001-3374-2890)
+- **Ojima Abraham**, Franklin & Marshall College, [![ORCID](https://img.shields.io/badge/ORCID-0009--0005--8667--4771-green)](https://orcid.org/0009-0005-8667-4771)
+- **Onyinye Okoli**, Cornell University, [![ORCID](https://img.shields.io/badge/ORCID-0009--0001--3374--2890-green)](https://orcid.org/0009-0001-3374-2890)
 
 ## License
 
@@ -122,4 +124,4 @@ Apache License, Version 2.0. See [LICENSE](LICENSE) for terms.
 
 ## Acknowledgments
 
-Asahi Linux reverse engineering team, Dougall Johnson (GPU microarchitecture documentation), AMD GPUOpen, Google Colab (NVIDIA T4 verification), DigitalOcean (AMD MI300X verification).
+Asahi Linux reverse engineering team, Dougall Johnson, GPU microarchitecture documentation, AMD GPUOpen, Google Colab, NVIDIA T4 verification, DigitalOcean, AMD MI300X verification.

@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE Metal backend. Provides `compile()` to translate a complete
-//!
-//! WBIN binary file into MSL source text, and `compile_kernel()` for translating a
-//! single kernel's code section. Orchestrates WBIN parsing via wave-decode, instruction
-//! decoding, and MSL code generation through the codegen module.
+//! Translate WBIN files or individual WAVE kernels into Metal.
 
 pub mod codegen;
 pub mod control_flow;
@@ -39,9 +35,31 @@ pub enum CompileError {
 ///
 /// # Errors
 ///
-/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels,
+/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels
 /// or contains unsupported instructions.
 pub fn compile(wbin_data: &[u8]) -> Result<String, CompileError> {
+    compile_with_initial_registers(wbin_data, &[])
+}
+
+/// Compile WBIN with initial values for consecutive argument registers.
+///
+/// Registers beyond the provided arguments retain their zero initialization.
+/// Arguments for registers unused by a kernel are ignored.
+///
+/// # Errors
+///
+/// Returns an error for invalid WBIN, unsupported instructions, or more than
+/// 256 initial register values.
+///
+/// # Examples
+///
+/// ```
+/// assert!(wave_metal::compile_with_initial_registers(&[], &[0, 64]).is_err());
+/// ```
+pub fn compile_with_initial_registers(
+    wbin_data: &[u8],
+    initial_registers: &[u32],
+) -> Result<String, CompileError> {
     let wbin = WbinFile::parse(wbin_data)?;
     if wbin.kernels.is_empty() {
         return Err(CompileError::NoKernels);
@@ -54,7 +72,8 @@ pub fn compile(wbin_data: &[u8]) -> Result<String, CompileError> {
         let instructions = wave_decode::decode_all(code)?;
 
         let mut gen = codegen::CodeGenerator::new();
-        let kernel_msl = gen.generate(&instructions, kernel_info)?;
+        let kernel_msl =
+            gen.generate_with_initial_registers(&instructions, kernel_info, initial_registers)?;
         output.push_str(&kernel_msl);
         output.push('\n');
     }

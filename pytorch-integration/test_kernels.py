@@ -5,15 +5,13 @@ import numpy as np
 from wave_kernels import ALL_KERNELS
 from wave_runtime import compile_kernel, run_kernel
 
-PASS = 0
 FAIL = 0
 
 
 def check(name, actual, expected, rtol=1e-4, atol=1e-5):
-    global PASS, FAIL
+    global FAIL
     if np.allclose(actual, expected, rtol=rtol, atol=atol):
         print(f"[PASS] {name}")
-        PASS += 1
     else:
         print(f"[FAIL] {name}")
         print(f"  Expected: {expected}")
@@ -241,4 +239,4 @@ if __name__ == "__main__":
     test_matmul_a_bt()
     test_bias_grad()
     test_sgd_update()
-    print(f"\nResults: {PASS} passed, {FAIL} failed")
+    print(f"\nFailures: {FAIL}" if FAIL else "\nChecks passed")

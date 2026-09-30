@@ -1,29 +1,23 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI entry point. Parses arguments via clap, reads source file, invokes the
-//!
-//! assembler library, handles diagnostics output, and writes the binary result.
-//! Supports verbose mode, AST dumping, hex output, and symbol stripping.
-
-#![allow(clippy::struct_excessive_bools)]
+//! Assemble WAVE source from the command line and report diagnostics.
 
 use clap::{Parser, ValueEnum};
 use std::fs;
 use std::path::PathBuf;
-use std::process::ExitCode;
 use wave_asm::diagnostics::DiagnosticEmitter;
 use wave_asm::lexer::Lexer;
 use wave_asm::parser::Parser as WaveParser;
 
-#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum WarnLevel {
     All,
     None,
     Error,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "wave-asm")]
 #[command(about = "WAVE assembler - translates .wave assembly to .wbin binary")]
 #[command(version)]
@@ -34,18 +28,12 @@ struct Args {
     #[arg(
         short,
         long,
-        help = "Output .wbin file (default: input with .wbin extension)"
+        help = "Output file. Defaults to the input path with a .wbin extension"
     )]
     output: Option<PathBuf>,
 
-    #[arg(long, help = "Print encoded instructions to stdout")]
-    verbose: bool,
-
-    #[arg(long, help = "Dump the AST to stdout")]
-    dump_ast: bool,
-
-    #[arg(long, help = "Dump hex output of binary to stdout")]
-    dump_hex: bool,
+    #[command(flatten)]
+    display: DisplayOptions,
 
     #[arg(long, help = "Strip symbol table from output")]
     no_symbols: bool,
@@ -60,26 +48,38 @@ struct Args {
     warn_level: WarnLevel,
 }
 
-fn main() -> ExitCode {
+#[derive(Debug, clap::Args)]
+struct DisplayOptions {
+    #[arg(long, help = "Print encoded instructions to stdout")]
+    verbose: bool,
+
+    #[arg(long, help = "Dump the AST to stdout")]
+    dump_ast: bool,
+
+    #[arg(long, help = "Dump hex output of binary to stdout")]
+    dump_hex: bool,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let source = match fs::read_to_string(&args.input) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error: failed to read {}: {}", args.input.display(), e);
-            return ExitCode::FAILURE;
+            return Err("assembly failed".into());
         }
     };
 
     let source_name = args.input.to_string_lossy();
 
-    if args.dump_ast {
+    if args.display.dump_ast {
         let tokens = match Lexer::new(&source).tokenize() {
             Ok(t) => t,
             Err(e) => {
                 let emitter = DiagnosticEmitter::new(&source_name, &source);
                 emitter.emit_error(&e, &mut std::io::stderr());
-                return ExitCode::FAILURE;
+                return Err("assembly failed".into());
             }
         };
 
@@ -88,12 +88,12 @@ fn main() -> ExitCode {
             Err(e) => {
                 let emitter = DiagnosticEmitter::new(&source_name, &source);
                 emitter.emit_error(&e, &mut std::io::stderr());
-                return ExitCode::FAILURE;
+                return Err("assembly failed".into());
             }
         };
 
         println!("{program:#?}");
-        return ExitCode::SUCCESS;
+        return Ok(());
     }
 
     let options = wave_asm::AssemblerOptions {
@@ -109,8 +109,8 @@ fn main() -> ExitCode {
                 for warning in &result.warnings {
                     emitter.emit_warning(warning, &mut stderr);
                 }
-                eprintln!("error: warnings treated as errors (-Werror)");
-                return ExitCode::FAILURE;
+                eprintln!("error: warnings treated as errors by -Werror");
+                return Err("assembly failed".into());
             }
 
             if args.warn_level == WarnLevel::All {
@@ -119,7 +119,7 @@ fn main() -> ExitCode {
                 }
             }
 
-            if args.dump_hex {
+            if args.display.dump_hex {
                 for (i, chunk) in result.binary.chunks(16).enumerate() {
                     print!("{:08x}: ", i * 16);
                     for byte in chunk {
@@ -127,7 +127,7 @@ fn main() -> ExitCode {
                     }
                     println!();
                 }
-                return ExitCode::SUCCESS;
+                return Ok(());
             }
 
             let output_path = args
@@ -136,10 +136,10 @@ fn main() -> ExitCode {
 
             if let Err(e) = fs::write(&output_path, &result.binary) {
                 eprintln!("error: failed to write {}: {}", output_path.display(), e);
-                return ExitCode::FAILURE;
+                return Err("assembly failed".into());
             }
 
-            if args.verbose {
+            if args.display.verbose {
                 println!(
                     "Assembled {} bytes to {}",
                     result.binary.len(),
@@ -147,12 +147,12 @@ fn main() -> ExitCode {
                 );
             }
 
-            ExitCode::SUCCESS
+            Ok(())
         }
         Err(e) => {
             let emitter = DiagnosticEmitter::new(&source_name, &source);
             emitter.emit_error(&e, &mut std::io::stderr());
-            ExitCode::FAILURE
+            Err("assembly failed".into())
         }
     }
 }

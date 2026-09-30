@@ -1,51 +1,36 @@
 ---
-title: Research Papers
-description: Publications, preprints, and source code for the WAVE research project.
+title: "Research papers"
+description: "The WAVE preprint, implementation, and GPU experiments."
 ---
 
-WAVE is an active research project. This page collects links to the published paper, pending publications, and the open-source implementation.
+## Preprint
 
-## Primary Publication
+Toward a Universal GPU Instruction Set Architecture: A Cross-Vendor Analysis of Hardware-Invariant Computational Primitives in Parallel Processors
 
-**Toward a Universal GPU Instruction Set Architecture: A Cross-Vendor Analysis of Hardware-Invariant Computational Primitives in Parallel Processors**
+Ojima Abraham and Onyinye Okoli. The preprint derives common GPU execution primitives and presents the WAVE architecture. Its experiments use hand-written kernels to examine these primitives across vendors.
 
-The paper presents the systematic analysis of over 5,000 pages of vendor ISA documentation across 16 microarchitectures from Apple, NVIDIA, AMD, and Intel. It identifies 11 categories of hardware-invariant primitives that every major GPU architecture provides, and introduces WAVE as a portable binary encoding built on top of those primitives.
+- [arXiv v1](https://arxiv.org/abs/2603.28793v1)
+- [Zenodo record](https://doi.org/10.5281/zenodo.19163452)
 
-The research demonstrates end-to-end correctness by compiling a single WAVE binary and executing it on three distinct GPUs - Apple M4 Pro (Metal), NVIDIA T4 (Turing/PTX), and AMD MI300X (CDNA 3/GCN ISA) - producing identical numerically verified output on all targets.
+## GPU experiments
 
-### Zenodo (Open Access)
+The [GPU benchmarks](https://github.com/Oabraham1/wave/tree/main/benchmarks/gpu) compare WAVE binaries with matched native kernels on Apple and NVIDIA hardware. They check complete outputs against independent references and measure execution with GPU timestamps. See [Hardware verification](/research/hardware-verification/) for the workloads, methods, and results.
 
-The paper is available on Zenodo under DOI [10.5281/zenodo.19163452](https://doi.org/10.5281/zenodo.19163452).
+## Implementation
 
-### ASPLOS 2027
+The [repository](https://github.com/Oabraham1/wave) contains the source compiler, assembler, emulator, backend translators, runtime, and SDKs. The source compiler emits WAVE binaries. The backends emit Metal Shading Language, PTX, HIP source, or SYCL source for vendor toolchains. The emulator checks functional execution; it does not predict hardware cycle counts.
 
-The paper is in preparation for submission to the 32nd ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS 2027).
-
-## Source Code
-
-The full WAVE implementation - compiler, emulator, runtime, and multi-language SDKs - is open source on GitHub:
-
-- **Repository:** [github.com/Oabraham1/wave](https://github.com/Oabraham1/wave)
-- **License:** See the repository for license details.
-
-The repository contains:
-
-- `wave-compiler` - the ahead-of-time compiler that translates WAVE binaries into vendor-native GPU instructions (Metal IR, PTX, GCN ISA).
-- `wave-emu` - a cycle-approximate emulator for WAVE binaries.
-- `wave-runtime` - the host-side runtime that manages device discovery, memory, and kernel dispatch.
-- Language SDKs for Rust, Python, TypeScript, and C++.
-
-## Citing WAVE
-
-If you use WAVE in your research, please cite the Zenodo publication:
+## Citation
 
 ```bibtex
-@software{wave2026,
-  title     = {Toward a Universal GPU Instruction Set Architecture:
-               A Cross-Vendor Analysis of Hardware-Invariant
-               Computational Primitives in Parallel Processors},
-  doi       = {10.5281/zenodo.19163452},
-  publisher = {Zenodo},
-  url       = {https://doi.org/10.5281/zenodo.19163452}
+@misc{abraham2026wave,
+  title = {Toward a Universal GPU Instruction Set Architecture:
+           A Cross-Vendor Analysis of Hardware-Invariant
+           Computational Primitives in Parallel Processors},
+  author = {Ojima Abraham and Onyinye Okoli},
+  year = {2026},
+  eprint = {2603.28793},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2603.28793}
 }
 ```

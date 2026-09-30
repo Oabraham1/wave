@@ -1,18 +1,18 @@
 # WAVE Specification Verification Test Suite
 
-This test suite verifies the WAVE v0.1 specification against the reference implementation (wave-asm assembler and wave-emu emulator).
+This test suite verifies the WAVE v0.1 specification against the reference implementation, wave-asm assembler and wave-emu emulator.
 
 ## Purpose
 
 The verification suite:
 - Tests every claim in the WAVE specification
 - Traces each test to a specific spec section
-- Uses self-checking tests (assembly writes results to memory, harness verifies)
+- Uses self-checking tests, assembly writes results to memory, harness verifies
 - Includes real GPU-style programs as stress tests
 
 ## Dependencies
 
-Requires `wave-asm` (assembler) and `wave-emu` (emulator) from the parent workspace.
+Requires `wave-asm`, assembler, and `wave-emu`, emulator, from the parent workspace.
 
 ## Running Tests
 
@@ -127,5 +127,5 @@ struct EmulatorConfig {
 
 ## License
 
-Copyright (c) 2026 Ojima Abraham. All rights reserved.
+Copyright © 2026 Ojima Abraham. All rights reserved.
 Licensed under the Apache License, Version 2.0.

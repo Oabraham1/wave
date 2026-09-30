@@ -12,6 +12,7 @@ homepage = "https://wave.ojima.me"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
+num-traits = "0.2"
 wave-compiler = { version = "0.1.2", path = "../wave-compiler" }
 wave-decode = { version = "0.1.2", path = "../wave-decode" }
 wave-emu = { version = "0.1.2", path = "../wave-emu" }
@@ -23,6 +24,7 @@ thiserror = "1"
 tempfile = "3"
 
 [dev-dependencies]
+wave-dis = { version = "0.1.2", path = "../wave-dis" }
 wave-asm = { version = "0.1.2", path = "../wave-asm" }
 
 [lints.rust]
@@ -31,3 +33,7 @@ unsafe_code = "deny"
 [lints.clippy]
 all = "deny"
 pedantic = "warn"
+
+[[bench]]
+name = "toolchain"
+harness = false

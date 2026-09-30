@@ -1,14 +1,11 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI entry point for the WAVE emulator. Parses command-line arguments for grid
-//!
-//! and workgroup dimensions, memory sizes, input data, and output options. Loads
-//! the WBIN binary, executes it, and reports results or statistics.
-
-#![allow(clippy::cast_possible_truncation)]
+//! Run WAVE binaries from the command line with input data, output dumps, and execution
+//! statistics.
 
 use clap::Parser;
+use num_traits::ToPrimitive;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -86,21 +83,21 @@ struct Args {
     #[arg(
         long,
         default_value = "10000000",
-        help = "Maximum instructions to execute (0 = unlimited)"
+        help = "Maximum instruction count. Use 0 for no limit"
     )]
     max_instructions: u64,
 
     #[arg(
         long,
         value_name = "REG:VALUE",
-        help = "Set initial register value for all threads (e.g. 0:4096)"
+        help = "Set an initial register value for all threads, such as 0:4096"
     )]
     set_reg: Vec<String>,
 
     #[arg(
         long,
         value_name = "OFFSET:TYPE:COUNT:SCALE",
-        help = "Fill memory with iota pattern (0, scale, 2*scale, ...)"
+        help = "Fill memory with 0, scale, 2*scale, and so on"
     )]
     fill_iota: Vec<String>,
 
@@ -206,15 +203,16 @@ fn parse_set_reg(spec: &str) -> Result<(u8, u32), String> {
     let reg = parts[0]
         .parse::<u8>()
         .map_err(|e| format!("invalid register: {e}"))?;
-    let value = parse_offset(parts[1])? as u32;
+    let value = u32::try_from(parse_offset(parts[1])?)
+        .map_err(|_| format!("register value exceeds u32: {}", parts[1]))?;
     Ok((reg, value))
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn generate_iota_f32(count: usize, scale: f32) -> Vec<u8> {
     let mut data = Vec::with_capacity(count * 4);
     for i in 0..count {
-        let val = i as f32 * scale;
+        // Generated f32 input data uses f32 rounding for large indices.
+        let val = i.to_f32().expect("usize values fit the f32 exponent range") * scale;
         data.extend_from_slice(&val.to_le_bytes());
     }
     data
@@ -273,6 +271,7 @@ fn build_config(args: &Args) -> Result<EmulatorConfig, EmulatorError> {
     Ok(EmulatorConfig {
         grid_dim,
         workgroup_dim,
+        use_kernel_workgroup_size: true,
         register_count: args.registers,
         local_memory_size: args.local_memory,
         device_memory_size: args.device_memory,
@@ -354,7 +353,37 @@ fn load_memory_fills(emulator: &mut Emulator, args: &Args) -> Result<(), Emulato
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+fn dump_values<const N: usize>(
+    emulator: &Emulator,
+    spec: &str,
+    flag: &str,
+    format: impl Fn([u8; N]) -> String,
+) -> Result<(), EmulatorError> {
+    let (offset, count) = spec
+        .split_once(':')
+        .ok_or_else(|| EmulatorError::InvalidBinary {
+            message: format!("{flag} expects OFFSET:COUNT, got '{spec}'"),
+        })?;
+    let offset = parse_offset(offset).map_err(|error| EmulatorError::InvalidBinary {
+        message: format!("{flag} offset: {error}"),
+    })?;
+    let count = count
+        .parse::<usize>()
+        .map_err(|error| EmulatorError::InvalidBinary {
+            message: format!("{flag} count: {error}"),
+        })?;
+    let length = count
+        .checked_mul(N)
+        .ok_or_else(|| EmulatorError::InvalidBinary {
+            message: format!("{flag} byte count exceeds host limits"),
+        })?;
+    let data = emulator.read_device_memory(offset, length)?;
+    for bytes in data.as_chunks::<N>().0 {
+        println!("{}", format(*bytes));
+    }
+    Ok(())
+}
+
 fn dump_outputs(emulator: &Emulator, args: &Args) -> Result<(), EmulatorError> {
     if let Some(range_str) = &args.dump_memory {
         let (start, end) =
@@ -362,7 +391,12 @@ fn dump_outputs(emulator: &Emulator, args: &Args) -> Result<(), EmulatorError> {
                 message: format!("invalid --dump-memory: {e}"),
             })?;
 
-        let len = (end - start) as usize;
+        let len = end
+            .checked_sub(start)
+            .and_then(|size| usize::try_from(size).ok())
+            .ok_or_else(|| EmulatorError::IoError {
+                message: "invalid memory dump range".into(),
+            })?;
         let data = emulator.read_device_memory(start, len)?;
 
         println!("Device memory 0x{start:08x}-0x{end:08x}:");
@@ -370,107 +404,30 @@ fn dump_outputs(emulator: &Emulator, args: &Args) -> Result<(), EmulatorError> {
     }
 
     if let Some(spec) = &args.dump_u32 {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(EmulatorError::InvalidBinary {
-                message: format!("--dump-u32 expects OFFSET:COUNT, got '{spec}'"),
-            });
-        }
-        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("--dump-u32 offset: {e}"),
+        dump_values(emulator, spec, "--dump-u32", |bytes| {
+            u32::from_le_bytes(bytes).to_string()
         })?;
-        let count = parts[1]
-            .parse::<usize>()
-            .map_err(|e| EmulatorError::InvalidBinary {
-                message: format!("--dump-u32 count: {e}"),
-            })?;
-        let data = emulator.read_device_memory(offset, count * 4)?;
-        for i in 0..count {
-            let bytes = [
-                data[i * 4],
-                data[i * 4 + 1],
-                data[i * 4 + 2],
-                data[i * 4 + 3],
-            ];
-            let val = u32::from_le_bytes(bytes);
-            println!("{val}");
-        }
     }
-
     if let Some(spec) = &args.dump_f32 {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(EmulatorError::InvalidBinary {
-                message: format!("--dump-f32 expects OFFSET:COUNT, got '{spec}'"),
-            });
-        }
-        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("--dump-f32 offset: {e}"),
+        dump_values(emulator, spec, "--dump-f32", |bytes| {
+            format!("{:?}", f32::from_le_bytes(bytes))
         })?;
-        let count = parts[1]
-            .parse::<usize>()
-            .map_err(|e| EmulatorError::InvalidBinary {
-                message: format!("--dump-f32 count: {e}"),
-            })?;
-        let data = emulator.read_device_memory(offset, count * 4)?;
-        for i in 0..count {
-            let bytes = [
-                data[i * 4],
-                data[i * 4 + 1],
-                data[i * 4 + 2],
-                data[i * 4 + 3],
-            ];
-            let val = f32::from_le_bytes(bytes);
-            println!("{val:?}");
-        }
     }
-
     if let Some(spec) = &args.dump_f16 {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(EmulatorError::InvalidBinary {
-                message: format!("--dump-f16 expects OFFSET:COUNT, got '{spec}'"),
-            });
-        }
-        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("--dump-f16 offset: {e}"),
+        dump_values(emulator, spec, "--dump-f16", |bytes| {
+            format!(
+                "{:?}",
+                half::f16::from_bits(u16::from_le_bytes(bytes)).to_f32()
+            )
         })?;
-        let count = parts[1]
-            .parse::<usize>()
-            .map_err(|e| EmulatorError::InvalidBinary {
-                message: format!("--dump-f16 count: {e}"),
-            })?;
-        let data = emulator.read_device_memory(offset, count * 2)?;
-        for i in 0..count {
-            let bytes = [data[i * 2], data[i * 2 + 1]];
-            let bits = u16::from_le_bytes(bytes);
-            let val = half::f16::from_bits(bits).to_f32();
-            println!("{val:?}");
-        }
     }
-
     if let Some(spec) = &args.dump_bf16 {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err(EmulatorError::InvalidBinary {
-                message: format!("--dump-bf16 expects OFFSET:COUNT, got '{spec}'"),
-            });
-        }
-        let offset = parse_offset(parts[0]).map_err(|e| EmulatorError::InvalidBinary {
-            message: format!("--dump-bf16 offset: {e}"),
+        dump_values(emulator, spec, "--dump-bf16", |bytes| {
+            format!(
+                "{:?}",
+                f32::from_bits(u32::from(u16::from_le_bytes(bytes)) << 16)
+            )
         })?;
-        let count = parts[1]
-            .parse::<usize>()
-            .map_err(|e| EmulatorError::InvalidBinary {
-                message: format!("--dump-bf16 count: {e}"),
-            })?;
-        let data = emulator.read_device_memory(offset, count * 2)?;
-        for i in 0..count {
-            let bytes = [data[i * 2], data[i * 2 + 1]];
-            let bits = u16::from_le_bytes(bytes);
-            let val = f32::from_bits(u32::from(bits) << 16);
-            println!("{val:?}");
-        }
     }
 
     Ok(())
@@ -501,9 +458,6 @@ fn run() -> Result<(), EmulatorError> {
     Ok(())
 }
 
-fn main() {
-    if let Err(e) = run() {
-        eprintln!("Error: {e}");
-        std::process::exit(1);
-    }
+fn main() -> Result<(), EmulatorError> {
+    run()
 }

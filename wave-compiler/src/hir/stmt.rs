@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIR statement types for WAVE GPU kernels.
-//!
-//! Statements represent actions that do not produce values, including
-//! assignments, control flow, memory stores, and synchronization.
+//! HIR statement types for WAVE GPU kernels. Statements represent actions that do not produce
+//! values, including assignments, control flow, memory stores, and synchronization.
 
 use super::expr::{Expr, MemoryScope};
 use super::types::AddressSpace;
@@ -21,7 +19,7 @@ pub enum Stmt {
     },
     /// Conditional statement with optional else branch.
     If {
-        /// Condition expression (must evaluate to bool).
+        /// Condition expression, must evaluate to bool.
         condition: Expr,
         /// Statements executed when condition is true.
         then_body: Vec<Stmt>,
@@ -32,9 +30,9 @@ pub enum Stmt {
     For {
         /// Loop variable name.
         var: String,
-        /// Start of range (inclusive).
+        /// Start of range, inclusive.
         start: Expr,
-        /// End of range (exclusive).
+        /// End of range, exclusive.
         end: Expr,
         /// Step increment.
         step: Expr,
@@ -50,7 +48,7 @@ pub enum Stmt {
     },
     /// Return from kernel.
     Return {
-        /// Optional return value (kernels typically return void).
+        /// Optional return value, kernels typically return void.
         value: Option<Expr>,
     },
     /// Store value to memory address.

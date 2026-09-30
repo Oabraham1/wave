@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Constant folding and propagation pass.
-//!
-//! Evaluates operations on constants at compile time. When both operands
-//! of a binary operation are constants, the result is computed and the
+//! Constant folding and propagation pass. Evaluates operations on constants at compile time.
+//! When both operands of a binary operation are constants, the result is computed and the
 //! instruction is replaced with a constant.
 
 use std::collections::HashMap;
@@ -15,6 +13,7 @@ use crate::mir::function::MirFunction;
 use crate::mir::instruction::{ConstValue, MirInst};
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Constant folding pass.
 pub struct ConstantFold;
 
@@ -39,8 +38,12 @@ impl Pass for ConstantFold {
                         }
                     }
                     MirInst::BinOp {
-                        dest, op, lhs, rhs, ..
-                    } => {
+                        dest,
+                        op,
+                        lhs,
+                        rhs,
+                        ty,
+                    } if !ty.is_float() => {
                         if let (Some(&l), Some(&r)) = (constants.get(lhs), constants.get(rhs)) {
                             if let Some(result) = fold_binop(*op, l, r) {
                                 constants.insert(*dest, result);
@@ -61,7 +64,7 @@ impl Pass for ConstantFold {
     }
 }
 
-fn fold_binop(op: BinOp, lhs: i32, rhs: i32) -> Option<i32> {
+pub(crate) fn fold_binop(op: BinOp, lhs: i32, rhs: i32) -> Option<i32> {
     match op {
         BinOp::Add => Some(lhs.wrapping_add(rhs)),
         BinOp::Sub => Some(lhs.wrapping_sub(rhs)),

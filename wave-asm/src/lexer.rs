@@ -4,7 +4,7 @@
 //! Hand-written lexer. Consumes UTF-8 source one character at a time, emits
 //!
 //! typed tokens with byte spans. Newlines are significant (one instruction per
-//! line). Comments start with ; or # and run to end of line.
+//! line). Comments start with; or # and run to end of line.
 
 use crate::ast::Span;
 use crate::diagnostics::AssemblerError;
@@ -33,6 +33,7 @@ pub struct SpannedToken {
     pub span: Span,
 }
 
+#[derive(Debug)]
 pub struct Lexer<'a> {
     source: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
@@ -49,6 +50,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Tokenize assembly source.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid characters, registers, predicates, or number literals.
     pub fn tokenize(&mut self) -> Result<Vec<SpannedToken>, AssemblerError> {
         let mut tokens = Vec::new();
 
@@ -83,7 +89,7 @@ impl<'a> Lexer<'a> {
             ',' => Token::Comma,
             ':' => Token::Colon,
 
-            '.' if self.peek_char().is_some_and(|c| c.is_alphabetic()) => {
+            '.' if self.peek_char().is_some_and(char::is_alphabetic) => {
                 self.scan_directive(start)?
             }
 
@@ -304,7 +310,7 @@ impl<'a> Lexer<'a> {
                 num_str.push(ch);
                 self.advance();
                 if self.peek_char() == Some('-') || self.peek_char() == Some('+') {
-                    num_str.push(self.advance().unwrap());
+                    num_str.push(self.advance().expect("peek found a character"));
                 }
             } else {
                 break;
@@ -482,14 +488,14 @@ mod tests {
 
     #[test]
     fn test_lexer_float_immediate() {
-        let tokens = tokenize("mov_imm r0, 3.14");
+        let tokens = tokenize("mov_imm r0, 1.25");
         assert_eq!(
             tokens,
             vec![
                 Token::Identifier("mov_imm".into()),
                 Token::Register("r0".into()),
                 Token::Comma,
-                Token::Float(3.14),
+                Token::Float(1.25),
                 Token::Eof,
             ]
         );

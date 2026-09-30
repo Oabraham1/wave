@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIP memory operation emission. Generates load, store, and atomic operations for
-//!
-//! both global (device) and shared (local/LDS) memory. Memory accesses use byte-offset
-//! pointer arithmetic with C-style casts. Atomics use HIP's atomicAdd/atomicSub/etc.
-//! functions which work on both global and shared memory without address space qualifiers.
+//! Emit HIP C++ loads, stores, and atomics for device and local memory.
 
 use crate::registers::reg;
 use wave_decode::opcodes::{AtomicOp, MemWidth};

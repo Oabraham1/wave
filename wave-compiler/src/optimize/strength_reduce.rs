@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Strength reduction pass.
-//!
-//! Replaces expensive operations with cheaper equivalents:
-//! multiply by power-of-2 → shift left, unsigned divide by power-of-2
-//! → shift right, unsigned modulo by power-of-2 → bitwise AND.
+//! Reduce integer multiplication by powers of two to shifts.
 
 use std::collections::HashMap;
 
@@ -15,6 +11,7 @@ use crate::mir::function::MirFunction;
 use crate::mir::instruction::{ConstValue, MirInst};
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Strength reduction pass.
 pub struct StrengthReduce;
 
@@ -24,103 +21,60 @@ impl Pass for StrengthReduce {
     }
 
     fn run(&self, func: &mut MirFunction) -> bool {
-        let mut constants: HashMap<ValueId, u32> = HashMap::new();
-        let mut changed = false;
-
-        for block in &mut func.blocks {
-            for inst in &block.instructions {
-                if let MirInst::Const { dest, value } = inst {
-                    match value {
-                        ConstValue::I32(v) => {
-                            constants.insert(*dest, u32::from_ne_bytes(v.to_ne_bytes()));
-                        }
-                        ConstValue::U32(v) => {
-                            constants.insert(*dest, *v);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-
-            let mut replacements: Vec<(usize, MirInst, MirInst)> = Vec::new();
-
-            for (idx, inst) in block.instructions.iter().enumerate() {
-                if let MirInst::BinOp {
+        let Some(mut next_value) = func.next_value_id() else {
+            return false;
+        };
+        let constants: HashMap<ValueId, u32> = func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .filter_map(|inst| match inst {
+                MirInst::Const {
                     dest,
-                    op,
-                    lhs,
+                    value: ConstValue::I32(value),
+                } => Some((*dest, value.cast_unsigned())),
+                MirInst::Const {
+                    dest,
+                    value: ConstValue::U32(value),
+                } => Some((*dest, *value)),
+                _ => None,
+            })
+            .collect();
+        let mut changed = false;
+        for block in &mut func.blocks {
+            let mut instructions = Vec::with_capacity(block.instructions.len());
+            for mut inst in std::mem::take(&mut block.instructions) {
+                if let MirInst::BinOp {
+                    op: BinOp::Mul,
                     rhs,
                     ty,
-                } = inst
+                    ..
+                } = &inst
                 {
-                    if let Some(&rhs_val) = constants.get(rhs) {
-                        if rhs_val.is_power_of_two() && rhs_val > 1 {
-                            let shift = rhs_val.trailing_zeros();
-                            let new_const_dest = ValueId(dest.0 + 10000);
-
-                            match op {
-                                BinOp::Mul => {
-                                    replacements.push((
-                                        idx,
-                                        MirInst::BinOp {
-                                            dest: *dest,
-                                            op: BinOp::Shl,
-                                            lhs: *lhs,
-                                            rhs: new_const_dest,
-                                            ty: *ty,
-                                        },
-                                        MirInst::Const {
-                                            dest: new_const_dest,
-                                            value: ConstValue::U32(shift),
-                                        },
-                                    ));
+                    if let Some(&value) = constants.get(rhs).filter(|_| ty.is_integer()) {
+                        if value.is_power_of_two() && value > 1 {
+                            if let Some(next) = next_value.checked_add(1) {
+                                let shift = ValueId(next_value);
+                                next_value = next;
+                                instructions.push(MirInst::Const {
+                                    dest: shift,
+                                    value: ConstValue::U32(value.trailing_zeros()),
+                                });
+                                func.value_types
+                                    .insert(shift, crate::mir::types::MirType::I32);
+                                if let MirInst::BinOp { op, rhs, .. } = &mut inst {
+                                    *op = BinOp::Shl;
+                                    *rhs = shift;
                                 }
-                                BinOp::Div | BinOp::FloorDiv => {
-                                    replacements.push((
-                                        idx,
-                                        MirInst::BinOp {
-                                            dest: *dest,
-                                            op: BinOp::Shr,
-                                            lhs: *lhs,
-                                            rhs: new_const_dest,
-                                            ty: *ty,
-                                        },
-                                        MirInst::Const {
-                                            dest: new_const_dest,
-                                            value: ConstValue::U32(shift),
-                                        },
-                                    ));
-                                }
-                                BinOp::Mod => {
-                                    replacements.push((
-                                        idx,
-                                        MirInst::BinOp {
-                                            dest: *dest,
-                                            op: BinOp::BitAnd,
-                                            lhs: *lhs,
-                                            rhs: new_const_dest,
-                                            ty: *ty,
-                                        },
-                                        MirInst::Const {
-                                            dest: new_const_dest,
-                                            value: ConstValue::U32(rhs_val - 1),
-                                        },
-                                    ));
-                                }
-                                _ => {}
+                                changed = true;
                             }
                         }
                     }
                 }
+                instructions.push(inst);
             }
-
-            for (idx, replacement, new_const) in replacements.into_iter().rev() {
-                block.instructions[idx] = replacement;
-                block.instructions.insert(idx, new_const);
-                changed = true;
-            }
+            block.instructions = instructions;
         }
-
         changed
     }
 }

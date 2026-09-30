@@ -3,8 +3,7 @@
 
 /// WAVE C/C++ SDK implementation.
 ///
-/// Implements the C API defined in wave.h. For v1, calls wave-compiler and
-/// wave-emu as subprocesses. Direct FFI to the Rust runtime is planned for v2.
+/// Implements the C API in wave.h using wave-compiler and wave-emu subprocesses.
 
 #include "wave/wave.h"
 

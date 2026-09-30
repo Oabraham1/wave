@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Rust kernel parser producing HIR.
-//!
-//! Parses a subset of Rust suitable for GPU kernels using the `syn` crate.
-//! Supports function definitions with type annotations, arithmetic, comparisons,
-//! if/else, for loops, array indexing, and GPU intrinsics.
+//! Parse Rust kernels into HIR with `syn`.
 
 use crate::diagnostics::CompileError;
 use crate::hir::expr::{BinOp, Dimension, Expr, Literal};
@@ -323,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_parse_rust_vector_add() {
-        let source = r#"
+        let source = r"
 #[kernel]
 fn vector_add(a: &[f32], b: &[f32], out: &mut [f32], n: u32) {
     let gid = thread_id();
@@ -331,7 +327,7 @@ fn vector_add(a: &[f32], b: &[f32], out: &mut [f32], n: u32) {
         let a_val = a[gid];
     }
 }
-"#;
+";
         let kernel = parse_rust(source).unwrap();
         assert_eq!(kernel.name, "vector_add");
         assert_eq!(kernel.params.len(), 4);
@@ -341,12 +337,12 @@ fn vector_add(a: &[f32], b: &[f32], out: &mut [f32], n: u32) {
 
     #[test]
     fn test_parse_rust_simple() {
-        let source = r#"
+        let source = r"
 #[kernel]
 fn test(n: u32) {
     let x = 42;
 }
-"#;
+";
         let kernel = parse_rust(source).unwrap();
         assert_eq!(kernel.name, "test");
         assert_eq!(kernel.body.len(), 1);

@@ -1,23 +1,19 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! C FFI exports for the WAVE runtime shared library.
+//! C interface for compilation, backend translation, and emulation.
 //!
-//! Exposes the in-process compilation, backend translation, and emulator
-//! execution pipeline as C-callable functions. Python (via ctypes), Node.js
-//! (via ffi-napi), and other language SDKs load the cdylib and call these
-//! functions directly, avoiding subprocess overhead entirely.
-//!
-//! Memory protocol: output buffers are allocated by Rust and must be freed
-//! by calling `wave_free`. Error messages are stored in a thread-local
-//! string retrievable via `wave_last_error`.
+//! The runtime owns returned buffers; callers release them with `wave_free`. Errors are available
+//! through `wave_last_error` on the calling thread.
 
+// This module is the C ABI boundary; all pointer operations stay in documented blocks.
 #![allow(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use crate::cache;
 use crate::device::GpuVendor;
 use std::cell::RefCell;
-use std::slice;
+use std::{ptr, slice};
 use wave_compiler::Language;
 
 thread_local! {
@@ -49,18 +45,21 @@ fn vendor_from_u32(v: u32) -> Option<GpuVendor> {
     }
 }
 
-/// Compile kernel source to WAVE binary (.wbin).
+/// Compile kernel source to WAVE binary.
 ///
 /// On success, writes the output pointer and length and returns 0.
-/// On failure, stores an error message (retrievable via `wave_last_error`)
+/// On failure, stores an error message, retrievable via `wave_last_error`
 /// and returns a nonzero error code.
 ///
 /// The caller must free the output buffer with `wave_free`.
 ///
 /// # Safety
 ///
-/// `source_ptr` must point to `source_len` valid UTF-8 bytes.
-/// `out_ptr` and `out_len` must be valid, aligned, non-null pointers.
+/// `source_ptr` must be non-null and readable for `source_len` bytes in one
+/// allocation, including when the length is zero. The length must not exceed
+/// `isize::MAX`. The source must remain immutable for the duration of the call.
+/// `out_ptr` and `out_len` must be aligned, writable, non-null, nonoverlapping
+/// output slots that do not alias the source. Invalid UTF-8 returns an error.
 #[no_mangle]
 pub unsafe extern "C" fn wave_compile(
     source_ptr: *const u8,
@@ -69,7 +68,9 @@ pub unsafe extern "C" fn wave_compile(
     out_ptr: *mut *mut u8,
     out_len: *mut usize,
 ) -> i32 {
-    let source = match std::str::from_utf8(slice::from_raw_parts(source_ptr, source_len)) {
+    // SAFETY: The caller provides a readable, non-null source allocation for this length.
+    let bytes = unsafe { slice::from_raw_parts(source_ptr, source_len) };
+    let source = match std::str::from_utf8(bytes) {
         Ok(s) => s,
         Err(e) => {
             set_error(format!("invalid UTF-8 source: {e}"));
@@ -84,10 +85,14 @@ pub unsafe extern "C" fn wave_compile(
 
     match cache::compile_cached(source, lang) {
         Ok(wbin) => {
-            let mut boxed = wbin.into_boxed_slice();
-            *out_ptr = boxed.as_mut_ptr();
-            *out_len = boxed.len();
-            std::mem::forget(boxed);
+            let boxed = wbin.into_boxed_slice();
+            let len = boxed.len();
+            let buffer = Box::into_raw(boxed).cast::<u8>();
+            // SAFETY: The caller provides writable, aligned output slots that do not alias.
+            unsafe {
+                *out_ptr = buffer;
+                *out_len = len;
+            }
             0
         }
         Err(e) => {
@@ -101,8 +106,11 @@ pub unsafe extern "C" fn wave_compile(
 ///
 /// # Safety
 ///
-/// `wbin_ptr` must point to `wbin_len` valid bytes.
-/// `out_ptr` and `out_len` must be valid, aligned, non-null pointers.
+/// `wbin_ptr` must be non-null and readable for `wbin_len` bytes in one
+/// allocation, including when empty. The length must not exceed `isize::MAX`.
+/// The binary must remain immutable during the call. `out_ptr` and `out_len`
+/// must be aligned, writable, non-null, nonoverlapping output slots that do
+/// not alias the binary.
 #[no_mangle]
 pub unsafe extern "C" fn wave_translate(
     wbin_ptr: *const u8,
@@ -111,7 +119,8 @@ pub unsafe extern "C" fn wave_translate(
     out_ptr: *mut *mut u8,
     out_len: *mut usize,
 ) -> i32 {
-    let wbin = slice::from_raw_parts(wbin_ptr, wbin_len);
+    // SAFETY: The caller provides a readable, non-null binary allocation for this length.
+    let wbin = unsafe { slice::from_raw_parts(wbin_ptr, wbin_len) };
 
     let Some(gpu_vendor) = vendor_from_u32(vendor) else {
         set_error(format!("invalid vendor: {vendor}"));
@@ -120,11 +129,14 @@ pub unsafe extern "C" fn wave_translate(
 
     match crate::backend::translate_to_vendor(wbin, gpu_vendor) {
         Ok(code) => {
-            let bytes = code.into_bytes();
-            let mut boxed = bytes.into_boxed_slice();
-            *out_ptr = boxed.as_mut_ptr();
-            *out_len = boxed.len();
-            std::mem::forget(boxed);
+            let boxed = code.into_bytes().into_boxed_slice();
+            let len = boxed.len();
+            let buffer = Box::into_raw(boxed).cast::<u8>();
+            // SAFETY: The caller provides writable, aligned output slots that do not alias.
+            unsafe {
+                *out_ptr = buffer;
+                *out_len = len;
+            }
             0
         }
         Err(e) => {
@@ -136,16 +148,20 @@ pub unsafe extern "C" fn wave_translate(
 
 /// Run a WAVE binary on the emulator with the given memory and registers.
 ///
-/// `mem_ptr`/`mem_len` is the device memory buffer (read/write).
-/// `reg_ptr`/`reg_count` is an array of (`register_index`, value) pairs.
+/// `mem_ptr`/`mem_len` is the device memory buffer, read/write.
+/// `reg_ptr`/`reg_count` is an array of, `register_index`, value, pairs.
 /// `grid` and `workgroup` are [x, y, z] arrays.
 ///
 /// On success, the memory buffer is modified in place and 0 is returned.
 ///
 /// # Safety
 ///
-/// All pointer arguments must be valid for their stated lengths.
-/// `mem_ptr` must be writable for `mem_len` bytes.
+/// All pointers must be non-null, aligned, and valid for their stated lengths
+/// within single allocations, including zero-length buffers. Each allocation's
+/// byte length must not exceed `isize::MAX`. `grid` and `workgroup` each point
+/// to one initialized dimension array. `mem_ptr` must be exclusively writable
+/// for `mem_len` bytes and must not overlap any other argument. All remaining
+/// input allocations must stay immutable throughout the call.
 #[no_mangle]
 pub unsafe extern "C" fn wave_emulate(
     wbin_ptr: *const u8,
@@ -157,11 +173,14 @@ pub unsafe extern "C" fn wave_emulate(
     grid: *const [u32; 3],
     workgroup: *const [u32; 3],
 ) -> i32 {
-    let wbin = slice::from_raw_parts(wbin_ptr, wbin_len);
-    let mem = slice::from_raw_parts_mut(mem_ptr, mem_len);
-    let regs = slice::from_raw_parts(reg_ptr, reg_count);
-    let grid_dim = *grid;
-    let wg_dim = *workgroup;
+    // SAFETY: The caller provides a readable, non-null binary allocation for this length.
+    let wbin = unsafe { slice::from_raw_parts(wbin_ptr, wbin_len) };
+    // SAFETY: The caller grants exclusive access to this writable memory allocation.
+    let mem = unsafe { slice::from_raw_parts_mut(mem_ptr, mem_len) };
+    // SAFETY: The caller provides aligned, readable register pairs for the full count.
+    let regs = unsafe { slice::from_raw_parts(reg_ptr, reg_count) };
+    // SAFETY: Both pointers refer to initialized, aligned dimension arrays.
+    let (grid_dim, wg_dim) = unsafe { (*grid, *workgroup) };
 
     let mut config = wave_emu::EmulatorConfig {
         grid_dim,
@@ -172,8 +191,10 @@ pub unsafe extern "C" fn wave_emulate(
 
     let mut initial_regs: Vec<(u8, u32)> = Vec::with_capacity(reg_count);
     for pair in regs {
-        #[allow(clippy::cast_possible_truncation)]
-        let idx = pair[0] as u8;
+        let Ok(idx) = u8::try_from(pair[0]) else {
+            set_error(format!("invalid register index: {} (maximum 255)", pair[0]));
+            return 2;
+        };
         initial_regs.push((idx, pair[1]));
     }
     config.initial_registers = initial_regs;
@@ -213,12 +234,15 @@ pub unsafe extern "C" fn wave_emulate(
 ///
 /// # Safety
 ///
-/// `out_len` must be a valid, non-null pointer.
+/// `out_len` must be an aligned, writable, non-null pointer. The returned
+/// bytes must not be modified or freed, and must not be used after a later
+/// runtime FFI call on this thread or after this thread exits.
 #[no_mangle]
 pub unsafe extern "C" fn wave_last_error(out_len: *mut usize) -> *const u8 {
     LAST_ERROR.with(|e| {
         let s = e.borrow();
-        *out_len = s.len();
+        // SAFETY: The caller provides an aligned, writable length slot.
+        unsafe { *out_len = s.len() };
         s.as_ptr()
     })
 }
@@ -229,10 +253,14 @@ pub unsafe extern "C" fn wave_last_error(out_len: *mut usize) -> *const u8 {
 ///
 /// `ptr` must have been returned by a previous FFI call, and `len` must
 /// match the returned length. Must not be called more than once per buffer.
+/// The caller must not retain or use references to the buffer after freeing it.
+/// A null pointer is accepted and does nothing.
 #[no_mangle]
 pub unsafe extern "C" fn wave_free(ptr: *mut u8, len: usize) {
-    if !ptr.is_null() && len > 0 {
-        let _: Box<[u8]> = Box::from(slice::from_raw_parts_mut(ptr, len));
+    if !ptr.is_null() {
+        // SAFETY: The pointer and length identify the original Box allocation, and the
+        // caller transfers ownership back exactly once. Reconstructing it frees it.
+        unsafe { drop(Box::from_raw(ptr::slice_from_raw_parts_mut(ptr, len))) };
     }
 }
 
@@ -246,4 +274,54 @@ pub extern "C" fn wave_cache_clear() {
 #[no_mangle]
 pub extern "C" fn wave_cache_size() -> usize {
     cache::cache_size()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compile_buffer_can_be_read_and_freed() {
+        let source = b"@kernel\ndef ffi_example(n: u32):\n    gid = thread_id()\n";
+        let mut output = ptr::null_mut();
+        let mut len = 0;
+        // SAFETY: The source and distinct output slots are live for the call.
+        let status = unsafe {
+            wave_compile(
+                source.as_ptr(),
+                source.len(),
+                0,
+                &raw mut output,
+                &raw mut len,
+            )
+        };
+        assert_eq!(status, 0);
+        // SAFETY: A successful compile returns an allocation of exactly len bytes.
+        let data = unsafe { slice::from_raw_parts(output, len) };
+        assert_eq!(&data[..4], b"WAVE");
+        // SAFETY: Ownership of the allocation is returned once with its original length.
+        unsafe { wave_free(output, len) };
+    }
+
+    #[test]
+    fn invalid_register_index_returns_an_error() {
+        let binary = [];
+        let mut memory = [0u8; 4];
+        let registers = [[256, 1]];
+        let dimensions = [1, 1, 1];
+        // SAFETY: All slices and dimension arrays are live and aligned; memory is exclusive.
+        let status = unsafe {
+            wave_emulate(
+                binary.as_ptr(),
+                0,
+                memory.as_mut_ptr(),
+                memory.len(),
+                registers.as_ptr(),
+                registers.len(),
+                &raw const dimensions,
+                &raw const dimensions,
+            )
+        };
+        assert_eq!(status, 2);
+    }
 }

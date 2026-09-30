@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 6: Wave Operations tests
-//!
-//! Verifies shuffle, broadcast, ballot, reduce, and vote operations.
+//! Section 6: Wave Operations tests Verifies shuffle, broadcast, ballot, reduce, and vote
+//! operations.
 
 use crate::harness::*;
 
@@ -33,7 +32,7 @@ fn test_wave_shuffle() -> TestResult {
     mov_imm r1, 2
     shl r2, r0, r1              ; offset = lane_id * 4
 
-    ; Set r3 = lane_id * 10 (so lane 0 has 0, lane 1 has 10, etc.)
+    ; Set r3 = lane_id * 10 ; lane 0 holds 0 and lane 1 holds 10
     mov_imm r4, 10
     imul r3, r0, r4
 
@@ -71,7 +70,7 @@ fn test_wave_shuffle() -> TestResult {
                 spec_claim: "wave_shuffle reads from specified lane".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [10, 20, 30, 0])",
+                    "lanes=[{}, {}, {}, {}]; expected [10, 20, 30, 0]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -133,7 +132,7 @@ fn test_wave_shuffle_xor() -> TestResult {
                 spec_claim: "wave_shuffle_xor works correctly".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [1, 0, 3, 2])",
+                    "lanes=[{}, {}, {}, {}]; expected [1, 0, 3, 2]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -255,7 +254,7 @@ fn test_wave_ballot() -> TestResult {
                 spec_section: "6.12".to_string(),
                 spec_claim: "wave_ballot creates correct bitmask".to_string(),
                 passed,
-                details: format!("ballot = 0b{:04b} (expected 0b0101)", ballot),
+                details: format!("ballot = 0b{:04b}; expected 0b0101", ballot),
                 cycles: result.cycles,
             }
         }
@@ -312,7 +311,7 @@ fn test_wave_any() -> TestResult {
                 spec_section: "6.12".to_string(),
                 spec_claim: "wave_any detects any true predicate".to_string(),
                 passed,
-                details: format!("wave_any = {} (expected 1)", any_result),
+                details: format!("wave_any = {}; expected 1", any_result),
                 cycles: result.cycles,
             }
         }
@@ -337,7 +336,7 @@ fn test_wave_all() -> TestResult {
 .registers 8
     mov r0, sr_lane_id
 
-    ; Test 1: Some lanes false (lane 0 has false)
+    ; Test 1: Some lanes false ; lane 0 is false
     mov_imm r1, 0
     icmp_ne p1, r0, r1          ; p1 = false for lane 0
 
@@ -370,8 +369,8 @@ fn test_wave_all() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let some_false = read_u32(&result.device_memory, 0);  // Should be 0
-            let all_true = read_u32(&result.device_memory, 4);    // Should be 1
+            let some_false = read_u32(&result.device_memory, 0); // Should be 0
+            let all_true = read_u32(&result.device_memory, 4); // Should be 1
 
             let passed = some_false == 0 && all_true == 1;
 
@@ -381,7 +380,7 @@ fn test_wave_all() -> TestResult {
                 spec_claim: "wave_all checks all predicates".to_string(),
                 passed,
                 details: format!(
-                    "some_false={}, all_true={} (expected 0, 1)",
+                    "some_false={}, all_true={}; expected 0, 1",
                     some_false, all_true
                 ),
                 cycles: result.cycles,
@@ -408,7 +407,7 @@ fn test_wave_reduce_add() -> TestResult {
 .registers 8
     mov r0, sr_lane_id
 
-    ; Each lane has value = lane_id + 1 (so 1, 2, 3, 4)
+    ; Each lane has value = lane_id + 1 ; values are 1, 2, 3, 4
     mov_imm r1, 1
     iadd r2, r0, r1
 
@@ -438,7 +437,7 @@ fn test_wave_reduce_add() -> TestResult {
                 spec_section: "6.12".to_string(),
                 spec_claim: "wave_reduce_add sums correctly".to_string(),
                 passed,
-                details: format!("sum(1,2,3,4) = {} (expected 10)", sum),
+                details: format!("sum(1,2,3,4) = {}; expected 10", sum),
                 cycles: result.cycles,
             }
         }
@@ -496,7 +495,7 @@ fn test_wave_prefix_sum() -> TestResult {
                 spec_claim: "wave_prefix_sum computes correctly".to_string(),
                 passed,
                 details: format!(
-                    "prefix_sum=[{}, {}, {}, {}] (expected [0, 1, 2, 3])",
+                    "prefix_sum=[{}, {}, {}, {}]; expected [0, 1, 2, 3]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,

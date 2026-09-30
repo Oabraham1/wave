@@ -1,9 +1,9 @@
 ---
-title: Python SDK
-description: Getting started with the WAVE Python SDK (wave_gpu) for portable GPU programming.
+title: "Python SDK"
+description: "Host arrays, kernel compilation, and emulator execution in Python."
 ---
 
-The `wave_gpu` Python package lets you write GPU kernels in Python and run them on any supported GPU backend. This guide walks through installation, device setup, array management, kernel authoring, and error handling.
+The `wave_gpu` package compiles kernels and manages host arrays. Its direct launch path uses the emulator. For GPU dispatch, use the [Rust SDK](/guides/rust-sdk/).
 
 ## Installation
 
@@ -19,21 +19,21 @@ Import the package in your code:
 import wave_gpu
 ```
 
-## Device Detection
+## Device detection
 
-Before launching kernels you need to confirm that a GPU is available. `wave_gpu.device()` returns a `DeviceInfo` object describing the first detected device:
+`wave_gpu.device()` returns a `DeviceInfo` object for the detected device:
 
 ```python
 dev = wave_gpu.device()
-print(dev.vendor)  # e.g. "Apple"
-print(dev.name)    # e.g. "Apple M2 Max"
+print(dev.vendor)  # e.g. "apple"
+print(dev.name)    # e.g. "Apple GPU (Metal)"
 ```
 
-If no GPU is found the call raises a `RuntimeError`.
+If no GPU is found, detection returns the emulator.
 
-## Creating Arrays
+## Creating arrays
 
-`WaveArray` is the primary buffer type. It lives in device-accessible memory. Create one with the factory helpers:
+`WaveArray` stores host data for kernel arguments. Create arrays with:
 
 ```python
 # From existing Python data
@@ -46,43 +46,47 @@ o = wave_gpu.ones(1024, dtype="f32")
 
 Supported dtypes: `f16`, `f32`, `f64`, `i32`, `u32`.
 
-`WaveArray` exposes a few useful properties and methods:
+`WaveArray` provides:
 
 | Member | Description |
 |---|---|
 | `data` | Raw underlying data |
 | `dtype` | Element type string |
-| `len(arr)` | Number of elements (`__len__`) |
-| `arr[i]` | Element access (`__getitem__`) |
+| `len(arr)` | Number of elements; `__len__` |
+| `arr[i]` | Element access; `__getitem__` |
 | `arr.to_list()` | Copy contents back to a Python list |
 
-## Writing Kernels
+## Writing kernels
 
 Decorate a plain Python function with `@wave_gpu.kernel` to mark it as a GPU kernel. Inside the kernel body you can use WAVE intrinsics to determine the current thread's position and synchronize:
 
 ```python
+from wave_gpu import thread_id
+
 @wave_gpu.kernel
-def vector_add(a, b, out, n):
-    tid = wave_gpu.thread_id()
+def vector_add(a: wave_gpu.f32[:], b: wave_gpu.f32[:], out: wave_gpu.f32[:], n: wave_gpu.u32):
+    tid = thread_id()
     if tid < n:
         out[tid] = a[tid] + b[tid]
 ```
 
-### Available Intrinsics
+### Available intrinsics
 
 | Intrinsic | Description |
 |---|---|
 | `thread_id()` | Global thread index |
-| `workgroup_id()` | Workgroup (block) index |
+| `workgroup_id()` | Workgroup; block index |
 | `lane_id()` | Lane within the current wave/warp |
 | `wave_width()` | Number of lanes per wave |
 | `barrier()` | Workgroup-level synchronization barrier |
 
-Kernel parameters must be either `WaveArray` objects (for buffer access) or plain `int` / `float` values (for scalar uniforms).
+Pass `WaveArray` objects as buffers and integers as scalar arguments. Float scalar arguments are converted to integers.
 
-## Launching Kernels
+## Launching kernels
 
-Call the decorated function directly. WAVE compiles the kernel on first invocation and caches the result. You can optionally specify the dispatch grid and workgroup size:
+The decorated function compiles on first invocation and caches the binary. It selects the detected device and supports emulator dispatch. GPU devices raise `NotImplementedError` in this SDK. To select the emulator explicitly, use `compile_kernel` and `launch_emulator` as shown in [Quickstart](/getting-started/quickstart/).
+
+On the emulator, call the function with optional grid and workgroup dimensions:
 
 ```python
 n = 1024
@@ -90,34 +94,34 @@ a = wave_gpu.array([float(i) for i in range(n)], dtype="f32")
 b = wave_gpu.ones(n, dtype="f32")
 out = wave_gpu.zeros(n, dtype="f32")
 
-# Simple launch - WAVE infers a 1-D grid from the first buffer
+# Infer a one-dimensional grid from the largest buffer
 vector_add(a, b, out, n)
 
 # Explicit grid and workgroup dimensions
 vector_add(a, b, out, n, grid=(n // 256, 1, 1), workgroup=(256, 1, 1))
 ```
 
-## Reading Results
+## Reading results
 
-After a kernel completes, read data back to the host with `to_list()`:
+After execution, `to_list()` copies the array contents into a Python list:
 
 ```python
 result = out.to_list()
 print(result[:8])  # [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
 ```
 
-You can also index individual elements for quick spot-checks:
+Index individual elements with:
 
 ```python
 assert out[0] == 1.0
 ```
 
-## Error Handling
+## Error handling
 
-WAVE surfaces two main exception types:
+Compilation and dispatch can raise:
 
-- **`RuntimeError`** - raised when kernel compilation fails (e.g. unsupported intrinsic, invalid shader generation) or when no device is found.
-- **`TypeError`** - raised when kernel arguments do not match the expected signature (wrong type or count).
+- `RuntimeError`: compilation, translation, or execution failed.
+- `TypeError`: an argument is neither an array nor a numeric scalar.
 
 Handle them with standard `try` / `except`:
 
@@ -130,6 +134,6 @@ except TypeError as e:
     print(f"Bad kernel arguments: {e}")
 ```
 
-## Next Steps
+## Next steps
 
-See the full [Python API Reference](/reference/python-api) for detailed method signatures and advanced options.
+See the [Python API reference](/reference/python-api) for method signatures.

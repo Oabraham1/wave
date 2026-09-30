@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 6: Instruction tests
-//!
-//! Verifies arithmetic, bitwise, compare, convert, and memory instructions.
+//! Section 6: Instruction tests Verifies arithmetic, bitwise, compare, convert, and memory
+//! instructions.
 
 use crate::harness::*;
 
@@ -1032,7 +1031,7 @@ fn test_cvt_f32_i32() -> TestResult {
 fn test_cvt_i32_f32() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 6.9 Convert
-; Claim: "cvt_i32_f32 converts float to signed int (truncation)."
+; Claim: "cvt_i32_f32 converts float to signed int by truncation."
 
 .kernel test_cvt_i32_f32
 .registers 8

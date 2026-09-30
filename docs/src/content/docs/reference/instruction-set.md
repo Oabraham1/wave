@@ -1,175 +1,238 @@
 ---
-title: Instruction Set Reference
-description: Complete WAVE ISA instruction set organized by category.
+title: "Instruction set reference"
+description: "WAVE assembler mnemonics, opcodes, and operands."
 ---
 
-This is the complete instruction reference for the WAVE ISA v0.3. Each instruction is listed with its mnemonic, opcode, format, operands, and description.
+The assembler accepts the mnemonics below. The [v0.4 specification](/reference/spec-v04/) defines their execution semantics. Instructions contain one or two 32-bit words; see [Binary encoding](/internals/binary-encoding/) for field layouts.
 
-## Instruction Formats
+## Operands
 
-**Base format (32-bit):** Used for register-to-register operations.
+| Name | Meaning |
+|------|---------|
+| `rd` | Destination general-purpose register |
+| `rs1` through `rs4` | Source registers or addresses, as defined by the instruction |
+| `pd` | Destination predicate register |
+| `ps` | Source predicate register |
+| `imm32` | 32-bit immediate |
+| `label` | Label resolved by the assembler |
+| `scope` | Memory scope |
+| `optional_rd` | Optional atomic result register |
+| `special_register` | Named special register |
 
-| Bits | Field | Width |
-|------|-------|-------|
-| 31-24 | Opcode | 8 |
-| 23-20 | Modifier | 4 |
-| 19-18 | Flags | 2 |
-| 17-13 | Dst (rd) | 5 |
-| 12-8 | Src1 (rs1) | 5 |
-| 7-3 | Src2 (rs2) | 5 |
-| 2-0 | Reserved | 3 |
+General-purpose registers range from `r0` through `r255`. Predicate registers range from `p0` through `p3`. Prefix an instruction with `@p1` or `@!p1` to predicate it. A zero predicate selector with no negation means unpredicated execution; it does not make the writable register `p0` constant.
 
-**Extended format (64-bit):** Base word followed by a 32-bit immediate. Used for load/store offsets, branch targets, and large constants.
+Memory suffixes select access width. Conversion names put the destination type first: `cvt_f32_i32` converts an integer to a float.
 
-## Operand Notation
+## Integer arithmetic
 
-| Notation | Meaning |
-|----------|---------|
-| `rd` | Destination register (`r0`-`r31`) |
-| `rs1` | First source register |
-| `rs2` | Second source register |
-| `imm32` | 32-bit immediate (extended format) |
-| `[rs1 + imm32]` | Memory address: base register plus immediate offset |
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `iadd` | `0x00` | `rd, rs1, rs2` |
+| `isub` | `0x01` | `rd, rs1, rs2` |
+| `imul` | `0x02` | `rd, rs1, rs2` |
+| `imul_hi` | `0x03` | `rd, rs1, rs2` |
+| `imad` | `0x04` | `rd, rs1, rs2, rs3` |
+| `idiv` | `0x05` | `rd, rs1, rs2` |
+| `imod` | `0x06` | `rd, rs1, rs2` |
+| `ineg` | `0x07` | `rd, rs1` |
+| `iabs` | `0x08` | `rd, rs1` |
+| `imin` | `0x09` | `rd, rs1, rs2` |
+| `imax` | `0x0A` | `rd, rs1, rs2` |
+| `iclamp` | `0x0B` | `rd, rs1, rs2, rs3` |
 
----
+## Floating-point arithmetic
 
-## Integer Arithmetic (0x00 - 0x0B)
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `fadd` | `0x10` | `rd, rs1, rs2` |
+| `fsub` | `0x11` | `rd, rs1, rs2` |
+| `fmul` | `0x12` | `rd, rs1, rs2` |
+| `fma` | `0x13` | `rd, rs1, rs2, rs3` |
+| `fdiv` | `0x14` | `rd, rs1, rs2` |
+| `fneg` | `0x15` | `rd, rs1` |
+| `fabs` | `0x16` | `rd, rs1` |
+| `fmin` | `0x17` | `rd, rs1, rs2` |
+| `fmax` | `0x18` | `rd, rs1, rs2` |
+| `fclamp` | `0x19` | `rd, rs1, rs2, rs3` |
+| `fsqrt` | `0x1A` | `rd, rs1` |
+| `fceil` | `0x1B` | `rd, rs1` |
+| `fcos` | `0x1B` | `rd, rs1` |
+| `fexp2` | `0x1B` | `rd, rs1` |
+| `ffloor` | `0x1B` | `rd, rs1` |
+| `ffract` | `0x1B` | `rd, rs1` |
+| `flog2` | `0x1B` | `rd, rs1` |
+| `frcp` | `0x1B` | `rd, rs1` |
+| `fround` | `0x1B` | `rd, rs1` |
+| `frsqrt` | `0x1B` | `rd, rs1` |
+| `fsat` | `0x1B` | `rd, rs1` |
+| `fsin` | `0x1B` | `rd, rs1` |
+| `ftrunc` | `0x1B` | `rd, rs1` |
+| `hadd` | `0x1C` | `rd, rs1, rs2` |
+| `hma` | `0x1C` | `rd, rs1, rs2, rs3` |
+| `hmul` | `0x1C` | `rd, rs1, rs2` |
+| `hsub` | `0x1C` | `rd, rs1, rs2` |
+| `hadd2` | `0x1D` | `rd, rs1, rs2` |
+| `hma2` | `0x1D` | `rd, rs1, rs2, rs3` |
+| `hmul2` | `0x1D` | `rd, rs1, rs2` |
+| `dadd` | `0x1E` | `rd, rs1, rs2` |
+| `dma` | `0x1E` | `rd, rs1, rs2, rs3` |
+| `dmul` | `0x1E` | `rd, rs1, rs2` |
+| `dsub` | `0x1E` | `rd, rs1, rs2` |
+| `ddiv` | `0x1F` | `rd, rs1, rs2` |
+| `dsqrt` | `0x1F` | `rd, rs1` |
+| `badd` | `0x2D` | `rd, rs1, rs2` |
+| `bma` | `0x2D` | `rd, rs1, rs2, rs3` |
+| `bmul` | `0x2D` | `rd, rs1, rs2` |
+| `bsub` | `0x2D` | `rd, rs1, rs2` |
+| `badd2` | `0x2E` | `rd, rs1, rs2` |
+| `bma2` | `0x2E` | `rd, rs1, rs2, rs3` |
+| `bmul2` | `0x2E` | `rd, rs1, rs2` |
 
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `ADD` | `0x00` | Base | `rd, rs1, rs2` | Integer addition. `rd = rs1 + rs2` |
-| `SUB` | `0x01` | Base | `rd, rs1, rs2` | Integer subtraction. `rd = rs1 - rs2` |
-| `MUL` | `0x02` | Base | `rd, rs1, rs2` | Integer multiplication (low 32 bits). `rd = (rs1 * rs2) & 0xFFFFFFFF` |
-| `DIV` | `0x03` | Base | `rd, rs1, rs2` | Signed integer division. `rd = rs1 / rs2`. Undefined if `rs2 == 0`. |
-| `UDIV` | `0x04` | Base | `rd, rs1, rs2` | Unsigned integer division. `rd = rs1 / rs2` (unsigned). |
-| `REM` | `0x05` | Base | `rd, rs1, rs2` | Signed integer remainder. `rd = rs1 % rs2`. |
-| `UREM` | `0x06` | Base | `rd, rs1, rs2` | Unsigned integer remainder. |
-| `NEG` | `0x07` | Base | `rd, rs1` | Integer negation. `rd = -rs1`. `rs2` ignored. |
-| `ABS` | `0x08` | Base | `rd, rs1` | Absolute value. `rd = |rs1|` (signed). `rs2` ignored. |
-| `MIN` | `0x09` | Base | `rd, rs1, rs2` | Signed minimum. `rd = min(rs1, rs2)`. |
-| `MAX` | `0x0A` | Base | `rd, rs1, rs2` | Signed maximum. `rd = max(rs1, rs2)`. |
-| `MULHI` | `0x0B` | Base | `rd, rs1, rs2` | Integer multiplication (high 32 bits). `rd = (rs1 * rs2) >> 32` |
+## Bitwise operations
 
----
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `and` | `0x20` | `rd, rs1, rs2` |
+| `or` | `0x21` | `rd, rs1, rs2` |
+| `xor` | `0x22` | `rd, rs1, rs2` |
+| `not` | `0x23` | `rd, rs1` |
+| `shl` | `0x24` | `rd, rs1, rs2` |
+| `shr` | `0x25` | `rd, rs1, rs2` |
+| `sar` | `0x26` | `rd, rs1, rs2` |
+| `bfe` | `0x27` | `rd, rs1, rs2, rs3` |
+| `bfi` | `0x27` | `rd, rs1, rs2, rs3, rs4` |
+| `bitcount` | `0x27` | `rd, rs1` |
+| `bitfind` | `0x27` | `rd, rs1` |
+| `bitrev` | `0x27` | `rd, rs1` |
 
-## Floating-Point (0x10 - 0x1F)
+## Comparisons and selection
 
-Modifier bits select rounding mode: `0` = round-to-nearest-even (default), `1` = round-toward-zero, `2` = round-toward-positive-infinity, `3` = round-toward-negative-infinity.
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `icmp_eq` | `0x28` | `pd, rs1, rs2` |
+| `icmp_ge` | `0x28` | `pd, rs1, rs2` |
+| `icmp_gt` | `0x28` | `pd, rs1, rs2` |
+| `icmp_le` | `0x28` | `pd, rs1, rs2` |
+| `icmp_lt` | `0x28` | `pd, rs1, rs2` |
+| `icmp_ne` | `0x28` | `pd, rs1, rs2` |
+| `ucmp_le` | `0x29` | `pd, rs1, rs2` |
+| `ucmp_lt` | `0x29` | `pd, rs1, rs2` |
+| `fcmp_eq` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_gt` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_le` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_lt` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_ne` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_ord` | `0x2A` | `pd, rs1, rs2` |
+| `fcmp_unord` | `0x2A` | `pd, rs1, rs2` |
+| `select` | `0x2B` | `rd, ps, rs1, rs2` |
 
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `FADD` | `0x10` | Base | `rd, rs1, rs2` | Floating-point addition. `rd = rs1 + rs2` |
-| `FSUB` | `0x11` | Base | `rd, rs1, rs2` | Floating-point subtraction. `rd = rs1 - rs2` |
-| `FMUL` | `0x12` | Base | `rd, rs1, rs2` | Floating-point multiplication. `rd = rs1 * rs2` |
-| `FDIV` | `0x13` | Base | `rd, rs1, rs2` | Floating-point division. `rd = rs1 / rs2` |
-| `FNEG` | `0x14` | Base | `rd, rs1` | Floating-point negation. `rd = -rs1` |
-| `FABS` | `0x15` | Base | `rd, rs1` | Floating-point absolute value. `rd = |rs1|` |
-| `FSQRT` | `0x16` | Base | `rd, rs1` | Square root. `rd = sqrt(rs1)` |
-| `FMIN` | `0x17` | Base | `rd, rs1, rs2` | Floating-point minimum (NaN-propagating). |
-| `FMAX` | `0x18` | Base | `rd, rs1, rs2` | Floating-point maximum (NaN-propagating). |
-| `FFLOOR` | `0x19` | Base | `rd, rs1` | Floor. `rd = floor(rs1)` |
-| `FCEIL` | `0x1A` | Base | `rd, rs1` | Ceiling. `rd = ceil(rs1)` |
-| `FROUND` | `0x1B` | Base | `rd, rs1` | Round to nearest integer (ties to even). |
-| `FTRUNC` | `0x1C` | Base | `rd, rs1` | Truncate toward zero. |
-| `FMA` | `0x1D` | Base | `rd, rs1, rs2` | Fused multiply-add. `rd = rs1 * rs2 + rd`. Note: uses `rd` as the addend (accumulator). |
-| `FCVT_I2F` | `0x1E` | Base | `rd, rs1` | Convert signed integer to float. |
-| `FCVT_F2I` | `0x1F` | Base | `rd, rs1` | Convert float to signed integer (truncation). |
+## Conversions
 
----
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `cvt_bf16_f32` | `0x2C` | `rd, rs1` |
+| `cvt_f16_f32` | `0x2C` | `rd, rs1` |
+| `cvt_f32_bf16` | `0x2C` | `rd, rs1` |
+| `cvt_f32_f16` | `0x2C` | `rd, rs1` |
+| `cvt_f32_f64` | `0x2C` | `rd, rs1` |
+| `cvt_f32_i32` | `0x2C` | `rd, rs1` |
+| `cvt_f32_u32` | `0x2C` | `rd, rs1` |
+| `cvt_f64_f32` | `0x2C` | `rd, rs1` |
+| `cvt_i32_f32` | `0x2C` | `rd, rs1` |
+| `cvt_u32_f32` | `0x2C` | `rd, rs1` |
 
-## Bitwise (0x20 - 0x27)
+## Memory and atomics
 
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `AND` | `0x20` | Base | `rd, rs1, rs2` | Bitwise AND. `rd = rs1 & rs2` |
-| `OR` | `0x21` | Base | `rd, rs1, rs2` | Bitwise OR. `rd = rs1 \| rs2` |
-| `XOR` | `0x22` | Base | `rd, rs1, rs2` | Bitwise XOR. `rd = rs1 ^ rs2` |
-| `NOT` | `0x23` | Base | `rd, rs1` | Bitwise NOT. `rd = ~rs1` |
-| `SHL` | `0x24` | Base | `rd, rs1, rs2` | Shift left. `rd = rs1 << (rs2 & 31)` |
-| `SHR` | `0x25` | Base | `rd, rs1, rs2` | Logical shift right. `rd = rs1 >>> (rs2 & 31)` |
-| `SAR` | `0x26` | Base | `rd, rs1, rs2` | Arithmetic shift right. `rd = rs1 >> (rs2 & 31)` (sign-extending) |
-| `POPCNT` | `0x27` | Base | `rd, rs1` | Population count. `rd = popcount(rs1)` |
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `local_load_u16` | `0x30` | `rd, rs1` |
+| `local_load_u32` | `0x30` | `rd, rs1` |
+| `local_load_u64` | `0x30` | `rd, rs1` |
+| `local_load_u8` | `0x30` | `rd, rs1` |
+| `local_store_u16` | `0x31` | `rs1, rs2` |
+| `local_store_u32` | `0x31` | `rs1, rs2` |
+| `local_store_u64` | `0x31` | `rs1, rs2` |
+| `local_store_u8` | `0x31` | `rs1, rs2` |
+| `device_load_u128` | `0x38` | `rd, rs1` |
+| `device_load_u16` | `0x38` | `rd, rs1` |
+| `device_load_u32` | `0x38` | `rd, rs1` |
+| `device_load_u64` | `0x38` | `rd, rs1` |
+| `device_load_u8` | `0x38` | `rd, rs1` |
+| `device_store_u128` | `0x39` | `rs1, rs2` |
+| `device_store_u16` | `0x39` | `rs1, rs2` |
+| `device_store_u32` | `0x39` | `rs1, rs2` |
+| `device_store_u64` | `0x39` | `rs1, rs2` |
+| `device_store_u8` | `0x39` | `rs1, rs2` |
+| `local_atomic_add` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_and` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_cas` | `0x3C` | `optional_rd, rs1, rs2, rs3` |
+| `local_atomic_exchange` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_max` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_min` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_or` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_sub` | `0x3C` | `optional_rd, rs1, rs2` |
+| `local_atomic_xor` | `0x3C` | `optional_rd, rs1, rs2` |
+| `atomic_add` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_and` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_cas` | `0x3D` | `optional_rd, rs1, rs2, rs3, scope` |
+| `atomic_exchange` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_max` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_min` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_or` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_sub` | `0x3D` | `optional_rd, rs1, rs2, scope` |
+| `atomic_xor` | `0x3D` | `optional_rd, rs1, rs2, scope` |
 
----
+## Wave operations
 
-## Comparison (0x28 - 0x2C)
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `wave_all` | `0x3E` | `pd, ps` |
+| `wave_any` | `0x3E` | `pd, ps` |
+| `wave_ballot` | `0x3E` | `rd, ps` |
+| `wave_broadcast` | `0x3E` | `rd, rs1, rs2` |
+| `wave_prefix_sum` | `0x3E` | `rd, rs1` |
+| `wave_reduce_add` | `0x3E` | `rd, rs1` |
+| `wave_reduce_max` | `0x3E` | `rd, rs1` |
+| `wave_reduce_min` | `0x3E` | `rd, rs1` |
+| `wave_shuffle` | `0x3E` | `rd, rs1, rs2` |
+| `wave_shuffle_down` | `0x3E` | `rd, rs1, rs2` |
+| `wave_shuffle_up` | `0x3E` | `rd, rs1, rs2` |
+| `wave_shuffle_xor` | `0x3E` | `rd, rs1, rs2` |
 
-Comparison instructions write `1` (true) or `0` (false) to `rd`. Modifier selects comparison predicate for `FCMP`.
+## Control and synchronization
 
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `CMP_EQ` | `0x28` | Base | `rd, rs1, rs2` | Integer equal. `rd = (rs1 == rs2) ? 1 : 0` |
-| `CMP_NE` | `0x29` | Base | `rd, rs1, rs2` | Integer not equal. |
-| `CMP_LT` | `0x2A` | Base | `rd, rs1, rs2` | Signed less than. |
-| `CMP_GE` | `0x2B` | Base | `rd, rs1, rs2` | Signed greater or equal. |
-| `FCMP` | `0x2C` | Base | `rd, rs1, rs2` | Floating-point compare. Modifier selects predicate: `0`=EQ, `1`=NE, `2`=LT, `3`=LE, `4`=GT, `5`=GE, `6`=ORD (both not NaN), `7`=UNORD (either NaN). |
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `barrier` | `0x3F` | None |
+| `break` | `0x3F` | `ps` |
+| `call` | `0x3F` | `label` |
+| `continue` | `0x3F` | `ps` |
+| `else` | `0x3F` | None |
+| `endif` | `0x3F` | None |
+| `endloop` | `0x3F` | None |
+| `fence_acq_rel` | `0x3F` | `scope` |
+| `fence_acquire` | `0x3F` | `scope` |
+| `fence_release` | `0x3F` | `scope` |
+| `halt` | `0x3F` | None |
+| `if` | `0x3F` | `ps` |
+| `loop` | `0x3F` | None |
+| `nop` | `0x3F` | None |
+| `return` | `0x3F` | None |
+| `wait` | `0x3F` | None |
 
----
+## Matrix operations
 
-## Memory (0x30 - 0x31, 0x38 - 0x39)
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `mma_compute` | `0x40` | `rd, rs1, rs2` |
+| `mma_load_a` | `0x40` | `rd, rs1, rs2` |
+| `mma_load_b` | `0x40` | `rd, rs1, rs2` |
+| `mma_store_c` | `0x40` | `rd, rs1, rs2` |
 
-All memory instructions use the extended format (64-bit) to encode the address offset.
+## Register moves
 
-Modifier selects memory ordering: `0` = relaxed, `1` = acquire, `2` = release, `3` = acquire-release, `4` = sequentially consistent.
-
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `LOAD` | `0x30` | Extended | `rd, [rs1 + imm32]` | Load 32-bit value from global memory into `rd`. |
-| `STORE` | `0x31` | Extended | `[rs1 + imm32], rs2` | Store 32-bit value from `rs2` to global memory. `rd` field unused. |
-| `LOCAL_LOAD` | `0x38` | Extended | `rd, [rs1 + imm32]` | Load 32-bit value from local (shared) memory. |
-| `LOCAL_STORE` | `0x39` | Extended | `[rs1 + imm32], rs2` | Store 32-bit value to local (shared) memory. |
-
----
-
-## Atomic (0x3C - 0x3D)
-
-Atomic instructions operate on global memory. Modifier selects the atomic operation variant.
-
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `ATOMIC` | `0x3C` | Extended | `rd, [rs1 + imm32], rs2` | Atomic read-modify-write. Loads the value at `[rs1 + imm32]`, writes the old value to `rd`, and applies the operation with `rs2`. Modifier selects operation: `0`=ADD, `1`=SUB, `2`=AND, `3`=OR, `4`=XOR, `5`=MIN, `6`=MAX, `7`=UMIN, `8`=UMAX, `9`=XCHG. |
-| `ATOMIC_CAS` | `0x3D` | Extended | `rd, [rs1 + imm32], rs2` | Atomic compare-and-swap. Compares value at `[rs1 + imm32]` with `rd`; if equal, stores `rs2`. Old value written to `rd` in either case. |
-
----
-
-## Wave Operations (0x3E)
-
-Wave (subgroup) operations execute across all active lanes in a wave. The modifier selects the wave operation variant. `rs2` is unused for broadcast; it serves as the shuffle source lane for `SHUFFLE`.
-
-| Mnemonic | Opcode | Format | Operands | Description |
-|----------|--------|--------|----------|-------------|
-| `WAVE_OP` | `0x3E` | Base | `rd, rs1, rs2` | Wave-level operation. Modifier selects variant: `0`=BROADCAST (broadcast `rs1` from lane 0 to all lanes), `1`=REDUCE_ADD (sum `rs1` across all active lanes), `2`=REDUCE_MIN, `3`=REDUCE_MAX, `4`=PREFIX_SUM (exclusive prefix sum of `rs1`), `5`=SHUFFLE (read `rs1` from lane `rs2`), `6`=BALLOT (set bit `i` if lane `i` has `rs1 != 0`), `7`=ANY (1 if any lane has `rs1 != 0`), `8`=ALL (1 if all lanes have `rs1 != 0`). |
-
----
-
-## Control Flow and Synchronization (0x3F)
-
-The modifier on opcode `0x3F` selects the specific control flow or synchronization operation.
-
-| Mnemonic | Opcode | Format | Modifier | Operands | Description |
-|----------|--------|--------|----------|----------|-------------|
-| `BARRIER` | `0x3F` | Base | `0` | *(none)* | Workgroup barrier. All threads in the workgroup must reach this point before any proceed. |
-| `BRANCH` | `0x3F` | Extended | `1` | `imm32` | Unconditional branch. Sets PC to `imm32`. |
-| `BRANCH_IF` | `0x3F` | Extended | `2` | `rs1, imm32` | Conditional branch. If `rs1 != 0`, sets PC to `imm32`. |
-| `BRANCH_IFNOT` | `0x3F` | Extended | `3` | `rs1, imm32` | Conditional branch. If `rs1 == 0`, sets PC to `imm32`. |
-| `CALL` | `0x3F` | Extended | `4` | `imm32` | Push return address and branch to `imm32`. |
-| `RET` | `0x3F` | Base | `5` | *(none)* | Pop return address and branch to it. |
-| `EXIT` | `0x3F` | Base | `6` | *(none)* | Terminate the current thread. |
-| `NOP` | `0x3F` | Base | `7` | *(none)* | No operation. |
-
----
-
-## Opcode Map Summary
-
-| Range | Category | Count |
-|-------|----------|-------|
-| `0x00`-`0x0B` | Integer Arithmetic | 12 |
-| `0x10`-`0x1F` | Floating-Point | 16 |
-| `0x20`-`0x27` | Bitwise | 8 |
-| `0x28`-`0x2C` | Comparison | 5 |
-| `0x30`-`0x31` | Global Memory | 2 |
-| `0x38`-`0x39` | Local Memory | 2 |
-| `0x3C`-`0x3D` | Atomic | 2 |
-| `0x3E` | Wave Operations | 1 (9 variants) |
-| `0x3F` | Control Flow / Sync | 1 (8 variants) |
-| | **Total** | **49 opcodes** |
+| Mnemonic | Opcode | Operands |
+|----------|--------|----------|
+| `mov` | `0x41` | `rd, rs1` |
+| `mov_imm` | `0x41` | `rd, imm32` |
+| `mov_sr` | `0x41` | `rd, special_register` |

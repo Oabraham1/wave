@@ -1,9 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Stress Tests
-//!
-//! Real GPU-style workloads to stress-test the emulator.
+//! Stress Tests Real GPU-style workloads to stress-test the emulator.
 
 use crate::harness::*;
 
@@ -82,7 +80,7 @@ fn test_vector_add() -> TestResult {
                 let actual = read_u32(&result.device_memory, (512 + i * 4) as usize);
                 if actual != expected {
                     passed = false;
-                    details = format!("C[{}] = {} (expected {})", i, actual, expected);
+                    details = format!("C[{}] = {}; expected {}", i, actual, expected);
                     break;
                 }
             }
@@ -149,7 +147,7 @@ fn test_reduction_sum() -> TestResult {
                 spec_section: "stress".to_string(),
                 spec_claim: "Parallel reduction with atomics".to_string(),
                 passed,
-                details: format!("Sum = {} (expected {})", sum, expected),
+                details: format!("Sum = {}; expected {}", sum, expected),
                 cycles: result.cycles,
             }
         }
@@ -166,7 +164,7 @@ fn test_reduction_sum() -> TestResult {
 
 fn test_matrix_transpose_tile() -> TestResult {
     const SOURCE: &str = r#"
-; Stress Test: Matrix Transpose (2x2 tile)
+; Stress Test: Matrix Transpose on a 2x2 tile
 ; Transposes a small matrix using thread cooperation.
 
 .kernel transpose_tile
@@ -177,7 +175,7 @@ fn test_matrix_transpose_tile() -> TestResult {
     mov r0, sr_thread_id_x      ; x coord (0 or 1)
     mov r1, sr_thread_id_y      ; y coord (0 or 1)
 
-    ; Read offset = y*8 + x*4 (2 columns, 4 bytes each)
+    ; Read offset = y*8 + x*4 ; two columns of four bytes
     mov_imm r2, 3
     shl r3, r1, r2              ; y * 8
     mov_imm r2, 2
@@ -187,7 +185,7 @@ fn test_matrix_transpose_tile() -> TestResult {
     ; Load value
     device_load_u32 r6, r5
 
-    ; Write offset = x*8 + y*4 (transposed)
+    ; Write offset = x*8 + y*4 ; transposed coordinates
     mov_imm r2, 3
     shl r3, r0, r2              ; x * 8
     mov_imm r2, 2
@@ -310,7 +308,7 @@ fn test_histogram() -> TestResult {
 
 fn test_prefix_sum_wave() -> TestResult {
     const SOURCE: &str = r#"
-; Stress Test: Wave-level Prefix Sum (simplified)
+; Stress Test: Wave-level Prefix Sum
 ; Each thread writes its lane_id to local memory, then reads neighbors.
 
 .kernel prefix_sum_wave
@@ -426,7 +424,10 @@ fn test_many_waves() -> TestResult {
                 details: if passed {
                     "32 threads across 4 workgroups executed correctly".to_string()
                 } else {
-                    format!("Thread {} wrote {} instead of {}", bad_index, bad_value, bad_index)
+                    format!(
+                        "Thread {} wrote {} instead of {}",
+                        bad_index, bad_value, bad_index
+                    )
                 },
                 cycles: result.cycles,
             }

@@ -1,11 +1,11 @@
 ---
-title: Pipeline Overview
-description: The end-to-end WAVE compilation pipeline from source code to GPU execution.
+title: "Pipeline overview"
+description: "The end-to-end WAVE compilation pipeline from source code to GPU execution."
 ---
 
-WAVE transforms GPU kernels written in Python, Rust, C++, or TypeScript into vendor-native GPU code through a multi-stage compilation pipeline that preserves portability at every intermediate step.
+WAVE compiles Python, Rust, C++, and TypeScript kernels to `.wbin`. A backend translates that binary for the target GPU.
 
-## Full Pipeline
+## Full pipeline
 
 ```
 Source Code                    Language-specific SDK
@@ -39,82 +39,73 @@ Source Code                    Language-specific SDK
     GPU execution
 ```
 
-## Stage-by-Stage Breakdown
+## Stage-by-Stage breakdown
 
-### 1. Source Code
+### 1. source code
 
-Developers write GPU kernels using the WAVE SDK for their language of choice. Each SDK provides a `@wave.kernel` decorator or macro that marks a function for GPU compilation:
-
-- **Python** (`wave-py`): Decorator-based API using `@wave.kernel` with NumPy-compatible types.
-- **Rust** (`wave-rs`): Procedural macro `#[wave::kernel]` with native Rust types.
-- **C++** (`wave-cpp`): Attribute-based annotation `[[wave::kernel]]` with standard C++ types.
-- **TypeScript** (`wave-ts`): Decorator `@wave.kernel` with TypedArray-compatible types.
-
-The SDK extracts the kernel function, serializes its AST or IR, and passes it to `wave-compiler`.
+The language SDKs pass kernel source to `wave-compiler`. Each frontend accepts a subset of its source language. See the SDK guides for supported syntax and launch APIs.
 
 ### 2. wave-compiler
 
-The compiler is the core of the pipeline. It takes a language-specific kernel representation and produces a `.wbin` binary through six internal stages:
+The compiler produces `.wbin` through these stages:
 
-1. **Frontend** - Language-specific parsers produce a unified HIR.
-2. **HIR (High-Level IR)** - Preserves source-level structure (loops, conditionals, variable names).
-3. **MIR (Mid-Level IR)** - SSA-based IR suitable for optimization passes.
-4. **Optimization** - DCE, CSE, SCCP, LICM, strength reduction, mem2reg, loop unrolling, CFG simplification. Controlled by optimization levels O0 through O3.
-5. **LIR (Low-Level IR)** - Structured control flow with explicit register references.
-6. **Register Allocation** - Chaitin-Briggs graph coloring with coalescing and spilling.
-7. **Emission** - Encodes the LIR into the `.wbin` binary format.
+1. Frontends parse each supported source language into HIR.
+2. HIR preserves loops, conditionals, and variable names.
+3. MIR uses SSA form for optimization.
+4. Optimization applies the passes enabled at levels O0 through O3.
+5. LIR represents structured control flow with explicit registers.
+6. Register allocation colors an interference graph while preserving parameter indices. Kernels that exceed the limit are rejected.
+7. Emission encodes LIR into `.wbin`.
 
-See [Compiler Internals](/architecture/compiler/) for a detailed walkthrough of each stage.
+See [Compiler internals](/architecture/compiler/) for a guide to each stage.
 
-### 3. .wbin Binary
+### 3. .wbin binary
 
-The `.wbin` file is the portable artifact. It encodes WAVE's 11 hardware-invariant primitives into a compact binary format:
+The `.wbin` container stores instruction words and kernel metadata:
 
-- **32-bit base instructions** for common operations (arithmetic, comparisons, register moves).
-- **64-bit extended instructions** for operations requiring three or more operands, immediates, or memory addressing.
-- **Metadata section** containing kernel name, register pressure, local memory requirements, and workgroup size hints.
+- 32-bit base instructions contain an opcode, register fields, modifiers, and predication.
+- 64-bit extended instructions add operand registers, immediates, or scope information.
+- Metadata declares kernel names, register counts, local memory, and workgroup dimensions.
 
-A `.wbin` file contains no vendor-specific information. The same binary runs through any of the four backends or through the emulator.
+The same format feeds the four backends and the emulator. Execution requires the selected backend to support the kernel's operations, capabilities, and resource needs.
 
-### 4. Backend Translation
+### 4. backend translation
 
-Each backend reads the `.wbin` and translates it to vendor-native code:
+Each backend translates `.wbin` into input for a vendor compiler:
 
-| Backend | Output | Target Hardware |
+| Backend | Output | Target hardware |
 |---|---|---|
-| `wave-metal` | Metal Shading Language (MSL) | Apple M1-M4, A-series GPUs |
-| `wave-ptx` | PTX assembly | NVIDIA Turing+ GPUs (SM 75+) |
+| `wave-metal` | Metal Shading Language; MSL | Apple M1-M4, A-series GPUs |
+| `wave-ptx` | PTX assembly | NVIDIA Turing+ GPUs; SM 75+ |
 | `wave-hip` | HIP C++ | AMD RDNA / CDNA GPUs |
 | `wave-sycl` | SYCL C++ | Intel Xe / Arc GPUs |
 
-The backend output is then compiled by the vendor's own toolchain (`metallib`, `ptxas`, `hipcc`, `dpcpp`) into a GPU-executable binary.
+Metal, CUDA, ROCm, or oneAPI tools compile the generated program for GPU execution.
 
 See [Backends](/architecture/backends/) for a detailed comparison of translation strategies.
 
-### 5. wave-emu (Emulator Path)
+### 5. wave-emu: emulator path
 
-For CI pipelines and development machines without a GPU, `wave-emu` executes `.wbin` binaries directly on the CPU. It implements the full WAVE execution model including SIMT divergence, barrier synchronization, atomic operations, and wave-level collectives.
+`wave-emu` executes `.wbin` on the CPU for development and CI. It models lane state, divergence, barriers, atomics, and wave collectives.
 
-The emulator guarantees functional correctness but does not model vendor-specific performance characteristics. It is the reference implementation for the WAVE specification.
+The emulator is the reference implementation for functional tests. It does not model GPU timing.
 
 See [Emulator](/architecture/emulator/) for details on the execution model.
 
-## How the Pieces Fit Together
+## How the pieces fit together
 
-The pipeline is designed around a single invariant: **the `.wbin` binary is the portability boundary**. Everything above it (SDKs, compiler frontend) is language-specific. Everything below it (backends, vendor toolchains) is hardware-specific. The `.wbin` format itself is neither.
+The `.wbin` format connects language frontends to hardware backends.
 
-This means:
+- Add a frontend to support another source language.
+- Add a backend to target another GPU vendor.
+- Run the same binary in the emulator for CPU-based tests.
 
-- **Adding a new source language** requires only a new frontend parser in `wave-compiler`. The optimization pipeline, register allocator, backends, and emulator are reused unchanged.
-- **Adding a new GPU vendor** requires only a new backend that translates `.wbin` to the vendor's native format. The compiler and all existing SDKs work without modification.
-- **Testing without hardware** uses the same `.wbin` that would run on a real GPU. There is no separate "test mode" or "CPU fallback" compilation path.
-
-The occupancy model is also portable. WAVE defines a universal occupancy equation:
+Register capacity gives an upper bound on resident waves:
 
 ```
 O = floor(F / (R * W * w))
 ```
 
-Where `F` is the register file size, `R` is the registers used per thread, `W` is the wave width, and `w` is the target number of waves per compute unit. Backends use this equation with vendor-specific values for `F` and `W` to determine launch configuration.
+`F` is register storage in bytes, `R` is machine registers per lane, `W` is lanes per wave, and `w` is bytes per register. Hardware limits and allocation granularity can reduce occupancy further. WAVE metadata records virtual register demand; the vendor compiler determines machine register use.
 
-**Next:** [Compiler Internals](/architecture/compiler/) for a deep dive into the compilation stages.
+Next: [Compiler internals](/architecture/compiler/) for details on the compilation stages.

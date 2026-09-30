@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 4: Memory Model tests
-//!
-//! Verifies local memory, device memory, memory widths, and atomics.
+//! Section 4: Memory Model tests Verifies local memory, device memory, memory widths, and
+//! atomics.
 
 use crate::harness::*;
 
@@ -108,12 +107,12 @@ fn test_local_memory_widths() -> TestResult {
     mov_imm r3, 0
     device_store_u32 r3, r2         ; device[0] = r2
 
-    ; Read as u16 (low 16 bits on little-endian)
+    ; Read as u16 from the low 16 bits
     local_load_u16 r4, r1           ; r4 = 0xBEEF
     mov_imm r3, 4
     device_store_u32 r3, r4         ; device[4] = 0xBEEF
 
-    ; Read as u8 (lowest byte)
+    ; Read as u8 from the lowest byte
     local_load_u8 r5, r1            ; r5 = 0xEF
     mov_imm r3, 8
     device_store_u32 r3, r5         ; device[8] = 0xEF
@@ -455,7 +454,7 @@ fn test_atomic_min_max() -> TestResult {
                 spec_section: "4.5".to_string(),
                 spec_claim: "atomic_min/max work correctly".to_string(),
                 passed,
-                details: format!("min={}, max={} (expected 0, 3)", min_val, max_val),
+                details: format!("min={}, max={}; expected 0, 3", min_val, max_val),
                 cycles: result.cycles,
             }
         }
@@ -509,7 +508,7 @@ fn test_atomic_and_or_xor() -> TestResult {
                 spec_section: "4.5".to_string(),
                 spec_claim: "atomic_or works correctly".to_string(),
                 passed,
-                details: format!("Result = 0x{:x} (expected 0xf)", value),
+                details: format!("Result = 0x{:x}; expected 0xf", value),
                 cycles: result.cycles,
             }
         }
@@ -562,14 +561,14 @@ fn test_atomic_exchange() -> TestResult {
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
         Ok(result) => {
             let final_val = read_u32(&result.device_memory, 0);
-            let passed = final_val >= 100 && final_val <= 103;
+            let passed = (100..=103).contains(&final_val);
 
             TestResult {
                 name: "test_atomic_exchange".to_string(),
                 spec_section: "4.5".to_string(),
                 spec_claim: "atomic_exchange works correctly".to_string(),
                 passed,
-                details: format!("Final value = {} (expected 100-103)", final_val),
+                details: format!("Final value = {}; expected 100-103", final_val),
                 cycles: result.cycles,
             }
         }
@@ -603,7 +602,7 @@ fn test_atomic_cas() -> TestResult {
     @p1 mov_imm r3, 10          ; desired
     @p1 atomic_cas r4, r1, r2, r3, .device   ; r4 = old value
 
-    ; Store old value (should be 5)
+    ; Store old value ; expected value is 5
     @p1 mov_imm r5, 100
     @p1 device_store_u32 r5, r4
 
@@ -631,10 +630,7 @@ fn test_atomic_cas() -> TestResult {
                 spec_section: "4.5".to_string(),
                 spec_claim: "atomic_cas works correctly".to_string(),
                 passed,
-                details: format!(
-                    "final={}, old={} (expected 10, 5)",
-                    final_val, old_val
-                ),
+                details: format!("final={}, old={}; expected 10, 5", final_val, old_val),
                 cycles: result.cycles,
             }
         }
@@ -657,7 +653,7 @@ fn test_local_atomic_add() -> TestResult {
 
 .kernel test_local_atomic_add
 .registers 8
-    ; Initialize local_mem[0] = 0 (only lane 0)
+    ; Initialize local_mem[0] = 0 in lane 0
     mov r0, sr_lane_id
     mov_imm r7, 0
     icmp_eq p1, r0, r7
@@ -785,7 +781,7 @@ fn test_barrier_memory_visibility() -> TestResult {
                 spec_claim: "Barrier ensures memory visibility".to_string(),
                 passed,
                 details: format!(
-                    "val0=0x{:x}, val4=0x{:x} (expected 0x11111111, 0x22222222)",
+                    "val0=0x{:x}, val4=0x{:x}; expected 0x11111111, 0x22222222",
                     val0, val4
                 ),
                 cycles: result.cycles,

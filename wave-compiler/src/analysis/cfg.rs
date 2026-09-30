@@ -1,16 +1,15 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Control flow graph construction and traversal utilities.
-//!
-//! Builds predecessor/successor maps and provides reverse postorder
-//! traversal for dataflow analysis algorithms.
+//! Control flow graph construction and traversal utilities. Builds predecessor/successor maps
+//! and provides reverse postorder traversal for dataflow analysis algorithms.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::mir::function::MirFunction;
 use crate::mir::value::BlockId;
 
+#[derive(Debug)]
 /// Control flow graph with predecessor and successor maps.
 pub struct Cfg {
     /// Predecessors for each block.
@@ -122,7 +121,7 @@ mod tests {
     fn test_cfg_predecessors() {
         let func = make_diamond_cfg();
         let cfg = Cfg::build(&func);
-        assert!(cfg.preds(BlockId(0)).is_empty());
+        assert_eq!(cfg.preds(BlockId(0)), []);
         assert_eq!(cfg.preds(BlockId(1)), &[BlockId(0)]);
         assert_eq!(cfg.preds(BlockId(2)), &[BlockId(0)]);
         let preds3 = cfg.preds(BlockId(3));

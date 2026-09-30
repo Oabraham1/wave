@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Real Programs tests
-//!
-//! Implements and verifies actual GPU algorithms to prove the spec is viable.
+//! Real Programs tests Implements and verifies actual GPU algorithms to prove the spec is
+//! viable.
 
 use crate::harness::*;
 
@@ -23,7 +22,7 @@ fn test_vector_add() -> TestResult {
     const SOURCE: &str = r#"
 ; Real Program: Vector Addition
 ; C[i] = A[i] + B[i]
-; Memory layout: A at 0, B at 64, C at 128 (16 elements each)
+; Memory layout: A at 0, B at 64, C at 128 with 16 elements each
 
 .kernel vector_add
 .registers 8
@@ -93,10 +92,7 @@ fn test_vector_add() -> TestResult {
                 details: if passed {
                     "All 16 elements correct".to_string()
                 } else {
-                    format!(
-                        "C = {}",
-                        format_memory_u32(&result.device_memory, 128, 4)
-                    )
+                    format!("C = {}", format_memory_u32(&result.device_memory, 128, 4))
                 },
                 cycles: result.cycles,
             }
@@ -115,7 +111,7 @@ fn test_vector_add() -> TestResult {
 /// Vector scale: B[i] = A[i] * scale
 fn test_vector_scale() -> TestResult {
     const SOURCE: &str = r#"
-; Real Program: Vector Scale (SAXPY simplified)
+; Real Program: Vector Scale with a scalar multiplier
 ; B[i] = A[i] * 3
 
 .kernel vector_scale
@@ -137,7 +133,7 @@ fn test_vector_scale() -> TestResult {
     mov_imm r4, 3
     imul r5, r3, r4
 
-    ; Store to B (offset 64)
+    ; Store to B at offset 64
     mov_imm r6, 64
     iadd r7, r2, r6
     device_store_u32 r7, r5
@@ -179,10 +175,7 @@ fn test_vector_scale() -> TestResult {
                 details: if passed {
                     "B = [3, 6, 9, 12, 15, 18, 21, 24]".to_string()
                 } else {
-                    format!(
-                        "B = {}",
-                        format_memory_u32(&result.device_memory, 64, 8)
-                    )
+                    format!("B = {}", format_memory_u32(&result.device_memory, 64, 8))
                 },
                 cycles: result.cycles,
             }
@@ -258,7 +251,7 @@ fn test_dot_product() -> TestResult {
                 spec_section: "Real Programs".to_string(),
                 spec_claim: "Dot product works".to_string(),
                 passed,
-                details: format!("dot([1,2,3,4], [5,6,7,8]) = {} (expected 70)", dot),
+                details: format!("dot([1,2,3,4], [5,6,7,8]) = {}; expected 70", dot),
                 cycles: result.cycles,
             }
         }
@@ -276,7 +269,7 @@ fn test_dot_product() -> TestResult {
 /// Parallel reduction using wave operations.
 fn test_parallel_reduction() -> TestResult {
     const SOURCE: &str = r#"
-; Real Program: Parallel Reduction (sum)
+; Real Program: Parallel Reduction sum
 ; Uses wave_reduce_add
 
 .kernel parallel_reduction
@@ -314,7 +307,7 @@ fn test_parallel_reduction() -> TestResult {
                 spec_section: "Real Programs".to_string(),
                 spec_claim: "Parallel reduction works".to_string(),
                 passed,
-                details: format!("sum(1,2,3,4) = {} (expected 10)", sum),
+                details: format!("sum(1,2,3,4) = {}; expected 10", sum),
                 cycles: result.cycles,
             }
         }
@@ -339,7 +332,7 @@ fn test_histogram() -> TestResult {
 .registers 8
     mov r0, sr_lane_id
 
-    ; Load input value (use lane_id % 2 as the value)
+    ; Load input value using lane_id % 2 as the value
     mov_imm r1, 1
     and r2, r0, r1              ; value = lane_id & 1 (0 or 1)
 
@@ -364,8 +357,8 @@ fn test_histogram() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, Some(&init_mem)) {
         Ok(result) => {
-            let bin0 = read_u32(&result.device_memory, 0);  // Even lanes (0, 2)
-            let bin1 = read_u32(&result.device_memory, 4);  // Odd lanes (1, 3)
+            let bin0 = read_u32(&result.device_memory, 0); // Even lanes (0, 2)
+            let bin1 = read_u32(&result.device_memory, 4); // Odd lanes (1, 3)
 
             let passed = bin0 == 2 && bin1 == 2;
 
@@ -374,7 +367,7 @@ fn test_histogram() -> TestResult {
                 spec_section: "Real Programs".to_string(),
                 spec_claim: "Atomic histogram works".to_string(),
                 passed,
-                details: format!("histogram = [{}, {}] (expected [2, 2])", bin0, bin1),
+                details: format!("histogram = [{}, {}]; expected [2, 2]", bin0, bin1),
                 cycles: result.cycles,
             }
         }
@@ -442,7 +435,7 @@ fn test_prefix_sum() -> TestResult {
                 spec_claim: "Prefix sum works".to_string(),
                 passed,
                 details: format!(
-                    "prefix_sum([1,2,3,4]) = [{}, {}, {}, {}] (expected [0, 1, 3, 6])",
+                    "prefix_sum([1,2,3,4]) = [{}, {}, {}, {}]; expected [0, 1, 3, 6]",
                     out0, out1, out2, out3
                 ),
                 cycles: result.cycles,

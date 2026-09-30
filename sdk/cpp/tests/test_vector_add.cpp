@@ -66,6 +66,6 @@ int main() {
     test_zeros_f32();
     printf("  [PASS] zeros f32\n");
 
-    printf("All C/C++ SDK tests passed!\n");
+    printf("C/C++ SDK checks passed.\n");
     return 0;
 }

@@ -1,17 +1,14 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI entry point for the WAVE HIP backend. Reads a WBIN binary file, translates
-//!
-//! it to HIP C++ using the `wave_hip::compile` API, and writes the resulting source
-//! to an output file or stdout.
+//! Translate WBIN files into HIP C++ from the command line.
 
 use clap::Parser;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "wave-hip")]
 #[command(
     about = "WAVE HIP backend - translates WAVE binary (.wbin) to AMD HIP kernel source (.hip)"
@@ -24,34 +21,16 @@ struct Cli {
     output: Option<PathBuf>,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
-    let wbin_data = match fs::read(&cli.input) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("error: cannot read '{}': {e}", cli.input.display());
-            process::exit(1);
-        }
-    };
-
-    let hip = match wave_hip::compile(&wbin_data) {
-        Ok(hip) => hip,
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
-    };
-
-    match cli.output {
-        Some(path) => {
-            if let Err(e) = fs::write(&path, &hip) {
-                eprintln!("error: cannot write '{}': {e}", path.display());
-                process::exit(1);
-            }
-        }
-        None => {
-            print!("{hip}");
-        }
+    let wbin_data = fs::read(&cli.input)
+        .map_err(|error| format!("cannot read '{}': {error}", cli.input.display()))?;
+    let hip = wave_hip::compile(&wbin_data)?;
+    if let Some(path) = cli.output {
+        fs::write(&path, &hip)
+            .map_err(|error| format!("cannot write '{}': {error}", path.display()))?;
+    } else {
+        io::stdout().lock().write_all(hip.as_bytes())?;
     }
+    Ok(())
 }

@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 2: Execution Model tests
-//!
-//! Verifies thread identity, wave structure, workgroup dimensions, and scheduling.
+//! Section 2: Execution Model tests Verifies thread identity, wave structure, workgroup
+//! dimensions, and scheduling.
 
 use crate::harness::*;
 
@@ -126,7 +125,7 @@ fn test_lane_id_unique() -> TestResult {
                     passed = false;
                 }
 
-                if value >= 100 && value < 104 {
+                if (100..104).contains(&value) {
                     seen[(value - 100) as usize] = true;
                 }
             }
@@ -141,10 +140,7 @@ fn test_lane_id_unique() -> TestResult {
                 details: if passed && all_unique {
                     "All lane IDs unique and in range".to_string()
                 } else {
-                    format!(
-                        "Memory: {}",
-                        format_memory_u32(&result.device_memory, 0, 4)
-                    )
+                    format!("Memory: {}", format_memory_u32(&result.device_memory, 0, 4))
                 },
                 cycles: result.cycles,
             }
@@ -257,10 +253,7 @@ fn test_workgroup_dims_1d() -> TestResult {
                 details: if passed {
                     "Thread IDs 0-7 written correctly".to_string()
                 } else {
-                    format!(
-                        "Memory: {}",
-                        format_memory_u32(&result.device_memory, 0, 8)
-                    )
+                    format!("Memory: {}", format_memory_u32(&result.device_memory, 0, 8))
                 },
                 cycles: result.cycles,
             }
@@ -449,7 +442,7 @@ fn test_forward_progress() -> TestResult {
     mov_imm r1, 2
     shl r2, r0, r1              ; offset = wave_id * 4
 
-    ; Write completion flag (0xDEADBEEF)
+    ; Write completion flag 0xDEADBEEF
     mov_imm r3, 0xDEADBEEF
     device_store_u32 r2, r3
 
@@ -477,10 +470,7 @@ fn test_forward_progress() -> TestResult {
                 details: if passed {
                     "Both waves completed successfully".to_string()
                 } else {
-                    format!(
-                        "Wave flags: 0x{:08x}, 0x{:08x}",
-                        wave0_flag, wave1_flag
-                    )
+                    format!("Wave flags: 0x{:08x}, 0x{:08x}", wave0_flag, wave1_flag)
                 },
                 cycles: result.cycles,
             }
@@ -556,10 +546,7 @@ fn test_multiple_waves_in_workgroup() -> TestResult {
                 details: if passed {
                     "Wave 1 successfully read Wave 0's local memory writes".to_string()
                 } else {
-                    format!(
-                        "Memory: {}",
-                        format_memory_u32(&result.device_memory, 0, 4)
-                    )
+                    format!("Memory: {}", format_memory_u32(&result.device_memory, 0, 4))
                 },
                 cycles: result.cycles,
             }

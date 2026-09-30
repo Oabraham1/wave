@@ -1,193 +1,158 @@
 ---
-title: Writing Kernels
-description: Learn WAVE assembly syntax, kernel structure, register usage, and how to write your first GPU kernel from scratch.
+title: "Writing kernels"
+description: "Assembly syntax, registers, memory operations, and a vector-add kernel."
 ---
 
-WAVE kernels are short assembly programs that run in parallel across thousands of threads on a GPU. This guide covers the assembly syntax, kernel structure, register conventions, and walks through a complete vector addition kernel line by line.
+WAVE assembly describes the work performed by each thread. A launch supplies the workgroup grid, memory allocation, and execution width.
 
-## Kernel Structure
-
-Every kernel is enclosed in `.kernel` and `.end` directives and declares its resource requirements up front:
+## Kernel structure
 
 ```asm
-.kernel vector_add
-  .registers 8
-  .workgroup_size 256
-
-  ; kernel body here
-
+.kernel empty
+.registers 1
+.workgroup_size 256, 1, 1
+halt
 .end
 ```
 
-- **`.kernel <name>`** begins a named kernel.
-- **`.registers <n>`** declares how many general-purpose registers (GPRs) the kernel uses (out of the 32 available, `r0`–`r31`).
-- **`.workgroup_size <n>`** sets the number of threads per workgroup (commonly 64, 128, or 256).
-- **`.end`** closes the kernel definition.
+- `.kernel <name>` starts a kernel.
+- `.registers <n>` declares the register count.
+- `.workgroup_size <x>, <y>, <z>` declares threads per workgroup.
+- `.local_memory <bytes>` reserves workgroup storage when needed.
+- `.end` closes the kernel definition.
 
 ## Registers
 
-WAVE provides three categories of registers:
+### General-purpose registers: r0-r31
 
-### General-Purpose Registers (r0–r31)
-
-All 32 GPRs are untyped 32-bit slots. The instruction determines how the bits are interpreted - `iadd` treats them as integers, `fadd` treats them as IEEE 754 floats, and so on. There is no need to declare types.
+The base encoding addresses `r0` through `r31`. Each register holds 32 untyped bits. The instruction selects the interpretation. Extended register encoding supports larger register indices; consult the [specification](/reference/spec/) for its limits.
 
 ```asm
-mov_imm r0, 42        ; r0 now holds integer 42
-iadd r2, r0, r1       ; integer add: r2 = r0 + r1
-fadd r5, r3, r4       ; float add:  r5 = r3 + r4
+mov_imm r0, 42
+iadd r2, r0, r1
+fadd r5, r3, r4
 ```
 
-### Predicate Registers (p0–p3)
+Arithmetic instructions take register operands. Load constants with `mov_imm` before using them in arithmetic.
 
-Four 1-bit predicate registers store comparison results and control conditional execution:
+### Predicate registers: p0-p3
+
+Comparisons write one-bit results to predicate registers:
 
 ```asm
-icmp.lt p0, r0, r1    ; p0 = (r0 < r1)
+icmp_lt p0, r0, r1
 ```
 
-### Special Registers
+### Special registers
 
-Sixteen read-only special registers expose the thread's position in the dispatch grid:
+Special registers describe the current invocation and launch:
 
-| Register | Description |
+| Register | Meaning |
 |---|---|
 | `sr_thread_id_x`, `sr_thread_id_y`, `sr_thread_id_z` | Thread index within the workgroup |
 | `sr_wave_id` | Wave index within the workgroup |
 | `sr_lane_id` | Lane index within the wave |
 | `sr_workgroup_id_x`, `sr_workgroup_id_y`, `sr_workgroup_id_z` | Workgroup index within the grid |
 | `sr_workgroup_size_x`, `sr_workgroup_size_y`, `sr_workgroup_size_z` | Workgroup dimensions |
-| `sr_grid_size_x`, `sr_grid_size_y`, `sr_grid_size_z` | Grid dimensions |
-| `sr_wave_width` | Number of lanes per wave (hardware-dependent) |
-| `sr_num_waves` | Number of waves in the workgroup |
+| `sr_grid_size_x`, `sr_grid_size_y`, `sr_grid_size_z` | Workgroup counts |
+| `sr_wave_width` | Lanes per wave |
+| `sr_num_waves` | Waves per workgroup |
 
-Access them with `mov_sr`:
-
-```asm
-mov_sr r0, sr_thread_id_x       ; r0 = local thread index
-mov_sr r1, sr_workgroup_id_x    ; r1 = workgroup index
-mov_sr r2, sr_workgroup_size_x  ; r2 = workgroup size
-```
-
-## Computing a Global Thread Index
-
-Most kernels need a unique global index per thread. The standard pattern is:
+Read them with `mov_sr`:
 
 ```asm
-mov_sr r0, sr_workgroup_id_x     ; workgroup index
-mov_sr r1, sr_workgroup_size_x   ; workgroup size
-mov_sr r2, sr_thread_id_x        ; local thread index
-imul   r3, r0, r1                ; r3 = workgroup_id * workgroup_size
-iadd   r3, r3, r2                ; r3 = global thread index
+mov_sr r0, sr_thread_id_x
+mov_sr r1, sr_workgroup_id_x
+mov_sr r2, sr_workgroup_size_x
 ```
 
-Or in one step with `imad` (integer multiply-add):
+## Computing a global thread index
+
+For a one-dimensional launch, multiply the workgroup index by the workgroup size and add the local thread index:
 
 ```asm
 mov_sr r0, sr_workgroup_id_x
 mov_sr r1, sr_workgroup_size_x
 mov_sr r2, sr_thread_id_x
-imad   r3, r0, r1, r2            ; r3 = workgroup_id * workgroup_size + thread_id
+imad r3, r0, r1, r2
 ```
 
-## Loading and Storing Data
+## Loading and storing data
 
-WAVE distinguishes two address spaces for memory operations:
-
-- **`device_load` / `device_store`** access global GPU memory (64-bit addresses).
-- **`local_load` / `local_store`** access per-workgroup shared memory.
-
-Both support widths `u8`, `u16`, `u32`, `u64`, and `u128`. A cache hint can be appended: `cached` (default), `uncached`, or `streaming`.
+Device memory holds the launch allocation. Local memory is shared within a workgroup. Loads name the destination first; stores name the address first.
 
 ```asm
-; Load a 32-bit value from device memory at address in r1 into r0
-device_load.u32 r0, r1
-
-; Store a 32-bit value from r0 to device memory at address in r1
-device_store.u32 r0, r1
-
-; Uncached load (bypass L1 cache)
-device_load.u32.uncached r0, r1
+device_load_u32 r0, r1
+device_store_u32 r1, r0
+local_load_u32 r2, r3
+local_store_u32 r3, r2
 ```
 
-### Address Arithmetic
-
-Device memory uses 64-bit addresses. To index into an array of 32-bit elements, shift the global index left by 2 (multiply by 4 bytes) and add it to the base pointer:
+The width is part of the mnemonic. Device operations support `u8`, `u16`, `u32`, `u64`, and `u128`; local operations support widths through `u64`. Device cache hints follow the mnemonic:
 
 ```asm
-; r3 = global thread index, r4 = base address of array
-shl  r5, r3, 2          ; r5 = r3 * 4 (byte offset for u32 elements)
-iadd r5, r5, r4         ; r5 = &array[global_index]
-device_load.u32 r6, r5  ; r6 = array[global_index]
+device_load_u32.uncached r0, r1
 ```
 
-## Complete Example: Vector Add
+### Address arithmetic
 
-This kernel computes `C[i] = A[i] + B[i]` for each element:
+A 32-bit element occupies four bytes. This example adds a byte offset to the base offset in `r4`:
+
+```asm
+mov_imm r7, 4
+imul r5, r3, r7
+iadd r5, r5, r4
+device_load_u32 r6, r5
+```
+
+The allocation and argument layout determine base offsets. Do not assume the runtime initializes arbitrary registers to buffer addresses.
+
+## Complete example: vector add
+
+This kernel adds two arrays of 256 `f32` values. Launch one workgroup of 256 threads with a device allocation of at least 3,072 bytes:
+
+| Byte offset | Contents |
+|---|---|
+| 0 | Input A, 256 floats |
+| 1,024 | Input B, 256 floats |
+| 2,048 | Output C, 256 floats |
 
 ```asm
 .kernel vector_add
-  .registers 8
-  .workgroup_size 256
+.registers 16
+.workgroup_size 256, 1, 1
 
-  ; --- Step 1: Compute global thread index ---
-  mov_sr r0, sr_workgroup_id_x       ; r0 = workgroup index
-  mov_sr r1, sr_workgroup_size_x     ; r1 = threads per workgroup (256)
-  mov_sr r2, sr_thread_id_x          ; r2 = thread index within workgroup
-  imad   r3, r0, r1, r2              ; r3 = global_id = workgroup_id * 256 + thread_id
+mov_sr r0, sr_thread_id_x
+mov_imm r1, 4
+imul r2, r0, r1
+device_load_u32 r3, r2
 
-  ; --- Step 2: Compute byte offset for 32-bit floats ---
-  shl    r4, r3, 2                   ; r4 = global_id * 4 (byte offset)
+mov_imm r4, 1024
+iadd r5, r4, r2
+device_load_u32 r6, r5
+fadd r7, r3, r6
 
-  ; --- Step 3: Load A[i] ---
-  ; Assume r10 holds base address of A (set by runtime)
-  iadd   r5, r10, r4                 ; r5 = &A[global_id]
-  device_load.u32 r0, r5            ; r0 = A[global_id]
-
-  ; --- Step 4: Load B[i] ---
-  ; Assume r11 holds base address of B (set by runtime)
-  iadd   r5, r11, r4                 ; r5 = &B[global_id]
-  device_load.u32 r1, r5            ; r1 = B[global_id]
-
-  ; --- Step 5: Add ---
-  fadd   r2, r0, r1                  ; r2 = A[i] + B[i]
-
-  ; --- Step 6: Store C[i] ---
-  ; Assume r12 holds base address of C (set by runtime)
-  iadd   r5, r12, r4                 ; r5 = &C[global_id]
-  device_store.u32 r2, r5           ; C[global_id] = r2
-
-  ; --- Done ---
-  return
-
+mov_imm r8, 2048
+iadd r9, r8, r2
+device_store_u32 r9, r7
+halt
 .end
 ```
 
-**Line-by-line breakdown:**
+Each thread computes its byte offset, loads one value from each input, adds them, and stores one output. For other sizes, pass the element count through a defined argument layout and guard the accesses.
 
-1. **Lines 6–9**: Read the workgroup ID, workgroup size, and thread ID from special registers, then combine them with `imad` to get a unique global index.
-2. **Line 12**: Shift left by 2 converts the element index into a byte offset (each `f32` is 4 bytes).
-3. **Lines 15–16**: Add the byte offset to `A`'s base address and load the element.
-4. **Lines 19–20**: Same for `B`.
-5. **Line 23**: `fadd` performs a 32-bit floating-point addition.
-6. **Lines 26–27**: Write the result to `C`.
-7. **Line 30**: `return` terminates the thread.
+## Instruction quick reference
 
-## Instruction Quick Reference
-
-Here are the most common instruction categories you will use in kernels:
-
-| Category | Instructions |
+| Category | Examples |
 |---|---|
-| Integer arithmetic | `iadd`, `isub`, `imul`, `imul_hi`, `imad`, `idiv`, `imod`, `ineg`, `iabs` |
-| Float arithmetic | `fadd`, `fsub`, `fmul`, `fma`, `fdiv`, `fneg`, `fabs`, `fsqrt` |
-| Float unary | `frsqrt`, `frcp`, `ffloor`, `fceil`, `fround`, `ftrunc`, `ffract`, `fsat`, `fsin`, `fcos`, `fexp2`, `flog2` |
-| Bitwise | `and`, `or`, `xor`, `not`, `shl`, `shr`, `sar` |
-| Compare | `icmp`, `ucmp`, `fcmp` with conditions: `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
-| Data movement | `mov`, `mov_imm`, `mov_sr`, `cvt` |
+| Integer arithmetic | `iadd`, `isub`, `imul`, `imad`, `idiv`, `imod` |
+| Floating-point arithmetic | `fadd`, `fsub`, `fmul`, `fma`, `fdiv`, `fsqrt` |
+| Bit operations | `and`, `or`, `xor`, `not`, `shl`, `shr`, `sar` |
+| Comparisons | `icmp_lt`, `ucmp_le`, `fcmp_eq` |
+| Data movement | `mov`, `mov_imm`, `mov_sr` |
 | Control flow | `if`, `else`, `endif`, `loop`, `break`, `continue`, `endloop` |
-| Synchronization | `barrier`, `fence_acquire`, `fence_release`, `return`, `halt` |
+| Synchronization and exit | `barrier`, `fence_acquire`, `fence_release`, `return`, `halt` |
 
-## Next Steps
+## Next steps
 
-Next: [Memory Model](/guides/memory-model/) - understand the three memory levels, atomic operations, and how fences keep your data consistent.
+Read the [memory model](/guides/memory-model/) for shared storage and synchronization.

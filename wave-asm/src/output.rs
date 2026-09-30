@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WBIN binary writer. Produces the final output format: 32-byte header, code
-//!
-//! section, symbol table (optional), and kernel metadata. Supports multiple
-//! kernels and stripping symbols for release builds.
+//! WBIN binary writer. Produces the final output format: 32-byte header, code section, symbol
+//! table, optional, and kernel metadata. Supports multiple kernels and stripping symbols for
+//! release builds.
 
 use crate::ast::KernelMetadata;
 use crate::diagnostics::AssemblerError;
@@ -13,6 +12,7 @@ use std::io::Write;
 
 const WBIN_VERSION: u16 = 0x0001;
 
+#[derive(Debug)]
 pub struct WbinWriter {
     kernels: Vec<KernelMetadata>,
     code: Vec<u8>,
@@ -33,13 +33,19 @@ impl WbinWriter {
         self.strip_symbols = strip;
     }
 
-    pub fn begin_kernel(&mut self, name: String) {
+    /// Begin a kernel at the current code offset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the code offset exceeds the WBIN size limit.
+    pub fn begin_kernel(&mut self, name: String) -> Result<(), AssemblerError> {
         let metadata = KernelMetadata {
             name,
-            code_offset: self.code.len() as u32,
+            code_offset: binary_size(self.code.len())?,
             ..Default::default()
         };
         self.kernels.push(metadata);
+        Ok(())
     }
 
     pub fn set_register_count(&mut self, count: u32) {
@@ -60,10 +66,16 @@ impl WbinWriter {
         }
     }
 
-    pub fn end_kernel(&mut self) {
+    /// Record the size of the current kernel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the code size exceeds the WBIN size limit.
+    pub fn end_kernel(&mut self) -> Result<(), AssemblerError> {
         if let Some(kernel) = self.kernels.last_mut() {
-            kernel.code_size = self.code.len() as u32 - kernel.code_offset;
+            kernel.code_size = binary_size(self.code.len())? - kernel.code_offset;
         }
+        Ok(())
     }
 
     pub fn write_instruction(&mut self, inst: &EncodedInstruction) {
@@ -73,178 +85,86 @@ impl WbinWriter {
         }
     }
 
+    /// Write a WBIN file to the output stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a section exceeds the WBIN size limit or the output write fails.
     pub fn finish<W: Write>(&self, writer: &mut W) -> Result<(), AssemblerError> {
-        let header_size: u32 = 0x20;
-        let code_offset = header_size;
-        let code_size = self.code.len() as u32;
-
-        let symbol_offset = if self.strip_symbols {
-            0
-        } else {
-            code_offset + code_size
-        };
-        let symbol_size = if self.strip_symbols {
-            0
-        } else {
-            self.kernels.iter().map(|k| k.name.len() + 1).sum::<usize>() as u32
-        };
-
-        let metadata_offset = symbol_offset + symbol_size;
-        let metadata_size = self.compute_metadata_size();
-
-        writer
-            .write_all(b"WAVE")
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&WBIN_VERSION.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&0u16.to_le_bytes()) // flags (reserved)
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&code_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&code_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&symbol_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&symbol_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&metadata_offset.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&metadata_size.to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        writer
-            .write_all(&self.code)
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
-        if !self.strip_symbols {
-            for kernel in &self.kernels {
-                writer
-                    .write_all(kernel.name.as_bytes())
-                    .map_err(|e| AssemblerError::IoError {
-                        message: e.to_string(),
-                    })?;
-                writer
-                    .write_all(&[0u8])
-                    .map_err(|e| AssemblerError::IoError {
-                        message: e.to_string(),
-                    })?;
-            }
-        }
-
-        writer
-            .write_all(&(self.kernels.len() as u32).to_le_bytes())
-            .map_err(|e| AssemblerError::IoError {
-                message: e.to_string(),
-            })?;
-
+        let code_offset = 32u32;
+        let code_size = binary_size(self.code.len())?;
+        let code_end = code_offset
+            .checked_add(code_size)
+            .ok_or(AssemblerError::BinaryTooLarge)?;
+        let symbol_offset = if self.strip_symbols { 0 } else { code_end };
+        let mut symbols = Vec::new();
+        let mut name_offsets = Vec::with_capacity(self.kernels.len());
         for kernel in &self.kernels {
-            let name_offset = if self.strip_symbols {
-                0u32
+            if self.strip_symbols {
+                name_offsets.push(0);
             } else {
-                symbol_offset + self.get_name_offset(&kernel.name)
-            };
-
-            writer
-                .write_all(&name_offset.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.register_count.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.local_memory_size.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.workgroup_size[0].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.workgroup_size[1].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.workgroup_size[2].to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.code_offset.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-
-            writer
-                .write_all(&kernel.code_size.to_le_bytes())
-                .map_err(|e| AssemblerError::IoError {
-                    message: e.to_string(),
-                })?;
-        }
-
-        Ok(())
-    }
-
-    fn compute_metadata_size(&self) -> u32 {
-        4 + (self.kernels.len() as u32 * 32)
-    }
-
-    fn get_name_offset(&self, target_name: &str) -> u32 {
-        let mut offset = 0u32;
-        for kernel in &self.kernels {
-            if kernel.name == target_name {
-                return offset;
+                name_offsets.push(
+                    symbol_offset
+                        .checked_add(binary_size(symbols.len())?)
+                        .ok_or(AssemblerError::BinaryTooLarge)?,
+                );
+                symbols.extend_from_slice(kernel.name.as_bytes());
+                symbols.push(0);
             }
-            offset += kernel.name.len() as u32 + 1;
         }
-        0
+        let symbol_size = binary_size(symbols.len())?;
+        let metadata_offset = code_end
+            .checked_add(symbol_size)
+            .ok_or(AssemblerError::BinaryTooLarge)?;
+        let count = binary_size(self.kernels.len())?;
+        let metadata_size = count
+            .checked_mul(32)
+            .and_then(|size| size.checked_add(4))
+            .ok_or(AssemblerError::BinaryTooLarge)?;
+        metadata_offset
+            .checked_add(metadata_size)
+            .ok_or(AssemblerError::BinaryTooLarge)?;
+
+        let mut header = Vec::with_capacity(32);
+        header.extend_from_slice(b"WAVE");
+        header.extend_from_slice(&WBIN_VERSION.to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        for value in [
+            code_offset,
+            code_size,
+            symbol_offset,
+            symbol_size,
+            metadata_offset,
+            metadata_size,
+        ] {
+            header.extend_from_slice(&value.to_le_bytes());
+        }
+        let write_error = |error: std::io::Error| AssemblerError::IoError {
+            message: format!("failed to write WBIN: {error}"),
+        };
+        writer.write_all(&header).map_err(write_error)?;
+        writer.write_all(&self.code).map_err(write_error)?;
+        writer.write_all(&symbols).map_err(write_error)?;
+        writer
+            .write_all(&count.to_le_bytes())
+            .map_err(write_error)?;
+        for (kernel, name_offset) in self.kernels.iter().zip(name_offsets) {
+            for value in [
+                name_offset,
+                kernel.register_count,
+                kernel.local_memory_size,
+                kernel.workgroup_size[0],
+                kernel.workgroup_size[1],
+                kernel.workgroup_size[2],
+                kernel.code_offset,
+                kernel.code_size,
+            ] {
+                writer
+                    .write_all(&value.to_le_bytes())
+                    .map_err(write_error)?;
+            }
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -256,6 +176,10 @@ impl WbinWriter {
     pub fn kernel_count(&self) -> usize {
         self.kernels.len()
     }
+}
+
+fn binary_size(size: usize) -> Result<u32, AssemblerError> {
+    u32::try_from(size).map_err(|_| AssemblerError::BinaryTooLarge)
 }
 
 impl Default for WbinWriter {
@@ -281,7 +205,7 @@ mod tests {
     #[test]
     fn test_output_single_kernel() {
         let mut writer = WbinWriter::new();
-        writer.begin_kernel("test_kernel".into());
+        writer.begin_kernel("test_kernel".into()).unwrap();
         writer.set_register_count(16);
         writer.set_local_memory_size(1024);
         writer.set_workgroup_size(256, 1, 1);
@@ -289,7 +213,7 @@ mod tests {
         let inst = EncodedInstruction::single(0x0042_0821);
         writer.write_instruction(&inst);
 
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
         let mut output = Vec::new();
         writer.finish(&mut output).unwrap();
@@ -300,12 +224,12 @@ mod tests {
     #[test]
     fn test_output_instruction_encoding() {
         let mut writer = WbinWriter::new();
-        writer.begin_kernel("test".into());
+        writer.begin_kernel("test".into()).unwrap();
 
         let inst = EncodedInstruction::extended(0xAAAA_BBBB, 0xCCCC_DDDD);
         writer.write_instruction(&inst);
 
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
         let code = writer.code_bytes();
         assert_eq!(code.len(), 8);
@@ -321,14 +245,14 @@ mod tests {
     fn test_output_multiple_kernels() {
         let mut writer = WbinWriter::new();
 
-        writer.begin_kernel("kernel1".into());
+        writer.begin_kernel("kernel1".into()).unwrap();
         writer.write_instruction(&EncodedInstruction::single(0x1111_1111));
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
-        writer.begin_kernel("kernel2".into());
+        writer.begin_kernel("kernel2".into()).unwrap();
         writer.write_instruction(&EncodedInstruction::single(0x2222_2222));
         writer.write_instruction(&EncodedInstruction::single(0x3333_3333));
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
         assert_eq!(writer.kernel_count(), 2);
         assert_eq!(writer.code_bytes().len(), 12);
@@ -337,9 +261,9 @@ mod tests {
     #[test]
     fn test_output_register_cap() {
         let mut writer = WbinWriter::new();
-        writer.begin_kernel("test".into());
+        writer.begin_kernel("test".into()).unwrap();
         writer.set_register_count(64);
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
         assert_eq!(writer.kernels[0].register_count, 64);
     }
@@ -348,9 +272,9 @@ mod tests {
     fn test_output_stripped_symbols() {
         let mut writer = WbinWriter::new();
         writer.set_strip_symbols(true);
-        writer.begin_kernel("test".into());
+        writer.begin_kernel("test".into()).unwrap();
         writer.write_instruction(&EncodedInstruction::single(0x1234_5678));
-        writer.end_kernel();
+        writer.end_kernel().unwrap();
 
         let mut output = Vec::new();
         writer.finish(&mut output).unwrap();

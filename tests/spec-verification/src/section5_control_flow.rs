@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 5: Control Flow tests
-//!
-//! Verifies divergence, reconvergence, loops, and inactive thread semantics.
+//! Section 5: Control Flow tests Verifies divergence, reconvergence, loops, and inactive thread
+//! semantics.
 
 use crate::harness::*;
 
@@ -29,7 +28,7 @@ fn test_if_uniform_taken() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 5.1 Control Flow
 ; Claim: "When all threads agree on branch, only one path executes."
-; Method: All threads have same condition (true). Verify all execute if-body.
+; Method: All threads have a true condition. Verify all execute if-body.
 
 .kernel test_if_uniform_taken
 .registers 8
@@ -97,7 +96,7 @@ fn test_if_uniform_not_taken() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 5.1 Control Flow
 ; Claim: "When all threads agree on branch, only one path executes."
-; Method: All threads have same condition (false). Verify none execute if-body.
+; Method: All threads have a false condition. Verify none execute if-body.
 
 .kernel test_if_uniform_not_taken
 .registers 8
@@ -179,7 +178,7 @@ fn test_if_else_uniform() -> TestResult {
     mov_imm r1, 2
     shl r2, r0, r1              ; offset = lane_id * 4
 
-    ; p1 = false (uniform)
+    ; p1 = false in every lane
     mov_imm r3, 1
     mov_imm r4, 2
     icmp_eq p1, r3, r4
@@ -206,7 +205,8 @@ fn test_if_else_uniform() -> TestResult {
             let mut passed = true;
             for lane in 0..4 {
                 let value = read_u32(&result.device_memory, lane * 4);
-                if value != 20 {  // All should have 20 (else branch)
+                if value != 20 {
+                    // All should have 20, else branch
                     passed = false;
                     break;
                 }
@@ -249,7 +249,7 @@ fn test_if_divergent() -> TestResult {
     mov_imm r1, 2
     shl r2, r0, r1              ; offset = lane_id * 4
 
-    ; p1 = (lane_id & 1) == 0 (true for even lanes)
+    ; p1 = (lane_id & 1) == 0 ; true for even lanes
     mov_imm r3, 1
     and r4, r0, r3              ; r4 = lane_id & 1
     mov_imm r5, 0
@@ -285,7 +285,7 @@ fn test_if_divergent() -> TestResult {
                 spec_claim: "Divergent if executes only for active threads".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [100, 0, 102, 0])",
+                    "lanes=[{}, {}, {}, {}]; expected [100, 0, 102, 0]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -315,7 +315,7 @@ fn test_if_else_divergent() -> TestResult {
     mov_imm r1, 2
     shl r2, r0, r1              ; offset = lane_id * 4
 
-    ; p1 = (lane_id & 1) == 0 (true for even lanes)
+    ; p1 = (lane_id & 1) == 0 ; true for even lanes
     mov_imm r3, 1
     and r4, r0, r3
     mov_imm r5, 0
@@ -340,10 +340,10 @@ fn test_if_else_divergent() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let val0 = read_u32(&result.device_memory, 0);   // even -> 1
-            let val1 = read_u32(&result.device_memory, 4);   // odd  -> 2
-            let val2 = read_u32(&result.device_memory, 8);   // even -> 1
-            let val3 = read_u32(&result.device_memory, 12);  // odd  -> 2
+            let val0 = read_u32(&result.device_memory, 0); // even -> 1
+            let val1 = read_u32(&result.device_memory, 4); // odd  -> 2
+            let val2 = read_u32(&result.device_memory, 8); // even -> 1
+            let val3 = read_u32(&result.device_memory, 12); // odd  -> 2
 
             let passed = val0 == 1 && val1 == 2 && val2 == 1 && val3 == 2;
 
@@ -353,7 +353,7 @@ fn test_if_else_divergent() -> TestResult {
                 spec_claim: "Divergent if-else executes both paths".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [1, 2, 1, 2])",
+                    "lanes=[{}, {}, {}, {}]; expected [1, 2, 1, 2]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -434,10 +434,10 @@ fn test_nested_if_2_levels() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let val0 = read_u32(&result.device_memory, 0);   // lane 0: 10
-            let val1 = read_u32(&result.device_memory, 4);   // lane 1: 30
-            let val2 = read_u32(&result.device_memory, 8);   // lane 2: 20
-            let val3 = read_u32(&result.device_memory, 12);  // lane 3: 40
+            let val0 = read_u32(&result.device_memory, 0); // lane 0: 10
+            let val1 = read_u32(&result.device_memory, 4); // lane 1: 30
+            let val2 = read_u32(&result.device_memory, 8); // lane 2: 20
+            let val3 = read_u32(&result.device_memory, 12); // lane 3: 40
 
             let passed = val0 == 10 && val1 == 30 && val2 == 20 && val3 == 40;
 
@@ -447,7 +447,7 @@ fn test_nested_if_2_levels() -> TestResult {
                 spec_claim: "Nested if works correctly".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [10, 30, 20, 40])",
+                    "lanes=[{}, {}, {}, {}]; expected [10, 30, 20, 40]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -578,13 +578,16 @@ fn test_inactive_no_side_effects() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let val0 = read_u32(&result.device_memory, 0);   // Lane 0: should write
-            let val1 = read_u32(&result.device_memory, 4);   // Lane 1: should NOT write
-            let val2 = read_u32(&result.device_memory, 8);   // Lane 2: should NOT write
-            let val3 = read_u32(&result.device_memory, 12);  // Lane 3: should NOT write
+            let val0 = read_u32(&result.device_memory, 0); // Lane 0: should write
+            let val1 = read_u32(&result.device_memory, 4); // Lane 1: should NOT write
+            let val2 = read_u32(&result.device_memory, 8); // Lane 2: should NOT write
+            let val3 = read_u32(&result.device_memory, 12); // Lane 3: should NOT write
             let completion = read_u32(&result.device_memory, 100);
 
-            let passed = val0 == 0x12345678 && val1 == 0 && val2 == 0 && val3 == 0
+            let passed = val0 == 0x12345678
+                && val1 == 0
+                && val2 == 0
+                && val3 == 0
                 && completion == COMPLETION_FLAG;
 
             TestResult {
@@ -631,7 +634,7 @@ fn test_loop_simple() -> TestResult {
         break p1                ; break if counter >= 5
     endloop
 
-    ; Write sum to device memory (should be 0+1+2+3+4 = 10)
+    ; Write sum to device memory ; expected sum is 10
     mov_imm r4, 0
     device_store_u32 r4, r1
 
@@ -651,7 +654,7 @@ fn test_loop_simple() -> TestResult {
                 spec_section: "5.1".to_string(),
                 spec_claim: "Simple loop works correctly".to_string(),
                 passed,
-                details: format!("Sum = {} (expected 10)", sum),
+                details: format!("Sum = {}; expected 10", sum),
                 cycles: result.cycles,
             }
         }
@@ -686,7 +689,7 @@ fn test_loop_break() -> TestResult {
         break p1
     endloop
 
-    ; Write counter (should be 3)
+    ; Write counter ; expected value is 3
     mov_imm r3, 0
     device_store_u32 r3, r0
 
@@ -706,7 +709,7 @@ fn test_loop_break() -> TestResult {
                 spec_section: "5.1".to_string(),
                 spec_claim: "break exits loop correctly".to_string(),
                 passed,
-                details: format!("Counter = {} (expected 3)", counter),
+                details: format!("Counter = {}; expected 3", counter),
                 cycles: result.cycles,
             }
         }
@@ -745,7 +748,7 @@ fn test_loop_divergent_break() -> TestResult {
         iadd r3, r3, r4
     endloop
 
-    ; Each thread writes its exit counter (should equal lane_id)
+    ; Each thread writes its exit counter ; expected value is lane_id
     device_store_u32 r2, r3
 
     halt
@@ -759,10 +762,10 @@ fn test_loop_divergent_break() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let val0 = read_u32(&result.device_memory, 0);   // Lane 0 breaks at 0
-            let val1 = read_u32(&result.device_memory, 4);   // Lane 1 breaks at 1
-            let val2 = read_u32(&result.device_memory, 8);   // Lane 2 breaks at 2
-            let val3 = read_u32(&result.device_memory, 12);  // Lane 3 breaks at 3
+            let val0 = read_u32(&result.device_memory, 0); // Lane 0 breaks at 0
+            let val1 = read_u32(&result.device_memory, 4); // Lane 1 breaks at 1
+            let val2 = read_u32(&result.device_memory, 8); // Lane 2 breaks at 2
+            let val3 = read_u32(&result.device_memory, 12); // Lane 3 breaks at 3
 
             let passed = val0 == 0 && val1 == 1 && val2 == 2 && val3 == 3;
 
@@ -772,7 +775,7 @@ fn test_loop_divergent_break() -> TestResult {
                 spec_claim: "Divergent break works correctly".to_string(),
                 passed,
                 details: format!(
-                    "lanes=[{}, {}, {}, {}] (expected [0, 1, 2, 3])",
+                    "lanes=[{}, {}, {}, {}]; expected [0, 1, 2, 3]",
                     val0, val1, val2, val3
                 ),
                 cycles: result.cycles,
@@ -824,10 +827,10 @@ fn test_halt_partial_wave() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [4, 1, 1], &config, None) {
         Ok(result) => {
-            let val0 = read_u32(&result.device_memory, 0);   // Lane 0: 0xDEAD (halted early)
-            let val1 = read_u32(&result.device_memory, 4);   // Lane 1: 0xBEEF
-            let val2 = read_u32(&result.device_memory, 8);   // Lane 2: 0xBEEF
-            let val3 = read_u32(&result.device_memory, 12);  // Lane 3: 0xBEEF
+            let val0 = read_u32(&result.device_memory, 0); // Lane 0: 0xDEAD (halted early)
+            let val1 = read_u32(&result.device_memory, 4); // Lane 1: 0xBEEF
+            let val2 = read_u32(&result.device_memory, 8); // Lane 2: 0xBEEF
+            let val3 = read_u32(&result.device_memory, 12); // Lane 3: 0xBEEF
 
             let passed = val0 == 0xDEAD && val1 == 0xBEEF && val2 == 0xBEEF && val3 == 0xBEEF;
 

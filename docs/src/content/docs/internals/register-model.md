@@ -1,54 +1,22 @@
 ---
-title: Register Model
-description: Why WAVE uses untyped 32-bit registers and how this maps to real GPU register files.
+title: "Register model"
+description: "WAVE registers, register pairs, and allocation."
 ---
 
-WAVE registers are untyped 32-bit slots whose interpretation is determined entirely by the instruction that reads them, mirroring how GPU hardware actually works beneath the type systems of high-level shading languages.
+WAVE general-purpose registers hold untyped 32-bit values. The instruction determines how it reads those bits. An integer add reads integers; a floating-point add reads IEEE 754 values.
 
-## Untyped by Design
+## Register addressing
 
-A single WAVE register `r5` can hold an integer, a floating-point value, or a memory address. There is no type tag, no runtime check, and no distinction at the register-file level:
+The 8-bit register fields address `r0` through `r255`. The implementation's `MAX_REGISTERS` capability determines the available count. Kernel metadata declares the registers the kernel needs. See [Binary encoding](/internals/binary-encoding/).
 
-```
-iadd r0, r1, r2   ; treats r1, r2 as integers, writes integer result to r0
-fadd r0, r1, r2   ; treats r1, r2 as IEEE 754 floats, writes float result to r0
-load r0, [r1]     ; treats r1 as an address, loads 32 bits into r0
-```
+`r0` is an ordinary writable register. An atomic instruction with destination zero discards its return value.
 
-This is not an abstraction convenience --- it reflects hardware reality. NVIDIA, AMD, Intel, and Apple GPUs all use untyped vector register files. The ALU pipeline reinterprets bit patterns based on the opcode, not on register metadata. A typed register model would impose a fiction that every backend would then have to strip away.
+## Wide values
 
-## Why 32-Bit?
+A 64-bit value occupies consecutive registers. The low register holds the low 32 bits. The instruction defines how it interprets the pair.
 
-Thirty-two bits is the native register width across all four target architectures. While 64-bit values (doubles, long integers, pointers on some architectures) are supported, they occupy register pairs. This matches vendor behavior:
+## Allocation and occupancy
 
-- **NVIDIA**: 32-bit registers; doubles use even/odd pairs.
-- **AMD**: 32-bit VGPRs; 64-bit values occupy two consecutive VGPRs.
-- **Intel**: 32-bit GRF elements; SIMD operations widen across elements.
-- **Apple**: 32-bit registers in the SIMD-group register file.
+The compiler assigns values to WAVE register indices within the configured limit. It returns an error when allocation fails; it does not insert spills. The vendor compiler then allocates machine registers, which affect occupancy. See [Occupancy equation](/internals/occupancy-equation/).
 
-Defining the base width as 32 bits means a WAVE register maps 1:1 to a physical register on every target, eliminating packing or splitting logic in the backend.
-
-## Register Count
-
-WAVE provides 32 registers per thread, addressed by the 5-bit register fields in the instruction encoding (see [Binary Encoding](/internals/binary-encoding/)). This count was chosen by analyzing register pressure across thousands of compute kernels:
-
-- The median kernel uses 16--24 registers.
-- Kernels exceeding 32 registers are rare and typically benefit from refactoring into smaller kernels.
-- Keeping the count at 32 allows 5-bit encoding, which fits within the 32-bit instruction word without sacrificing bits for other fields.
-
-The compiler's register allocator is responsible for mapping an unbounded number of virtual registers to 32 physical registers, spilling to local memory when necessary.
-
-## Relationship to Occupancy
-
-The register count directly determines occupancy --- the number of concurrent waves a compute unit can execute. Fewer registers per thread means more threads fit in the fixed-size register file. This relationship is formalized in the [Occupancy Equation](/internals/occupancy-equation/).
-
-## Vendor Register File Comparison
-
-| Property | NVIDIA (Ampere) | AMD (RDNA 3) | Intel (Xe-HPG) | Apple (M1) |
-|----------|----------------|--------------|----------------|------------|
-| Register width | 32-bit | 32-bit | 32-bit | 32-bit |
-| Max registers/thread | 255 | 256 | 128 | 128 |
-| File size per CU/SM/EU | 256 KB | 512 KB | 128 KB | 208 KB |
-| Typing | Untyped | Untyped | Untyped | Untyped |
-
-All four vendors confirm the same fundamental design: large, untyped, 32-bit register files. WAVE's register model is a direct reflection of this hardware consensus.
+Predicate registers and special registers have separate roles. Predicates control lane execution; special registers expose thread identifiers and device capabilities. See the [specification](/reference/spec-v04/) for their access rules.

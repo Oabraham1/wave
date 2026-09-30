@@ -1,13 +1,13 @@
 # wave-emu
 
-A reference CPU-based emulator for the WAVE (Wide Architecture Virtual Encoding) ISA.
+The reference CPU emulator for the WAVE ISA.
 
 ## Overview
 
-wave-emu executes WAVE binary programs (.wbin files) and simulates the GPU-like execution model including:
+wave-emu runs `.wbin` files on the CPU. It implements:
 
-- **Threads, Waves, and Workgroups**: Full SIMT execution model with configurable wave width (default 32)
-- **Memory Hierarchy**: Device memory (global) and local memory (per-workgroup)
+- **Threads, waves, and workgroups**: Configurable wave width, with a default of 32
+- **Memory**: Global device memory and workgroup-local memory
 - **Divergence Handling**: Structured control flow with active mask tracking
 - **Wave Operations**: Shuffle, broadcast, ballot, prefix sum, reductions
 - **Barriers**: Workgroup-level synchronization
@@ -72,7 +72,7 @@ wave-emu program.wbin --arg 0:input.bin --dump-memory 0x1000:0x2000
 - `wave.rs` - Wave state management
 - `thread.rs` - Per-thread register and predicate state
 - `memory.rs` - Device and local memory implementation
-- `control_flow.rs` - Structured control flow (if/else/loop) handling
+- `control_flow.rs` - Structured control flow, if/else/loop, handling
 - `barrier.rs` - Barrier synchronization
 - `scheduler.rs` - Round-robin wave scheduling
 - `shuffle.rs` - Wave shuffle and collective operations
@@ -80,5 +80,13 @@ wave-emu program.wbin --arg 0:input.bin --dump-memory 0x1000:0x2000
 
 ## License
 
-Copyright (c) 2026 Ojima Abraham. All rights reserved.
+Copyright © 2026 Ojima Abraham. All rights reserved.
 Licensed under the Apache License, Version 2.0.
+
+## Memory-read benchmark
+
+```bash
+cargo bench --manifest-path wave-emu/Cargo.toml --bench device_memory
+```
+
+Run this from the repository root. It checks read contents at four buffer sizes and reports median latency and throughput across seven rounds. Each read returns an owned buffer.

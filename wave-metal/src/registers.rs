@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Register naming and special register mapping. Converts WAVE register indices to
-//!
-//! MSL variable names and maps WAVE special registers to Metal kernel parameter
-//! expressions. General registers become `uint32_t` locals (r0, r1, ...) and predicate
-//! registers become bool locals (p0-p3). Special registers map to Metal built-in
-//! kernel parameters like `thread_position_in_threadgroup` and `simdgroup_index`.
+//! Map WAVE registers and thread identity values to Metal.
 
 use std::fmt::Write;
 
@@ -52,14 +47,14 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
         let mut i = 0u32;
         while i < reg_count {
             let end = (i + regs_per_line).min(reg_count);
-            write!(out, "    uint32_t").unwrap();
+            write!(out, "    uint32_t").expect("writing to String cannot fail");
             for j in i..end {
                 if j > i {
-                    write!(out, ",").unwrap();
+                    write!(out, ",").expect("writing to String cannot fail");
                 }
-                write!(out, " r{j} = 0").unwrap();
+                write!(out, " r{j} = 0").expect("writing to String cannot fail");
             }
-            writeln!(out, ";").unwrap();
+            writeln!(out, ";").expect("writing to String cannot fail");
             i = end;
         }
     }
@@ -68,18 +63,19 @@ pub fn emit_declarations(reg_count: u32, local_mem_size: u32) -> String {
         out,
         "    bool p0 = false, p1 = false, p2 = false, p3 = false;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
     writeln!(
         out,
         "    uint wave_count = (tsize.x * tsize.y * tsize.z + 31u) / 32u;"
     )
-    .unwrap();
+    .expect("writing to String cannot fail");
 
     if local_mem_size > 0 {
-        writeln!(out, "    threadgroup uint8_t local_mem[{local_mem_size}];").unwrap();
-        writeln!(out, "    float _mma_a[16] = {{}};").unwrap();
-        writeln!(out, "    float _mma_b[16] = {{}};").unwrap();
-        writeln!(out, "    float _mma_c[16] = {{}};").unwrap();
+        writeln!(out, "    threadgroup uint8_t local_mem[{local_mem_size}];")
+            .expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_a[16] = {{}};").expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_b[16] = {{}};").expect("writing to String cannot fail");
+        writeln!(out, "    float _mma_c[16] = {{}};").expect("writing to String cannot fail");
     }
 
     out

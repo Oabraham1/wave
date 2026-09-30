@@ -24,3 +24,6 @@ where = ["src"]
 [project.urls]
 Homepage = "https://wave.ojima.me"
 Repository = "https://github.com/Oabraham1/wave"
+
+[tool.ruff]
+target-version = "py39"

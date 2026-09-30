@@ -1,10 +1,10 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Test harness for WAVE specification verification. Assembles WAVE programs,
-//!
-//! runs them on the emulator, and verifies results against expected values.
+//! Test harness for WAVE specification verification. Assembles WAVE programs runs them on the
+//! emulator, and verifies results against expected values.
 
+use std::fmt::Write as _;
 use std::path::Path;
 use thiserror::Error;
 
@@ -206,7 +206,7 @@ pub fn format_memory_u32(memory: &[u8], offset: usize, count: usize) -> String {
         if i > 0 {
             result.push_str(", ");
         }
-        result.push_str(&format!("0x{:08x}", read_u32(memory, offset + i * 4)));
+        write!(result, "0x{:08x}" , read_u32 (memory , offset + i * 4)).expect("writing to String cannot fail");
     }
     result
 }

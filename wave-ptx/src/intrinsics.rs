@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Warp-level intrinsic emission for PTX. Maps WAVE wave operations to PTX shfl.sync,
-//!
-//! vote.sync, and reduction instructions. Shuffles use full-warp mask 0xFFFFFFFF.
-//! Reductions are implemented via butterfly shfl.sync tree (5 steps for 32-wide warps)
-//! for compatibility with SM 75+. Prefix sum uses shfl.sync.up with predicated
-//! accumulation across 5 steps, then shifts to convert inclusive to exclusive.
+//! Emit PTX shuffle, vote, reduction, and prefix-sum operations.
 
 use crate::registers::{pred, reg};
 use wave_decode::opcodes::{WaveOpType, WaveReduceType};
@@ -14,24 +9,23 @@ use wave_decode::opcodes::{WaveOpType, WaveReduceType};
 const FULL_MASK: &str = "0xFFFFFFFF";
 
 #[must_use]
-#[allow(clippy::similar_names)]
 pub fn emit_wave_op(op: WaveOpType, rd: u8, rs1: u8, rs2: Option<u8>) -> Vec<String> {
     let r_d = reg(rd);
-    let r_s1 = reg(rs1);
-    let r_s2 = rs2.map_or_else(|| "0".to_string(), reg);
+    let source1 = reg(rs1);
+    let source2 = rs2.map_or_else(|| "0".to_string(), reg);
 
     match op {
         WaveOpType::Shuffle | WaveOpType::Broadcast => vec![format!(
-            "shfl.sync.idx.b32 {r_d}, {r_s1}, {r_s2}, 31, {FULL_MASK};"
+            "shfl.sync.idx.b32 {r_d}, {source1}, {source2}, 31, {FULL_MASK};"
         )],
         WaveOpType::ShuffleUp => vec![format!(
-            "shfl.sync.up.b32 {r_d}, {r_s1}, {r_s2}, 0, {FULL_MASK};"
+            "shfl.sync.up.b32 {r_d}, {source1}, {source2}, 0, {FULL_MASK};"
         )],
         WaveOpType::ShuffleDown => vec![format!(
-            "shfl.sync.down.b32 {r_d}, {r_s1}, {r_s2}, 31, {FULL_MASK};"
+            "shfl.sync.down.b32 {r_d}, {source1}, {source2}, 31, {FULL_MASK};"
         )],
         WaveOpType::ShuffleXor => vec![format!(
-            "shfl.sync.bfly.b32 {r_d}, {r_s1}, {r_s2}, 31, {FULL_MASK};"
+            "shfl.sync.bfly.b32 {r_d}, {source1}, {source2}, 31, {FULL_MASK};"
         )],
         WaveOpType::Ballot | WaveOpType::Any | WaveOpType::All => Vec::new(),
     }
@@ -58,11 +52,10 @@ pub fn emit_wave_vote(op: WaveOpType, pd: u8, ps: u8) -> Vec<String> {
     }
 }
 
-#[allow(clippy::similar_names)]
 fn emit_shfl_reduce(rd: u8, rs1: u8, combine_op: &str) -> Vec<String> {
     let r_d = reg(rd);
-    let r_s1 = reg(rs1);
-    let mut lines = vec![format!("mov.b32 {r_d}, {r_s1};")];
+    let source1 = reg(rs1);
+    let mut lines = vec![format!("mov.b32 {r_d}, {source1};")];
 
     for delta in [16, 8, 4, 2, 1] {
         lines.push(format!(
@@ -84,11 +77,10 @@ pub fn emit_wave_reduce(op: WaveReduceType, rd: u8, rs1: u8) -> Vec<String> {
     }
 }
 
-#[allow(clippy::similar_names)]
 fn emit_prefix_sum(rd: u8, rs1: u8) -> Vec<String> {
     let r_d = reg(rd);
-    let r_s1 = reg(rs1);
-    let mut lines = vec![format!("mov.b32 {r_d}, {r_s1};")];
+    let source1 = reg(rs1);
+    let mut lines = vec![format!("mov.b32 {r_d}, {source1};")];
 
     for delta in [1, 2, 4, 8, 16] {
         lines.push(format!(

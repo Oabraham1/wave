@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration tests for full WAVE program compilation to SYCL. Builds complete WBIN
-//!
-//! files, compiles to SYCL C++, and verifies structural correctness including the
-//! launch function wrapper, nd_range dispatch, sub-group accessor bindings, and
-//! SYCL-specific instruction mappings.
+//! Check SYCL C++ output for complete WAVE programs.
 
 use wave_sycl::compile;
 
@@ -53,9 +49,9 @@ fn build_wbin(name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 

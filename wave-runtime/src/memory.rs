@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Device memory buffer types for the WAVE runtime.
-//!
-//! Provides CPU-side buffer management for kernel arguments. Buffers are
-//! serialized to temporary files for subprocess-based kernel launch in v1.
-//! Direct GPU memory mapping is planned for v2.
+//! Host buffers for kernel arguments and results. Vendor launches exchange buffer contents
+//! through temporary files.
 
 use crate::error::RuntimeError;
 use std::fmt;
@@ -118,26 +115,60 @@ impl DeviceBuffer {
     ///
     /// # Errors
     ///
-    /// Returns `RuntimeError::Memory` if the buffer element type is not `f32`.
+    /// Returns `RuntimeError::Memory` for a different element type or invalid byte length.
     pub fn to_f32(&self) -> Result<Vec<f32>, RuntimeError> {
+        Ok(self.iter_f32()?.collect())
+    }
+
+    /// Iterate over the buffer's little-endian `f32` values without copying them.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuntimeError::Memory` for a different element type or invalid byte length.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use wave_runtime::memory::DeviceBuffer;
+    /// let buffer = DeviceBuffer::from_f32(&[1.0, 2.0]);
+    /// assert_eq!(buffer.iter_f32()?.sum::<f32>(), 3.0);
+    /// # Ok::<(), wave_runtime::error::RuntimeError>(())
+    /// ```
+    pub fn iter_f32(&self) -> Result<impl ExactSizeIterator<Item = f32> + '_, RuntimeError> {
         if self.element_type != ElementType::F32 {
             return Err(RuntimeError::Memory(format!(
                 "cannot read {} buffer as f32",
                 self.element_type
             )));
         }
+        self.validate()?;
         Ok(self
             .data
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-            .collect())
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .copied()
+            .map(f32::from_le_bytes))
+    }
+
+    /// Check that element count and byte length agree.
+    pub(crate) fn validate(&self) -> Result<(), RuntimeError> {
+        if self.count.checked_mul(self.element_type.size_bytes()) != Some(self.data.len()) {
+            return Err(RuntimeError::Memory(format!(
+                "{} elements of {} do not match {} bytes",
+                self.count,
+                self.element_type,
+                self.data.len()
+            )));
+        }
+        Ok(())
     }
 
     /// Read buffer contents as `u32` values.
     ///
     /// # Errors
     ///
-    /// Returns `RuntimeError::Memory` if the buffer element type is not `u32`.
+    /// Returns `RuntimeError::Memory` for a different element type or invalid byte length.
     pub fn to_u32(&self) -> Result<Vec<u32>, RuntimeError> {
         if self.element_type != ElementType::U32 {
             return Err(RuntimeError::Memory(format!(
@@ -145,9 +176,12 @@ impl DeviceBuffer {
                 self.element_type
             )));
         }
+        self.validate()?;
         Ok(self
             .data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
             .collect())
     }
@@ -191,5 +225,16 @@ mod tests {
     fn test_type_mismatch() {
         let buf = DeviceBuffer::from_u32(&[1, 2]);
         assert!(buf.to_f32().is_err());
+    }
+    #[test]
+    fn typed_reads_reject_invalid_lengths() {
+        let mut buffer = DeviceBuffer::from_f32(&[1.0, 2.0]);
+        buffer.data.push(0);
+        assert!(buffer.iter_f32().is_err());
+        assert!(buffer.to_f32().is_err());
+        buffer.element_type = ElementType::U32;
+        assert!(buffer.to_u32().is_err());
+        buffer.count = usize::MAX;
+        assert!(buffer.to_u32().is_err());
     }
 }

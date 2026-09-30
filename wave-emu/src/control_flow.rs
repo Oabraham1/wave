@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Structured control flow with divergence support. Maintains a stack of active
-//!
-//! masks for nested if/else/endif and loop/break/endloop constructs. Divergence
-//! occurs when threads disagree on predicates, executing both paths sequentially.
+//! Track active masks through divergent branches and loops, with a separate stack for each wave.
 
 use crate::EmulatorError;
 
@@ -26,6 +23,7 @@ pub struct ControlFrame {
 }
 
 impl ControlFrame {
+    #[must_use]
     pub fn new_if(entry_mask: u64, then_mask: u64, else_mask: u64) -> Self {
         Self {
             kind: ControlFrameKind::If,
@@ -38,6 +36,7 @@ impl ControlFrame {
         }
     }
 
+    #[must_use]
     pub fn new_loop(entry_mask: u64, loop_start_pc: u32) -> Self {
         Self {
             kind: ControlFrameKind::Loop,
@@ -58,6 +57,7 @@ pub struct ControlFlowStack {
 }
 
 impl ControlFlowStack {
+    #[must_use]
     pub fn new(max_depth: usize) -> Self {
         Self {
             frames: Vec::with_capacity(max_depth),
@@ -65,6 +65,11 @@ impl ControlFlowStack {
         }
     }
 
+    /// Push a divergence frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the divergence stack is full.
     pub fn push(&mut self, frame: ControlFrame) -> Result<(), EmulatorError> {
         if self.frames.len() >= self.max_depth {
             return Err(EmulatorError::StackOverflow {
@@ -79,6 +84,7 @@ impl ControlFlowStack {
         self.frames.pop()
     }
 
+    #[must_use]
     pub fn top(&self) -> Option<&ControlFrame> {
         self.frames.last()
     }
@@ -87,14 +93,17 @@ impl ControlFlowStack {
         self.frames.last_mut()
     }
 
+    #[must_use]
     pub fn depth(&self) -> usize {
         self.frames.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.frames.is_empty()
     }
 
+    #[must_use]
     pub fn find_loop(&self) -> Option<&ControlFrame> {
         self.frames
             .iter()
@@ -116,12 +125,18 @@ pub struct ControlFlowManager {
 }
 
 impl ControlFlowManager {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             stack: ControlFlowStack::new(32),
         }
     }
 
+    /// Enter a conditional with the selected lane mask.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the divergence stack is full.
     pub fn handle_if(
         &mut self,
         active_mask: u64,
@@ -136,6 +151,11 @@ impl ControlFlowManager {
         Ok((then_mask, None))
     }
 
+    /// Switch to the other branch of a conditional.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no matching conditional is active.
     pub fn handle_else(&mut self, _active_mask: u64) -> Result<(u64, Option<u32>), EmulatorError> {
         let frame = self
             .stack
@@ -154,6 +174,11 @@ impl ControlFlowManager {
         Ok((frame.else_mask, None))
     }
 
+    /// Restore the lane mask after a conditional.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no matching conditional is active.
     pub fn handle_endif(&mut self) -> Result<u64, EmulatorError> {
         let frame = self
             .stack
@@ -172,12 +197,22 @@ impl ControlFlowManager {
         Ok(frame.entry_mask)
     }
 
+    /// Enter a loop and save its lane mask.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the divergence stack is full.
     pub fn handle_loop(&mut self, active_mask: u64, pc: u32) -> Result<u64, EmulatorError> {
         let frame = ControlFrame::new_loop(active_mask, pc);
         self.stack.push(frame)?;
         Ok(active_mask)
     }
 
+    /// Remove the selected lanes from the current loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no enclosing loop exists.
     pub fn handle_break(
         &mut self,
         active_mask: u64,
@@ -202,6 +237,11 @@ impl ControlFlowManager {
         }
     }
 
+    /// Skip the rest of this iteration for the selected lanes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no enclosing loop exists.
     pub fn handle_continue(
         &mut self,
         active_mask: u64,
@@ -224,6 +264,11 @@ impl ControlFlowManager {
         }
     }
 
+    /// Complete a loop iteration and select the next program counter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no matching loop is active.
     pub fn handle_endloop(
         &mut self,
         _active_mask: u64,
@@ -257,6 +302,11 @@ impl ControlFlowManager {
         }
     }
 
+    /// Remove the active loop frame.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the top frame is not a loop.
     pub fn pop_loop(&mut self) -> Result<u64, EmulatorError> {
         let frame = self
             .stack
@@ -275,14 +325,17 @@ impl ControlFlowManager {
         Ok(frame.entry_mask & !frame.break_mask)
     }
 
+    #[must_use]
     pub fn depth(&self) -> usize {
         self.stack.depth()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.stack.is_empty()
     }
 
+    #[must_use]
     pub fn current_loop_start(&self) -> Option<u32> {
         self.stack.find_loop().map(|f| f.loop_start_pc)
     }

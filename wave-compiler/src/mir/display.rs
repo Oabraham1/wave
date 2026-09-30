@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Pretty-printing for MIR functions and instructions.
-//!
-//! Provides human-readable output of the MIR for debugging and
-//! compiler development purposes.
+//! Pretty-printing for MIR functions and instructions. Provides human-readable output of the MIR
+//! for debugging and compiler development purposes.
 
 use std::fmt::{self, Write};
 

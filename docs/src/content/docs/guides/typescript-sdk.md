@@ -1,9 +1,9 @@
 ---
-title: TypeScript SDK
-description: Getting started with the WAVE TypeScript SDK (wave-gpu) for portable GPU programming.
+title: "TypeScript SDK"
+description: "Host arrays, kernel compilation, and emulator execution in Node.js."
 ---
 
-The `wave-gpu` npm package provides a TypeScript-first interface for compiling and launching GPU kernels through the WAVE toolchain. This guide covers installation, device detection, buffer management, kernel compilation, dispatch, and error handling.
+The `wave-gpu` package provides host arrays, device detection, and a kernel API for Node.js. Its launch wrapper is incompatible with the current emulator CLI.
 
 ## Installation
 
@@ -19,21 +19,21 @@ Import the module:
 import { array, zeros, ones, device, kernel } from "wave-gpu";
 ```
 
-## Device Detection
+## Device detection
 
 `device()` is async and returns a `Promise<DeviceInfo>`:
 
 ```typescript
 const dev = await device();
-console.log(dev.vendor); // e.g. "Apple"
-console.log(dev.name);   // e.g. "Apple M2 Max"
+console.log(dev.vendor); // e.g. "apple"
+console.log(dev.name);   // e.g. "Apple GPU (Metal)"
 ```
 
-The promise rejects if no GPU is found.
+Detection returns the emulator if no GPU is found.
 
-## Creating Arrays
+## Creating arrays
 
-`WaveArray` is the buffer type used to transfer data between the host and the GPU. Create one with the factory functions:
+`WaveArray` stores host data for kernel arguments. Create arrays with:
 
 ```typescript
 // From existing data
@@ -56,7 +56,7 @@ Supported `DType` values: `"f16"`, `"f32"`, `"f64"`, `"i32"`, `"u32"`.
 | `toArray()` | Copy contents to a JavaScript array |
 | `toBuffer()` | Copy contents to a Node.js `Buffer` |
 
-## Writing and Compiling Kernels
+## Writing and compiling kernels
 
 Call `kernel()` with a source string and an optional language identifier. The default language is `"typescript"`:
 
@@ -65,8 +65,8 @@ const src = `
 import wave_gpu
 
 @wave_gpu.kernel
-def vector_add(a, b, out, n):
-    tid = wave_gpu.thread_id()
+def vector_add(a: f32[:], b: f32[:], out: f32[:], n: u32):
+    tid = thread_id()
     if tid < n:
         out[tid] = a[tid] + b[tid]
 `;
@@ -80,7 +80,7 @@ When the language argument is omitted the source is parsed as TypeScript:
 
 ```typescript
 const tsKernel = kernel(`
-  export function add(a: WaveArray, b: WaveArray, out: WaveArray, n: number) {
+  export function add(a: f32[], b: f32[], out: f32[], n: u32) {
     const tid = thread_id();
     if (tid < n) {
       out[tid] = a[tid] + b[tid];
@@ -89,45 +89,47 @@ const tsKernel = kernel(`
 `);
 ```
 
-## Launching Kernels
+## Launching kernels
 
-`CompiledKernel.launch()` is async. It takes the device, buffer and scalar arrays, and optional grid/workgroup dimensions:
+`CompiledKernel.launch()` compiles on first use. Its emulator wrapper passes `--memory-file`, `--workgroup`, and `--reg` options that the current `wave-emu` CLI does not accept, so execution fails. GPU device vendors are rejected directly. Use the [Python quickstart](/getting-started/quickstart/) or [Rust SDK](/guides/rust-sdk/) for execution.
+
+This call illustrates the argument order; it rejects when it reaches emulator execution:
 
 ```typescript
 const n = 1024;
-const a   = array(Float32Array.from({ length: n }, (_, i) => i), "f32");
+const a = array(Array.from({ length: n }, (_, i) => i), "f32");
 const b   = ones(n, "f32");
 const out = zeros(n, "f32");
 
-const dev = await device();
+const dev = { vendor: "emulator" as const, name: "WAVE Emulator" };
 
 // Launch with explicit grid and workgroup
 await vectorAdd.launch(dev, [a, b, out], [n], [n / 256, 1, 1], [256, 1, 1]);
 
-// Grid and workgroup are optional - WAVE can infer defaults
-await vectorAdd.launch(dev, [a, b, out], [n]);
+// Defaults are one workgroup of 256 threads.
+// Specify dimensions when the input needs more threads.
 ```
 
 The grid and workgroup parameters are 3-element arrays representing `[x, y, z]` dimensions.
 
-## Reading Results
+## Reading results
 
-After the launch promise resolves, read data back on the host:
+Read the values stored in a host array:
 
 ```typescript
-const result = out.toArray();
-console.log(result.slice(0, 4)); // [1, 2, 3, 4]
+const values = array([1, 2, 3, 4]);
+console.log(values.toArray()); // [1, 2, 3, 4]
 ```
 
 For interop with Node.js APIs you can also get a `Buffer`:
 
 ```typescript
-const buf = out.toBuffer();
+const buf = values.toBuffer();
 ```
 
-## Error Handling
+## Error handling
 
-All async operations (`device()`, `launch()`) signal failures through promise rejection. Use `try`/`catch` with `async`/`await` or `.catch()` on the promise:
+Async operations signal failures through promise rejection. Use `try`/`catch` with `async`/`await` or `.catch()` on the promise:
 
 ```typescript
 try {
@@ -138,8 +140,8 @@ try {
 }
 ```
 
-Synchronous errors (e.g. passing the wrong number of arguments to `kernel()`) throw immediately.
+`kernel()` stores the source. Compilation errors reject the first `launch()` call.
 
-## Next Steps
+## Next steps
 
-See the full [TypeScript API Reference](/reference/typescript-api) for detailed type definitions, interfaces, and advanced configuration.
+See the [TypeScript API reference](/reference/typescript-api) for types and signatures.

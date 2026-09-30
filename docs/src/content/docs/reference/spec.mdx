@@ -1,114 +1,35 @@
 ---
-title: WAVE Specification
-description: The complete WAVE ISA specification — all versions.
+title: "WAVE specification"
+description: "The WAVE instruction set, binary format, and execution rules."
 ---
 
-import { Tabs, TabItem, LinkCard, CardGrid } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
 
-The WAVE specification defines the instruction set architecture, binary encoding format, memory model, and execution semantics for the WAVE GPU compute model.
+WAVE v0.4 defines the instruction set, execution model, registers, memory ordering, binary encoding, and conformance requirements.
 
-## Specification Versions
+<LinkCard title="WAVE v0.4 specification" href="/reference/spec-v04/" />
 
-<Tabs>
-  <TabItem label="v0.4 (Current)">
-    ### v0.4 — Current
+## Instruction encoding
 
-    The v0.4 specification is the current version of the WAVE ISA. It fixes predicate encoding (Defect 4), restructures word0 bits [3:0], and adds neural network training as conformance evidence.
+Instructions contain one or two 32-bit words. The first word has this layout:
 
-    **Key changes from v0.3:**
+| Bits | Field |
+|------|-------|
+| 31:24 | Opcode |
+| 23:16 | Destination register |
+| 15:8 | First source register |
+| 7:4 | Modifier |
+| 3 | Reserved |
+| 2 | Predicate negation |
+| 1:0 | Predicate register |
 
-    - **Predicate encoding restored.** Bits [3:0] of word0 repurposed for predicate fields: pred_reg (bits [1:0]), pred_neg (bit [2]), with bit [3] reserved. Previously these bits held scope and flags, which silently dropped all predication.
-    - **Scope moved to word1.** Memory scope is now encoded in word1 bits [1:0] for extended instructions (DeviceAtomic, fence). This freed word0 bits for predicate encoding.
-    - **New opcode: Misc (0x41).** Misc operations (mov, mov_imm, mov_sr) moved from Control (0x3F) to their own opcode, since the flags field they used for dispatch no longer exists.
-    - **SyncOp modifier offset.** Sync operations (return, halt, barrier, fence) share Control opcode 0x3F but use modifier values offset by +8 (SYNC_MODIFIER_OFFSET = 8).
-    - **Type conversion naming convention clarified.** The mnemonic `cvt_A_B` converts from type B to type A (destination type first). An emulator bug where `cvt_f32_i32` and `cvt_i32_f32` were swapped has been fixed.
-    - **Neural network training verification.** A complete two-layer MNIST network (784->128->10) has been trained using 11 WAVE kernels, with gradients verified against PyTorch.
+Register fields address `r0` through `r255`. The second word holds additional operands, an immediate, or a memory scope, depending on the opcode. See [Binary encoding](/internals/binary-encoding/).
 
-    <LinkCard title="Read the full v0.4 specification →" href="/reference/spec-v04/" />
-  </TabItem>
+Each wave has independent control flow state. Instructions act on active lanes and honor their predicates. Conversion mnemonics put the destination type first: `cvt_f32_i32` converts an integer to a float.
 
-  <TabItem label="v0.3">
-    ### v0.3
+## Versioned specifications
 
-    The v0.3 specification resolved encoding issues present in earlier versions and established the canonical instruction format used by all WAVE tooling.
-
-    **Key changes from v0.2:**
-
-    - **Modifier field widened to 4 bits.** The 3-bit modifier field from v0.2 was insufficient to encode all instruction variants. v0.3 expands it to 4 bits, supporting up to 16 modifier values per opcode.
-    - **Flags field reduced from 3 bits to 2 bits.** Two flags were removed:
-      - `WAVE_REDUCE_FLAG` — now handled by dedicated wave operation opcodes.
-      - `NON_RETURNING_ATOMIC_FLAG` — now encoded via the modifier field on atomic instructions.
-    - **Canonical register encoding:** 5-bit register fields encoding 32 general-purpose registers (`r0`–`r31`).
-    - **4-bit modifier** enables fine-grained instruction variants (e.g., memory ordering, rounding mode, comparison predicate).
-
-    **Instruction word layout (v0.3, 32-bit base format):**
-
-    | Bits    | Field      | Width |
-    |---------|------------|-------|
-    | 31–24   | Opcode     | 8     |
-    | 23–20   | Modifier   | 4     |
-    | 19–18   | Flags      | 2     |
-    | 17–13   | Dst (rd)   | 5     |
-    | 12–8    | Src1 (rs1) | 5     |
-    | 7–3     | Src2 (rs2) | 5     |
-    | 2–0     | Reserved   | 3     |
-
-    Extended format instructions append a second 32-bit immediate word.
-
-    <LinkCard title="Read the full v0.3 specification →" href="/reference/spec-v03/" />
-  </TabItem>
-
-  <TabItem label="v0.2">
-    ### v0.2
-
-    v0.2 fixed the most critical encoding bug from v0.1 — register fields — but still carried an undersized modifier field.
-
-    **Key changes from v0.1:**
-
-    - **Register fields widened to 8 bits.** v0.1 used 5-bit register fields but attempted to address more than 32 registers in some instructions, causing encoding collisions. v0.2 moved to 8-bit register fields, supporting up to 256 registers.
-    - **Per-wave control flow.** v0.1 shared a single control flow state across all waves in a workgroup. v0.2 introduced per-wave program counters and divergence masks, enabling proper SIMT execution with independent branching per wave.
-    - **3-bit modifier (unchanged from v0.1).** This was later identified as a limitation and corrected in v0.3.
-
-    **Known issues (fixed in v0.3):**
-
-    - The 3-bit modifier field could only encode 8 variants, which was insufficient for memory ordering modes, comparison predicates, and rounding modes.
-    - `WAVE_REDUCE_FLAG` and `NON_RETURNING_ATOMIC_FLAG` consumed flag bits that could be better allocated.
-    - 8-bit register fields were unnecessarily wide — no real workload needed more than 32 registers per thread.
-
-    <LinkCard title="Read the full v0.2 specification →" href="/reference/spec-v02/" />
-  </TabItem>
-
-  <TabItem label="v0.1">
-    ### v0.1 — Initial Draft
-
-    The initial specification established the core instruction set and execution model. It was a proof-of-concept encoding that validated the overall architecture but contained several encoding issues.
-
-    **Characteristics:**
-
-    - **5-bit register fields** encoding 32 general-purpose registers.
-    - **3-bit modifier field** for instruction variants.
-    - **3-bit flags field** including `WAVE_REDUCE_FLAG` and `NON_RETURNING_ATOMIC_FLAG`.
-    - **Shared control flow state.** All waves in a workgroup shared a single program counter and divergence mask. This meant branch divergence in one wave could stall the entire workgroup.
-
-    **Known issues (fixed in v0.2):**
-
-    - Shared control flow prevented efficient SIMT divergence handling.
-    - Register encoding was correct at 5 bits, but v0.2 mistakenly widened it to 8 bits before v0.3 restored the 5-bit width.
-
-    <LinkCard title="Read the full v0.1 specification →" href="/reference/spec-v01/" />
-  </TabItem>
-</Tabs>
-
-## Specification Contents
-
-Each version of the specification covers the following sections:
-
-1. **Introduction** — purpose, scope, design principles, and relationship to other standards.
-2. **Execution Model** — thread hierarchy, identifiers, core resources, execution guarantees, and dispatch.
-3. **Register Model** — general-purpose registers, sub-register access, register pairs, special registers, and predicate registers.
-4. **Memory Model** — memory spaces, local/device memory details, memory ordering, and atomic operations.
-5. **Control Flow** — structured control flow, uniform branches, divergence/reconvergence, and per-wave state.
-6. **Instruction Set** — integer, bitwise, floating-point, type conversion, comparison, memory, atomic, wave, synchronization, control flow, and MMA instructions.
-7. **Capability System** — required constants, optional capabilities, MMA parameters, and query mechanism.
-8. **Binary Encoding** — base and extended instruction formats, opcode map.
-9. **Conformance** — required behavior, implementation-defined behavior, undefined behavior, and conformance testing.
+- [v0.4](/reference/spec-v04/)
+- [v0.3](/reference/spec-v03/)
+- [v0.2](/reference/spec-v02/)
+- [v0.1](/reference/spec-v01/)

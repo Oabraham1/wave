@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Runtime error types for the WAVE runtime.
-//!
-//! Unifies errors from all stages of the pipeline: compilation, backend
-//! translation, device detection, memory management, and kernel launch.
+//! Runtime error types for the WAVE runtime. Unifies errors from all stages of the pipeline:
+//! compilation, backend translation, device detection, memory management, and kernel launch.
 
 use thiserror::Error;
 

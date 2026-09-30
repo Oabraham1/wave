@@ -1,100 +1,59 @@
 ---
 title: Supported GPUs
-description: Hardware compatibility table for WAVE backends, plus emulator fallback for development.
+description: WAVE hardware targets and emulator execution.
 ---
 
-WAVE targets four GPU vendor families through dedicated compiler backends. This page lists the GPUs that have been verified, those expected to work based on architecture compatibility, and the emulator fallback for development without a GPU.
+WAVE has backends for Apple, NVIDIA, AMD, and Intel GPUs. Hardware support depends on the operations a kernel uses and the installed vendor toolchain.
 
-## Verified Hardware
+## Tested hardware
 
-These GPUs have passed the full WAVE spec-verification test suite, confirming correct behavior for all 11 primitive categories.
+WAVE hardware verification includes these devices:
 
-| Vendor | GPU | Architecture | Backend | Status |
-|--------|-----|-------------|---------|--------|
-| Apple | M4 Pro | Apple GPU (Metal 3) | `wave-metal` | Verified |
-| NVIDIA | T4 | Turing (SM 7.5) | `wave-ptx` | Verified |
-| AMD | MI300X | CDNA 3 | `wave-hip` | Verified |
+| Vendor | GPU | Architecture | Backend |
+|---|---|---|---|
+| Apple | M4 Pro | Apple GPU | `wave-metal` |
+| NVIDIA | T4 | Turing, SM 7.5 | `wave-ptx` |
+| AMD | MI300X | CDNA 3 | `wave-hip` |
 
-## Expected Compatible Hardware
+The [hardware verification page](/research/hardware-verification/) describes the matched benchmark study on Apple M4 Pro and NVIDIA T4. Intel hardware verification is pending.
 
-These GPUs share the same architecture family as verified hardware and are expected to work. They have not yet been tested with the full spec-verification suite.
+## Other devices
 
-| Vendor | GPU | Architecture | Backend | Status |
-|--------|-----|-------------|---------|--------|
-| Apple | M1 | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M1 Pro / Max / Ultra | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M2 | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M2 Pro / Max / Ultra | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M3 | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M3 Pro / Max / Ultra | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M4 | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| Apple | M4 Max / Ultra | Apple GPU (Metal 3) | `wave-metal` | Expected |
-| NVIDIA | RTX 2060-2080 Ti | Turing (SM 7.5) | `wave-ptx` | Expected |
-| NVIDIA | RTX 3060-3090 Ti | Ampere (SM 8.6) | `wave-ptx` | Expected |
-| NVIDIA | A100 | Ampere (SM 8.0) | `wave-ptx` | Expected |
-| NVIDIA | RTX 4060-4090 | Ada Lovelace (SM 8.9) | `wave-ptx` | Expected |
-| NVIDIA | H100 | Hopper (SM 9.0) | `wave-ptx` | Expected |
-| AMD | RX 7900 XTX | RDNA 3 | `wave-hip` | Expected |
-| AMD | RX 7600 | RDNA 3 | `wave-hip` | Expected |
-| AMD | MI250X | CDNA 2 | `wave-hip` | Expected |
-| Intel | Arc A770 | Xe HPG (Alchemist) | `wave-sycl` | Pending |
-| Intel | Data Center GPU Max (Ponte Vecchio) | Xe HPC | `wave-sycl` | Pending |
+The backends target Metal, PTX, HIP, and SYCL rather than individual GPU models. Other devices that support these toolchains are candidate targets. Run correctness checks on the intended device before relying on its results. Wave width, numeric capabilities, and resource limits can differ between devices.
 
-**Status definitions:**
+| Backend | Required vendor toolchain |
+|---|---|
+| `wave-metal` | Metal |
+| `wave-ptx` | CUDA |
+| `wave-hip` | ROCm |
+| `wave-sycl` | Intel oneAPI |
 
-- **Verified** - all 11 primitive categories pass the spec-verification test suite on this hardware.
-- **Expected** - same architecture family as a verified GPU; not yet tested.
-- **Pending** - backend implementation is complete but hardware access for verification is not yet available.
+## Emulator
 
-## Emulator Fallback
+The CPU emulator executes WAVE binaries without a GPU. Use it to test kernel behavior and compare outputs with hardware execution. It does not model GPU timing.
 
-When no supported GPU is detected, WAVE automatically falls back to `wave-emu`, a CPU-based instruction-level emulator. The emulator executes the same `.wbin` binary that would run on a GPU, so kernels behave identically regardless of whether they are running on hardware or in emulation.
+The [quick start](/getting-started/quickstart/) runs a kernel explicitly through the emulator. SDK execution paths and fallback behavior are described in the language guides.
 
-The emulator is useful for:
+## Device detection
 
-- **Development** - write and debug kernels on a laptop without a discrete GPU.
-- **CI/CD** - run the full test suite in cloud environments that lack GPU instances.
-- **Correctness testing** - compare emulator output against hardware output to detect backend translation bugs.
-
-To force emulator mode even when a GPU is available:
-
-```bash
-# Environment variable (works with all SDKs)
-WAVE_BACKEND=emulator python my_kernel.py
-```
+The Python SDK reports the selected device:
 
 ```python
-# Python SDK - explicit backend selection
 import wave_gpu
-device = wave_gpu.device(backend="emulator")
+
+print(wave_gpu.device())
 ```
+
+The Rust SDK exposes the same device information:
 
 ```rust
-// Rust SDK - explicit backend selection
-let dev = wave_sdk::device::with_backend(wave_sdk::Backend::Emulator);
+use wave_gpu::device;
+
+fn main() -> Result<(), wave_gpu::RuntimeError> {
+    let dev = device::detect()?;
+    println!("{}: {:?}", dev.name, dev.vendor);
+    Ok(())
+}
 ```
 
-The emulator runs single-threaded by default. Set `WAVE_EMU_THREADS` to enable multi-threaded emulation for larger workloads:
-
-```bash
-WAVE_EMU_THREADS=8 WAVE_BACKEND=emulator python my_kernel.py
-```
-
-## Checking Your Hardware
-
-Every SDK provides a detection function that reports the selected backend:
-
-```bash
-# CLI
-wave-emu --detect
-
-# Python
-python -c "import wave_gpu; print(wave_gpu.detect_backend())"
-
-# Rust (in a binary)
-wave_sdk::device::detect().map(|d| println!("{:?}", d.backend()));
-```
-
-Possible output values: `metal`, `ptx`, `hip`, `sycl`, `emulator`.
-
-**Next:** [Introduction to the ISA](/architecture/overview/) - learn how WAVE instructions are encoded and executed.
+See [Installation](/getting-started/installation/) for SDK setup and [Backends](/architecture/backends/) for translation details.

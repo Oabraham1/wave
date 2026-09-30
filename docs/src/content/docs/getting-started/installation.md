@@ -1,187 +1,138 @@
 ---
-title: Installation
-description: Install the WAVE SDK for Python, Rust, C++, or TypeScript, or build the toolchain from source.
+title: "Installation"
+description: "Build the WAVE toolchain and install the Python, Rust, C++, or TypeScript SDK."
 ---
 
-WAVE provides native SDKs for four languages and a source build for the core toolchain. Pick the path that matches your project.
+These instructions build WAVE from a checkout. Each crate builds independently.
+
+## Toolchain
+
+Install Git and a stable Rust toolchain through [rustup](https://rustup.rs/), then build the compiler, assembler, emulator, runtime, and backends:
+
+```sh
+git clone https://github.com/Oabraham1/wave.git
+cd wave
+for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime; do
+  cargo build --release --manifest-path "$crate/Cargo.toml"
+done
+```
+
+Each crate writes its output to its own `target/release/` directory. The runtime build also produces the shared library used by the Python SDK. Keep the checkout available when using the SDKs from source.
+
+To put the command-line tools on your `PATH`:
+
+```sh
+cargo install --path wave-compiler
+cargo install --path wave-asm
+cargo install --path wave-dis
+cargo install --path wave-emu
+```
 
 ## Python
 
-Requires Python 3.9 or later.
+From the repository root:
 
-```bash
-pip install wave-gpu
+```sh
+python3 -m pip install -e ./sdk/python
 ```
 
-Verify the installation:
+Check the installed version and device detection:
 
 ```python
 import wave_gpu
+
 print(wave_gpu.__version__)
-print(wave_gpu.detect_backend())  # e.g. "metal", "ptx", "hip", or "emulator"
+print(wave_gpu.device())
 ```
 
-The Python package includes prebuilt binaries for the WAVE compiler and all four backends on macOS (ARM64), Linux (x86_64), and Windows (x86_64). If no supported GPU is detected at runtime, the built-in emulator is used automatically.
+Continue to [Quick start](/getting-started/quickstart/) for a complete emulator example.
 
 ## Rust
 
-Requires Rust 1.70 or later.
+Add the SDK to your application, using the path to your checkout:
 
-```bash
-cargo add wave-sdk
+```sh
+cargo add wave-gpu --path /path/to/wave/sdk/rust
 ```
 
-Or add to your `Cargo.toml` manually:
-
-```toml
-[dependencies]
-wave-sdk = "0.1"
-```
-
-Verify the installation:
+The crate is imported as `wave_gpu`:
 
 ```rust
-use wave_sdk::device;
+use wave_gpu::device;
 
-fn main() {
-    let backend = device::detect_backend();
-    println!("Backend: {:?}", backend);
+fn main() -> Result<(), wave_gpu::RuntimeError> {
+    let dev = device::detect()?;
+    println!("{}", dev.name);
+    Ok(())
 }
 ```
-
-The Rust SDK links against the WAVE toolchain at build time via a bundled static library. No system-level dependencies beyond a working Rust toolchain are required.
 
 ## C++
 
-Requires a C++17-compatible compiler and CMake 3.20 or later.
+The C++ SDK requires C++17 and CMake 3.16 or later. Build it from the repository root:
 
-### Option A: CMake FetchContent
+```sh
+cmake -S sdk/cpp -B sdk/cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build sdk/cpp/build
+ctest --test-dir sdk/cpp/build --output-on-failure
+```
 
-Add to your `CMakeLists.txt`:
+To include the SDK in a CMake project:
 
 ```cmake
-include(FetchContent)
-FetchContent_Declare(
-  wave
-  GIT_REPOSITORY https://github.com/Oabraham1/wave.git
-  GIT_TAG        main
-)
-FetchContent_MakeAvailable(wave)
-
-target_link_libraries(your_target PRIVATE wave::wave-sdk)
+add_subdirectory(/path/to/wave/sdk/cpp wave-sdk)
+target_link_libraries(your_target PRIVATE wave)
 ```
 
-### Option B: System Install
-
-```bash
-git clone https://github.com/Oabraham1/wave.git
-cd wave
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-sudo cmake --install build
-```
-
-Then in your project:
-
-```cmake
-find_package(wave REQUIRED)
-target_link_libraries(your_target PRIVATE wave::wave-sdk)
-```
-
-Verify the installation:
-
-```cpp
-#include <wave/wave.h>
-#include <cstdio>
-
-int main() {
-    const char* backend = wave_detect_backend();
-    printf("Backend: %s\n", backend);
-    return 0;
-}
-```
+Headers are available through `#include <wave/wave.h>`. See the [C++ guide](/guides/cpp-sdk/) for buffer ownership and launch arguments.
 
 ## TypeScript
 
-Requires Node.js 18 or later.
+The TypeScript SDK requires Node.js 18 or later. Build it in the checkout:
 
-```bash
-npm install wave-gpu
+```sh
+cd sdk/js
+npm install
+npm run build
 ```
 
-Or with other package managers:
+From your application directory, install the local package:
 
-```bash
-yarn add wave-gpu
-pnpm add wave-gpu
+```sh
+npm install /path/to/wave/sdk/js
 ```
 
-Verify the installation:
+Detect the device:
 
 ```typescript
-import { detectBackend } from "wave-gpu";
+import { device } from "wave-gpu";
 
-console.log(detectBackend()); // e.g. "metal", "ptx", "hip", or "emulator"
+async function main() {
+  console.log(await device());
+}
+
+main();
 ```
 
-The npm package ships with prebuilt native binaries for macOS (ARM64), Linux (x86_64), and Windows (x86_64) via platform-specific optional dependencies. The N-API binding loads the correct binary automatically.
+## GPU toolchains
 
-## Building from Source
+Vendor compilation and dispatch require the corresponding toolchain. Emulator execution does not require a vendor SDK.
 
-Building from source gives you the core WAVE toolchain: `wave-compiler`, `wave-asm`, `wave-dis`, and `wave-emu`, plus all four backends.
+| Backend | Toolchain |
+|---|---|
+| `wave-metal` | Xcode command-line tools and Metal |
+| `wave-ptx` | NVIDIA CUDA toolkit |
+| `wave-hip` | AMD ROCm and `hipcc` |
+| `wave-sycl` | Intel oneAPI and `dpcpp` |
 
-### Prerequisites
+## Tests
 
-- **Rust toolchain** - install via [rustup](https://rustup.rs/) (stable channel, 1.70+)
-- **Git**
-- **CMake 3.20+** (only needed if building the C++ SDK)
+Run from the repository root:
 
-### Build Steps
-
-```bash
-git clone https://github.com/Oabraham1/wave.git
-cd wave
-cargo build --release
+```sh
+for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust tests/spec-verification; do
+  cargo test --manifest-path "$crate/Cargo.toml"
+done
+bash tests/ci/run_emulator_tests.sh
+bash tests/ci/run_backend_tests.sh
 ```
-
-The compiled binaries are placed in `target/release/`:
-
-```bash
-ls target/release/wave-*
-# target/release/wave-compiler
-# target/release/wave-asm
-# target/release/wave-dis
-# target/release/wave-emu
-```
-
-### Running Tests
-
-```bash
-cargo test --workspace
-```
-
-This runs unit tests, integration tests, and spec-verification tests across all crates including the emulator and every backend.
-
-### Optional: Install to PATH
-
-```bash
-cargo install --path crates/wave-compiler
-cargo install --path crates/wave-asm
-cargo install --path crates/wave-dis
-cargo install --path crates/wave-emu
-```
-
-This installs the tools to `~/.cargo/bin/`, which should already be on your `PATH` if you installed Rust via rustup.
-
-### Backend-Specific Requirements
-
-Each backend has optional vendor SDK dependencies for runtime dispatch. These are only needed if you want to compile and run on actual hardware - the emulator works without any vendor SDK.
-
-| Backend | Vendor SDK | Environment Variable |
-|---|---|---|
-| `wave-metal` | Xcode Command Line Tools | Detected automatically on macOS |
-| `wave-ptx` | CUDA Toolkit 11.0+ | `CUDA_PATH` |
-| `wave-hip` | ROCm 5.0+ | `ROCM_PATH` |
-| `wave-sycl` | oneAPI Base Toolkit 2023+ | `ONEAPI_ROOT` |
-
-**Next:** [Quick Start](/getting-started/quickstart/) - write and run your first WAVE kernel.

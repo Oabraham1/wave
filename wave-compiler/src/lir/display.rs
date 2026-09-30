@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Pretty-printing for LIR instructions.
-//!
-//! Formats LIR instructions in a readable assembly-like syntax
-//! for debugging and compiler development.
+//! Pretty-printing for LIR instructions. Formats LIR instructions in a readable assembly-like
+//! syntax for debugging and compiler development.
 
 use std::fmt::Write;
 

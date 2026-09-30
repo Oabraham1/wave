@@ -1,213 +1,150 @@
 ---
-title: Optimization
-description: Practical techniques for maximizing WAVE kernel performance - occupancy, memory coalescing, wave ops, and more.
+title: "Optimization"
+description: "Register usage, memory access, wave operations, and divergence."
 ---
 
-Getting a kernel to produce correct results is the first step; making it fast is the second. This guide covers the most impactful optimization techniques for WAVE kernels.
+Measure a representative workload, identify its bottleneck, and check that each optimization preserves the kernel's numerical and memory behavior.
 
-## Register Pressure and Occupancy
+## Register pressure and occupancy
 
-Occupancy is the number of waves that can run simultaneously on a single compute unit. Higher occupancy helps hide memory latency because the hardware can switch to another wave while one is waiting on a load.
+Register allocation limits how many waves can reside on a compute unit. More resident waves can help hide memory latency, but other limits also apply, including local memory, workgroup size, and hardware scheduling capacity.
 
-Occupancy is determined by register usage:
+Ignoring allocation granularity, the register limit is:
 
-```
-O = floor(F / (R * W * w))
-```
-
-| Symbol | Meaning |
-|---|---|
-| `O` | Occupancy (waves per compute unit) |
-| `F` | Register file size (total 32-bit registers per compute unit) |
-| `R` | Registers used per thread (your `.registers` declaration) |
-| `W` | Wave width (lanes per wave, e.g., 32 or 64) |
-| `w` | Waves to schedule |
-
-**Example:** If a compute unit has 16,384 registers, your kernel uses 16 registers, and waves are 32 lanes wide:
-
-```
-O = floor(16384 / (16 * 32 * 1)) = 32 waves
+```text
+resident_waves <= floor(registers_per_unit / (registers_per_thread * wave_width))
 ```
 
-If you increase register usage to 32:
+For 16,384 registers, 16 registers per thread, and 32 lanes per wave, this bound is 32 waves. Doubling the per-thread allocation reduces the bound to 16. Use the vendor compiler's resource report to find the actual allocation; the WAVE `.registers` declaration alone does not determine hardware occupancy.
 
-```
-O = floor(16384 / (32 * 32 * 1)) = 16 waves
-```
+### Practical tips
 
-Doubling register usage halves occupancy.
+- End value lifetimes early and reuse registers when their previous values are no longer needed.
+- Declare enough registers for every operand.
+- Measure the tradeoff before moving temporary values into local memory. Extra memory operations and workgroup storage can offset register savings.
 
-### Practical Tips
-
-- **Use `.registers` honestly.** Only declare what you need. The compiler and runtime use this number to compute occupancy.
-- **Reuse registers aggressively.** Once a value is consumed and no longer needed, reuse that register for something else.
-- **Spill to local memory as a last resort.** If you need more than 32 registers worth of live values, store temporaries to local memory and reload them. This costs ~20 cycles per round trip but frees a register.
+A local-memory temporary needs an address unique to each thread:
 
 ```asm
-; Spill r15 to local memory, reuse r15, then restore
-local_store.u32 r15, r20    ; spill r15 to local addr in r20
-; ... use r15 for something else ...
-local_load.u32 r15, r20     ; restore r15
+local_store_u32 r20, r15
+; Reuse r15 here. r20 must remain unchanged.
+local_load_u32 r15, r20
 ```
 
-## Memory Coalescing
+## Memory coalescing
 
-When threads in a wave access consecutive memory addresses, the hardware combines (coalesces) them into a single wide transaction. This can improve throughput by 8-32x compared to scattered accesses.
-
-**Coalesced access (fast):** Thread `i` accesses address `base + i * 4`:
+Adjacent lanes accessing adjacent addresses can share memory transactions. Alignment, element size, and the target determine how many transactions are needed.
 
 ```asm
 mov_sr r0, sr_thread_id_x
-shl    r1, r0, 2            ; byte offset = tid * 4
-iadd   r2, r10, r1          ; address = base + tid * 4
-device_load.u32 r3, r2      ; coalesced - consecutive addresses
+mov_imm r1, 4
+imul r2, r0, r1
+iadd r3, r10, r2
+device_load_u32 r4, r3
 ```
 
-**Scattered access (slow):** Thread `i` accesses address `base + hash(i) * 4`:
+Here `r10` is the array's base offset and each thread reads one consecutive word.
+
+### Coalescing rules of thumb
+
+- Map adjacent lanes to adjacent elements where the algorithm permits it.
+- Consider wider loads when each thread needs adjacent words and the address is aligned.
+- For strided or transposed access, test a tile staged through local memory.
+
+## Using local memory as a scratchpad
+
+A cooperative tile separates device access from the order in which threads consume the data:
 
 ```asm
-; Avoid this pattern - scattered loads cannot coalesce
-device_load.u32 r3, r_random_addr
-```
-
-### Coalescing Rules of Thumb
-
-- Access consecutive 4-byte elements: thread 0 reads `base+0`, thread 1 reads `base+4`, etc.
-- Use wider loads (`u128`) when each thread needs 4 consecutive floats - one `u128` load is faster than four `u32` loads.
-- Avoid stride-2 or stride-N access patterns. If your algorithm requires strided access, consider tiling through local memory first.
-
-## Using Local Memory as a Scratchpad
-
-When threads need to share data or when an algorithm requires non-coalesced access patterns, stage the data through local memory:
-
-```asm
-; --- Phase 1: Coalesced load from device → local ---
 mov_sr r0, sr_thread_id_x
-shl    r1, r0, 2
-iadd   r2, r10, r1
-device_load.u32 r3, r2          ; coalesced device load
-local_store.u32 r3, r1          ; write to local memory at tid*4
+mov_imm r1, 4
+imul r2, r0, r1
+iadd r3, r10, r2
+device_load_u32 r4, r3
+local_store_u32 r2, r4
+barrier
 
-barrier                          ; sync all threads
-
-; --- Phase 2: Non-sequential read from local (fast, bank-parallel) ---
-; Now each thread can read any element from local memory
-; at ~20 cycle latency instead of ~300 cycle device latency
-shl    r4, r5, 2                ; r5 = some computed index
-local_load.u32 r6, r4
+; r5 is a valid element index within the shared tile.
+imul r6, r5, r1
+local_load_u32 r7, r6
 ```
 
-This pattern is the foundation of optimized matrix transpose, reduction, and stencil kernels.
+Declare enough local memory for the tile. Add another barrier before reusing the storage if other threads may still be reading it.
 
-## Wave Operations for Reductions
+## Wave operations for reductions
 
-Wave operations let threads within a wave communicate directly through the register file, without touching local memory at all. For reductions, this is significantly faster.
+Wave operations exchange values between lanes without a shared-memory array. For a workgroup reduction, first combine values within each wave, then combine the wave results through local memory.
 
-### Naive Reduction (Shared Memory)
+### Naive reduction: shared memory
+
+A shared-memory tree stores partial values and synchronizes at each stage. It is useful across waves, where register exchange is unavailable. Store and read phases must be separated by barriers, including before shared storage is reused.
+
+### Optimized reduction: wave ops
+
+For a known wave width of 32, this XOR tree sums `f32` values across a fully active wave:
 
 ```asm
-; Store each thread's value to local memory, then reduce with a tree
-mov_sr r0, sr_thread_id_x
-shl    r1, r0, 2
-local_store.u32 r5, r1          ; write partial result
-barrier                          ; sync
-
-; Tree reduction: log2(N) steps, each with a barrier
-; ... many instructions, many barriers ...
+mov_imm r1, 16
+wave_shuffle_xor r2, r0, r1
+fadd r0, r0, r2
+mov_imm r1, 8
+wave_shuffle_xor r2, r0, r1
+fadd r0, r0, r2
+mov_imm r1, 4
+wave_shuffle_xor r2, r0, r1
+fadd r0, r0, r2
+mov_imm r1, 2
+wave_shuffle_xor r2, r0, r1
+fadd r0, r0, r2
+mov_imm r1, 1
+wave_shuffle_xor r2, r0, r1
+fadd r0, r0, r2
 ```
 
-### Optimized Reduction (Wave Ops)
+Adapt the tree to the target wave width and initialize inactive data lanes to zero before the collective. Changing the reduction order can change floating-point results.
+
+WAVE also provides `wave_reduce_add`, `wave_reduce_min`, `wave_reduce_max`, `wave_prefix_sum`, `wave_broadcast`, and predicate collectives. Check the instruction's operand types and active-lane requirements before substituting it.
+
+## Minimizing divergence
+
+Divergence leaves some lanes inactive while others execute a path.
+
+### 1. Use `select` for simple conditionals
 
 ```asm
-; Single instruction reduces across the entire wave - no barriers needed
-reduce_add r1, r0               ; r1 = sum of r0 across all lanes in the wave
+mov_imm r3, 1
+mov_imm r4, 0
+icmp_lt p0, r0, r1
+select r2, p0, r3, r4
 ```
 
-Other useful wave operations:
+`select` is useful when both candidate values can be computed safely. Measure it against branching when producing those values is expensive.
+
+### 2. Reorganize work to align branches with wave boundaries
+
+Group inputs with similar control flow when the reordering cost is justified. A branch uniform within each wave does not split that wave's active lanes.
+
+### 3. Avoid variable-length loops
+
+A wave with different per-lane iteration counts remains occupied until its last participating lane finishes. Group similar workloads or redistribute work when practical.
+
+## Cache hints
+
+Use `cached` for reuse and consider `streaming` for large sequential accesses. `uncached` requests cache bypass. Hints affect cache policy; synchronization still requires the appropriate atomic operations, fences, and barriers.
 
 ```asm
-; Prefix (inclusive) sum across the wave
-prefix_sum r1, r0               ; r1[lane] = r0[0] + r0[1] + ... + r0[lane]
-
-; Broadcast lane 0's value to all lanes
-broadcast r1, r0, 0             ; r1 = r0 from lane 0
-
-; Shuffle: read another lane's register
-shuffle r1, r0, r2              ; r1 = r0 from the lane whose index is in r2
-
-; Cross-lane shift patterns
-shuffle_up   r1, r0, 1          ; r1 = r0 from lane (my_lane - 1)
-shuffle_down r1, r0, 1          ; r1 = r0 from lane (my_lane + 1)
-shuffle_xor  r1, r0, 1          ; r1 = r0 from lane (my_lane XOR 1) - butterfly
-
-; Ballot: gather predicates across the wave
-ballot r1, p0                   ; r1 = bitmask of which lanes have p0 == true
-
-; Collective predicates
-any p1, p0                      ; p1 = true if any lane has p0 set
-all p1, p0                      ; p1 = true if all lanes have p0 set
+device_load_u32.streaming r0, r1
 ```
 
-**Guideline:** Always reduce within a wave using `reduce_add` / `reduce_min` / `reduce_max` before falling back to shared-memory tree reduction across waves.
+## Optimization checklist
 
-## Minimizing Divergence
+1. Measure representative sizes and input distributions.
+2. Reduce unnecessary transfers and improve device-memory access patterns.
+3. Use wave communication where its numerical and lane semantics match the algorithm.
+4. Check register allocation, local-memory usage, and workgroup size together.
+5. Reduce divergence where it limits useful lane activity.
+6. Compare timing distributions across repeated runs.
+7. Use `fma` only when fused rounding matches the algorithm. Replacing separate multiply and add changes floating-point semantics.
+8. Use lower precision only when the accuracy requirements permit it.
 
-Divergent branches force the wave to execute both paths. A few strategies to reduce divergence cost:
-
-### 1. Use `select` for Simple Conditionals
-
-```asm
-; Bad: branch diverges the wave
-icmp.lt p0, r0, r1
-if p0
-  mov_imm r2, 1
-else
-  mov_imm r2, 0
-endif
-
-; Good: no divergence
-icmp.lt p0, r0, r1
-select r2, p0, r3, r4    ; branchless
-```
-
-### 2. Reorganize Work to Align Branches with Wave Boundaries
-
-If threads 0–31 always take one path and threads 32–63 always take the other, neither wave diverges. Structure your workload so that nearby thread IDs follow the same control path when possible.
-
-### 3. Avoid Variable-Length Loops
-
-If different threads iterate different numbers of times, the wave runs for as many iterations as the slowest lane. Equalize work per thread, or batch threads with similar iteration counts together.
-
-## Cache Hints
-
-Use cache hints to give the hardware better information about your access pattern:
-
-| Pattern | Recommended hint |
-|---|---|
-| Data reused multiple times | `cached` (default) |
-| Large sequential scan, each element read once | `streaming` |
-| Data written by another workgroup | `uncached` |
-| Write-only output buffers | `streaming` on stores |
-
-```asm
-; Streaming load for a single-pass scan
-device_load.u32.streaming r0, r1
-
-; Uncached load to see another workgroup's atomic updates
-device_load.u32.uncached r0, r1
-```
-
-## Optimization Checklist
-
-Here is a prioritized checklist for optimizing a WAVE kernel:
-
-1. **Coalesce memory accesses.** This is almost always the single largest performance factor. Ensure adjacent threads access adjacent addresses.
-2. **Use wave ops for reductions.** Replace shared-memory tree reductions with `reduce_add`, `prefix_sum`, etc.
-3. **Minimize register usage.** Lower register count means higher occupancy and better latency hiding.
-4. **Tile through local memory.** When you cannot coalesce device loads directly, load a tile cooperatively, barrier, then access from local memory.
-5. **Reduce divergence.** Use `select` for simple branches. Align branch conditions with wave boundaries when possible.
-6. **Choose appropriate cache hints.** Use `streaming` for single-pass data and `uncached` when freshness matters.
-7. **Prefer `fma`/`imad` over separate multiply-add.** Fused multiply-add is a single instruction with better precision (for floats) and throughput.
-8. **Use half-precision when possible.** `hadd2` and `hmul2` process two half-precision values per instruction, doubling throughput.
-
-Next: [Python SDK](/guides/python-sdk/) - learn how to launch WAVE kernels from Python with the `wave_gpu` package.
+Next: [Python SDK](/guides/python-sdk/).

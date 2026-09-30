@@ -1,168 +1,107 @@
 ---
-title: Emulator
-description: How wave-emu executes .wbin binaries on the CPU with full SIMT simulation.
+title: "Emulator"
+description: "Execute WAVE binaries on the CPU with wave state, memory checks, and tracing."
 ---
 
-The WAVE emulator (`wave-emu`) is a CPU-based execution engine that runs `.wbin` binaries without requiring GPU hardware, providing a reference implementation for the WAVE ISA and enabling GPU kernel testing in CI environments.
+`wave-emu` executes `.wbin` files on the CPU. It provides functional tests for kernels without modeling GPU timing.
 
-## Execution Model
+## Execution model
 
-The emulator implements a SIMT (Single Instruction, Multiple Threads) execution model that mirrors real GPU hardware behavior.
+Each wave has a program counter, active mask, and control-flow stacks. Each thread has registers and a lane index.
 
-### Waves and Threads
+### Waves and threads
 
-A kernel launch creates one or more **waves** (the WAVE equivalent of NVIDIA warps or AMD wavefronts). Each wave contains a configurable number of threads that execute in lockstep. The default wave width is 32, matching the most common hardware configuration, but can be set to any value for testing:
+The default wave width is 32. Set another width to test kernels whose lane operations support it:
 
-```
-wave-emu kernel.wbin --wave-width 64   # Test AMD CDNA-style execution
-wave-emu kernel.wbin --wave-width 16   # Test narrow wave behavior
-```
-
-Threads within a wave share the same program counter when executing uniform control flow. Each thread has its own private register file (32 general-purpose registers + 4 predicate registers) and its own lane index within the wave.
-
-### Workgroup Execution
-
-Waves are grouped into **workgroups**. All waves within a workgroup share access to local memory and can synchronize via barriers. The emulator executes workgroups sequentially (one at a time) to ensure deterministic results, though the execution order of waves within a workgroup is interleaved to expose concurrency bugs.
-
-## Memory Simulation
-
-### Device Memory
-
-Device (global) memory is simulated as a flat byte-addressable buffer allocated on the host heap. All workgroups share the same device memory, matching GPU behavior. The emulator supports:
-
-- **Byte, half-word, word, and double-word** loads and stores (8, 16, 32, 64 bits).
-- **Aligned and unaligned access** - unaligned accesses succeed but the emulator emits a diagnostic warning, since many GPU architectures penalize or fault on misaligned access.
-- **Out-of-bounds detection** - accesses beyond the allocated buffer size trigger an immediate error with the offending thread ID and program counter.
-
-### Local Memory
-
-Each workgroup receives an independent local (shared) memory allocation sized according to the `.wbin` metadata. Local memory is:
-
-- Visible to all threads in the workgroup but not across workgroups.
-- Uninitialized at workgroup start (the emulator fills it with a poison value in debug builds to catch use-before-write bugs).
-- Deallocated when the workgroup completes.
-
-### Register File
-
-Each thread maintains a private register file:
-
-- **32 general-purpose registers** (`r0`-`r31`): 32-bit untyped storage. Integer and floating-point values coexist via bitwise reinterpretation.
-- **4 predicate registers** (`p0`-`p3`): 1-bit boolean flags used for conditional execution and branch decisions.
-- **16 special registers** (read-only): thread ID (`sr_tid_x/y/z`), workgroup ID (`sr_wg_id_x/y/z`), workgroup size (`sr_wg_size_x/y/z`), grid size, wave width, and lane ID.
-
-## Divergence Handling
-
-When threads within a wave take different branch paths, the wave **diverges**. The emulator handles divergence using an active mask and a control flow stack, matching the structured control flow model of the WAVE ISA.
-
-### Active Mask
-
-Every wave maintains an **active mask** - a bitmask where each bit indicates whether the corresponding thread is currently executing. When all threads are active, every bit is set. When a conditional branch causes divergence, the emulator splits execution:
-
-```
-                            Active mask: 11111111
-                                 │
-                            if (r0 > 0)
-                           ╱            ╲
-               true path                 false path
-          Active: 11010010          Active: 00101101
-                           ╲            ╱
-                            reconverge
-                            Active mask: 11111111
+```bash
+wave-emu kernel.wbin --wave-width 64
+wave-emu kernel.wbin --wave-width 16
 ```
 
-Instructions execute only for threads whose active mask bit is set. Inactive threads retain their register state but do not read or write memory.
+The register count defaults to 32. A nonzero count in kernel metadata overrides this setting. Each thread also has four predicate registers and access to sixteen special-register values.
 
-### Control Flow Stack
+### Workgroup execution
 
-The emulator maintains a **control flow stack** to track nested divergence. Each stack entry records:
+Workgroups run sequentially. Within a workgroup, the scheduler selects ready waves in round-robin order. Suspended and halted waves do not execute. This schedule makes a run repeatable; it does not explore every legal GPU interleaving.
 
-- The active mask before the branch.
-- The reconvergence point (the instruction after the `endif` or `endloop`).
-- The deferred mask (threads that will execute the else branch or loop exit path).
+## Memory simulation
 
-When entering an `if` block, the emulator pushes the current state, computes the true-mask (threads where the predicate is true), and sets the active mask to the true-mask. When reaching `else`, it swaps to the deferred mask. At `endif`, it pops the stack and restores the full mask.
+### Device memory
 
-Loops work similarly: the active mask tracks which threads are still iterating. A `break` instruction clears a thread's active mask bit. When all threads have broken, the loop exits.
+All workgroups share a byte-addressed host buffer. It starts at zero. Loads and stores check the requested byte range and return an error on an out-of-bounds access.
 
-## Barrier Synchronization
+Accesses use little-endian byte operations. The emulator does not diagnose every alignment requirement imposed by a GPU target.
 
-The `barrier` instruction synchronizes all threads within a workgroup. The emulator implements barriers by:
+### Local memory
 
-1. **Suspending the current wave** at the barrier instruction.
-2. **Executing other waves** in the workgroup until all waves have reached a barrier.
-3. **Resuming all waves** simultaneously past the barrier.
+Each workgroup gets a separate zero-initialized buffer. A nonzero local-memory size in kernel metadata overrides the configured size. Kernels must still initialize memory before reading it when the ISA requires them to do so; the emulator's initialization is not a target guarantee.
 
-The emulator verifies that all threads in every wave reach the same barrier instruction. If some threads in a wave are inactive due to divergence when a barrier is encountered, the emulator raises a diagnostic error - executing a barrier in divergent control flow is undefined behavior under the WAVE specification.
+### Register file
 
-## Atomic Operations
+- General-purpose registers hold untyped 32-bit values.
+- Predicate registers `p0` through `p3` hold boolean values.
+- Special registers expose thread, wave, workgroup, and grid identifiers and dimensions.
 
-The emulator implements all WAVE atomic operations with sequential consistency on the CPU. Supported operations:
+See [Register model](/internals/register-model/) for register addressing and wide values.
 
-| Operation | Description |
+## Divergence handling
+
+### Active mask
+
+Only active lanes execute an instruction. Predication can restrict this set further. Inactive lanes leave destination registers and memory unchanged.
+
+### Control flow stack
+
+An `if` partitions the incoming active lanes by its condition. `else` selects the other path, and `endif` restores the participating lanes. Loop state tracks lanes that break or continue independently of other waves.
+
+See [Control flow](/internals/control-flow/) for examples.
+
+## Barrier synchronization
+
+At a workgroup barrier, the current wave suspends. The scheduler runs other ready waves until all workgroup waves arrive, then releases them. A workgroup with suspended waves and no ready wave can report deadlock.
+
+Programs must obey the specification's barrier participation rules. Successful emulator completion alone does not prove that every lane reaches the same barrier correctly.
+
+## Atomic operations
+
+The emulator executes atomic read-modify-write operations on local or device memory:
+
+| Operation | Effect |
 |---|---|
-| `atom_add` | Atomic add (integer) |
-| `atom_sub` | Atomic subtract (integer) |
-| `atom_and` | Atomic bitwise AND |
-| `atom_or` | Atomic bitwise OR |
-| `atom_xor` | Atomic bitwise XOR |
-| `atom_min` | Atomic minimum |
-| `atom_max` | Atomic maximum |
-| `atom_exch` | Atomic exchange |
-| `atom_cas` | Atomic compare-and-swap |
+| Add and subtract | Update an integer value |
+| AND, OR, and XOR | Update selected bits |
+| Minimum and maximum | Select a value by comparison |
+| Exchange | Replace the value |
+| Compare-and-swap | Replace a matching value and return the previous value |
 
-Each atomic specifies a **scope** (wave, workgroup, device, system) that determines which threads observe the operation's effects. The emulator tracks scoped visibility by maintaining per-scope memory views and flushing writes at fence and barrier points.
+These operations execute within the emulator's sequential schedule. It does not maintain separate cache views for each memory scope or simulate weak memory ordering.
 
-## Wave Collective Operations
+## Wave collective operations
 
-The emulator supports wave-level collective operations that communicate values across threads within a wave:
+Shuffle exchanges register values across lanes. Reductions combine lane values, ballots collect predicates, and broadcast selects one source lane. The implementation reads shuffle sources before writing destinations, so overlapping registers preserve cross-lane dependencies.
 
-- **`wave_shuffle`** - Read the register value from an arbitrary lane in the same wave.
-- **`wave_reduce_add/min/max`** - Reduce a value across all active threads in the wave.
-- **`wave_ballot`** - Produce a bitmask of which threads have a true predicate.
-- **`wave_broadcast`** - Copy a value from one lane to all lanes.
+Kernels must satisfy the [specification's](/reference/spec-v04/) active-lane and source-lane requirements.
 
-These operations respect the active mask: only active threads participate in reductions and ballots. A `wave_shuffle` that reads from an inactive lane returns an undefined value (the emulator returns zero and emits a warning).
+## Debugging features
 
-## Debugging Features
+### Trace mode
 
-### Trace Mode
-
-Trace mode logs every instruction executed by every thread:
-
-```
+```bash
 wave-emu kernel.wbin --trace
 ```
 
-Output includes the program counter, instruction mnemonic, operand values, and result for each thread:
+Trace records identify the workgroup, wave, program counter, and instruction. Use small inputs to keep the output readable.
 
-```
-[wave 0, lane 0] PC=0x004  iadd r2, r0, r1  | r0=5 r1=3 → r2=8
-[wave 0, lane 1] PC=0x004  iadd r2, r0, r1  | r0=7 r1=3 → r2=10
-[wave 0, lane 0] PC=0x008  store [r3], r2    | addr=0x100 val=8
-```
+### Memory access log
 
-Trace output can be filtered by wave index, lane index, or program counter range to reduce volume on large kernels.
-
-### Memory Access Log
-
-The emulator can log all memory accesses (loads, stores, atomics) with timestamps, enabling detection of data races and uncoalesced access patterns:
-
-```
-wave-emu kernel.wbin --mem-trace
-```
+`--stats` reports memory-operation counts and transferred bytes. `--dump-memory START:END` prints a memory range after execution. These outputs do not constitute a data-race detector.
 
 ### Breakpoints
 
-The emulator supports program counter breakpoints for interactive debugging:
-
-```
-wave-emu kernel.wbin --break 0x010
-```
-
-When a breakpoint is hit, the emulator prints the full register state for all threads in the wave and pauses for user input.
+The CLI supports instruction limits and post-execution dumps rather than interactive breakpoints. `--max-instructions N` stops a run after the configured instruction budget; `0` removes the limit.
 
 ### Assertions
 
-Kernels can include `assert` instructions that halt execution with a diagnostic message when a predicate is false. In CI pipelines, a failing assertion causes `wave-emu` to exit with a nonzero status code, enabling standard test harness integration.
+A decoding, memory, control-flow, or execution-limit error causes the CLI to fail. Test harnesses can check its exit status and compare the output dumps with an independent reference.
 
-**Next:** [ISA Design](/architecture/isa-design/) for the research methodology behind WAVE's 11 hardware-invariant primitives.
+See [CLI tools](/reference/cli-tools/) for all options.

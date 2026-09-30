@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for individual instruction codegen. Constructs minimal WBIN files with
-//!
-//! specific WAVE instructions, compiles them to HIP, and verifies the output contains
-//! expected HIP code fragments. Tests cover integer arithmetic, float operations,
-//! bitwise ops, memory access, control flow, special registers, and wave intrinsics.
+//! Check HIP C++ output for individual WAVE instructions.
 
 use wave_hip::compile;
 
@@ -89,9 +85,9 @@ fn build_wbin(kernel_name: &str, reg_count: u32, local_mem: u32, code: &[u8]) ->
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = kernel_name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -254,7 +250,7 @@ fn test_bitfind() {
 
 #[test]
 fn test_mov() {
-    // MiscOp uses opcode 0x41, modifier 0 = Mov (single-word, decoder doesn't read word1)
+    // MiscOp uses opcode 0x41, modifier 0 = Mov, single-word, decoder doesn't read word1
     let hip = compile_instructions(&single(0x41, 5, 3, 0, 0));
     assert!(hip.contains("r5 = r3;"), "HIP: {hip}");
 }
@@ -271,7 +267,7 @@ fn test_mov_imm() {
 
 #[test]
 fn test_mov_sr_thread_id() {
-    // MiscOp uses opcode 0x41, modifier 2 = MovSr (single-word)
+    // MiscOp uses opcode 0x41, modifier 2 = MovSr, single-word
     let hip = compile_instructions(&single(0x41, 5, 0, 2, 0));
     assert!(hip.contains("r5 = (uint32_t)threadIdx.x;"), "HIP: {hip}");
 }

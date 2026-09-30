@@ -1,194 +1,121 @@
 ---
-title: ISA Design
-description: The research methodology and design principles behind WAVE's 11 hardware-invariant primitives.
+title: "ISA design"
+description: "The operation categories, parameters, and capabilities in the WAVE ISA."
 ---
 
-The WAVE ISA defines 11 hardware-invariant primitive categories derived from a systematic analysis of every major GPU vendor's instruction set architecture, covering 5,000+ pages of documentation across 16 microarchitectures.
+WAVE groups GPU compute operations into 11 primitive categories. Its design compares the execution interfaces of NVIDIA, AMD, Intel, and Apple.
 
-## Design Principle
+## Design principle
 
-WAVE follows a single governing principle: **define what hardware must do, not how it does it.**
+An instruction defines its inputs, outputs, participating lanes, and observable effects. The backend chooses a target mechanism that preserves them. A workgroup barrier, for example, requires participating threads to reach a rendezvous; it does not prescribe how hardware tracks arrival.
 
-Every WAVE instruction describes an operation in terms of its inputs, outputs, and observable side effects. It never prescribes a specific execution mechanism. For example, `barrier` means "all threads in the workgroup must reach this point before any may proceed" - it says nothing about how the hardware implements the wait (spinning, yielding, scoreboard, etc.).
+This separation keeps memory scope, lane participation, and numerical behavior explicit while leaving machine encoding and scheduling to the target.
 
-This principle produces a **thin abstraction**: thick enough to be portable across vendors, thin enough to compile to efficient native code. Thick abstractions (like high-level compute languages) sacrifice performance. No abstraction at all (like raw PTX or GCN) sacrifices portability. WAVE sits at the ISA level - the lowest point where all vendors converge.
+## Analysis methodology
 
-## Analysis Methodology
+The cross-vendor analysis compares operation semantics and the parameters needed to express them.
 
-The WAVE ISA was derived by exhaustive cross-vendor analysis rather than by design committee or by generalizing from a single vendor.
-
-### Source Documentation
-
-The analysis covered official ISA documentation from all four major GPU vendors:
+### Source documentation
 
 | Vendor | Documentation | Microarchitectures |
 |---|---|---|
 | NVIDIA | PTX ISA v1.0 through v9.2 | Tesla, Fermi, Kepler, Maxwell, Pascal, Volta, Turing, Ampere, Hopper |
 | AMD | RDNA 1-4, CDNA 1-4 ISA references | GCN, RDNA, CDNA families |
 | Intel | Gen11, Xe-LP, Xe-HPG, Xe-HPC programmer's references | Gen11 through Ponte Vecchio |
-| Apple | Metal Shading Language specification, Metal Feature Set tables | A-series (G13), M1-M4 |
+| Apple | Metal Shading Language specification and feature tables | A-series, M1-M4 |
 
-Total volume: approximately 5,000 pages across 16 distinct microarchitectures.
+The research describes a survey of approximately 5,000 pages across 16 microarchitectures. These sources operate at different abstraction levels: a language interface does not document a vendor's machine encoding.
 
-### Extraction Process
+### Extraction process
 
-For each vendor's ISA, the analysis extracted:
+The analysis compares five properties:
 
-1. **Operation categories** - what fundamental operations does the ISA provide?
-2. **Operand models** - how are registers, memory, and immediates addressed?
-3. **Memory hierarchy** - what memory spaces exist and what are their visibility rules?
-4. **Synchronization primitives** - what mechanisms exist for ordering and coordinating threads?
-5. **Execution model** - how are threads grouped, scheduled, and divergence handled?
+1. Operations and their observable effects.
+2. Register, memory, and immediate operands.
+3. Memory spaces and visibility.
+4. Ordering and rendezvous requirements.
+5. Thread grouping and conditional participation.
 
-### Convergence Analysis
+### Convergence analysis
 
-The extracted features were aligned across vendors to identify convergence points - operations that every vendor provides, even if the encoding, naming, or specific semantics differ. An operation qualified as a hardware-invariant primitive only if:
+A common operation needs a definition that each target can preserve. Matching names do not establish matching semantics. Widths and capacities become parameters; optional operations and unsupported scopes require capability checks.
 
-- Every analyzed vendor provides it (universality requirement).
-- It operates at the ISA level, not as a software library function (hardware requirement).
-- It cannot be decomposed into a combination of other primitives without performance loss (irreducibility requirement).
+## The 11 primitives
 
-## The 11 Primitives
+### 1. Lockstep execution: waves
 
-The analysis produced 11 categories of hardware-invariant operations:
+WAVE groups lanes into waves with width `W`. NVIDIA calls these groups warps, AMD calls them wavefronts, Intel uses subgroups, and Metal uses SIMD-groups. The target may implement instruction scheduling differently while preserving the program's lane behavior.
 
-### 1. Lockstep Execution (Waves)
+### 2. SIMT divergence handling
 
-Every GPU groups threads into fixed-width SIMD lanes that share a program counter and execute in lockstep. NVIDIA calls them warps, AMD calls them wavefronts, Intel calls them subgroups, Apple calls them SIMD-groups. WAVE calls them **waves**.
+An active mask records which lanes execute. Structured branches and loops change that mask. Backends preserve lane participation through the target's control-flow mechanism.
 
-The wave is the fundamental unit of scheduling. All GPU architectures provide it because the SIMT execution model depends on it - without lockstep grouping, GPU parallelism would require explicit thread management at every instruction.
+### 3. Register file
 
-### 2. SIMT Divergence Handling
+General-purpose registers contain untyped 32-bit values. Eight-bit fields address `r0` through `r255`; kernel metadata declares the required count. Wider values use consecutive registers. The vendor compiler assigns machine registers after translation.
 
-When threads within a wave take different branch paths, the hardware must serialize execution of each path while tracking which threads are active. Every vendor implements a mechanism for this (masked execution with a reconvergence stack or equivalent).
+### 4. Local: shared memory
 
-WAVE models divergence with an **active mask** and **structured control flow** (`if/else/endif`, `loop/break/endloop`). This structured model is the subset that all vendors support - NVIDIA's recently-introduced independent thread scheduling extends beyond it, but structured divergence remains the universal baseline.
+Local memory is a byte-addressed region owned by one workgroup. It maps to NVIDIA shared memory, AMD LDS, Intel SLM, or Metal threadgroup memory. Threads synchronize accesses when they exchange values through it.
 
-### 3. Register File
+### 5. Device: global memory
 
-Every GPU provides a per-thread register file for arithmetic operands. The size, width, and organization differ:
+Device memory is shared across workgroups. The implementation supplies a device-memory base pointer, and instructions use byte offsets to access it. Access width and address validity are part of the instruction contract.
 
-| Vendor | Width | File size |
-|---|---|---|
-| NVIDIA | 32-bit | 256 per thread (configurable) |
-| AMD | 32-bit (VGPR) + 32-bit (SGPR) | Varies by arch |
-| Intel | 256-bit (GRF) | 128 registers |
-| Apple | 32-bit | Not publicly documented |
+### 6. Scoped synchronization
 
-WAVE defines a **32-register, 32-bit file** - the intersection that maps efficiently to all vendors. Wider operations (f64) use register pairs. Backends map WAVE registers to vendor-native registers during translation.
+WAVE defines wave, workgroup, device, and system scopes. Barriers coordinate arrival; fences order memory accesses. A backend must implement the requested scope or reject it. Metal, for example, rejects system-scope fences.
 
-### 4. Local (Shared) Memory
+### 7. Structured control flow
 
-A fast, workgroup-visible scratchpad memory. Every GPU architecture provides it:
+WAVE expresses branches with `if/else/endif` and loops with `loop/break/endloop`. The structure defines mask changes and reconvergence. Backends translate it into target control flow.
 
-- NVIDIA: shared memory (configurable vs. L1)
-- AMD: LDS (Local Data Share)
-- Intel: SLM (Shared Local Memory)
-- Apple: threadgroup memory
+### 8. Atomic operations
 
-WAVE models local memory as a byte-addressable array with workgroup lifetime and workgroup visibility.
+Atomic operations read and update a memory location indivisibly. The set includes add, subtract, AND, OR, XOR, minimum, maximum, exchange, and compare-and-swap. A lowering can require several instructions: PTX subtraction uses negation followed by atomic addition, and Metal strong compare-and-swap retries a weak exchange after spurious failure.
 
-### 5. Device (Global) Memory
+### 9. Wave-level operations
 
-Byte-addressable memory visible to all threads on the device. All vendors provide global load/store instructions with various width options. WAVE models device memory as a flat address space with 64-bit addressing.
+Shuffle exchanges register values, reductions combine lane values, and ballots collect predicates. These operations make communication within a wave explicit. Their participation and source-lane requirements must be preserved.
 
-### 6. Scoped Synchronization
+### 10. Type conversion
 
-Barriers and fences with explicit scope. Every vendor provides workgroup-level barriers. Fences with wider scope (device, system) are also universally available, though the mechanisms differ:
+Conversion instructions specify both source and destination formats. `cvt_f32_i32`, for example, converts a signed integer to binary32. The [instruction reference](/reference/instruction-set/#conversions) lists supported pairs.
 
-- NVIDIA: `bar.sync`, `membar.{cta,gl,sys}`
-- AMD: `s_barrier`, `s_waitcnt`
-- Intel: `barrier`, `fence`
-- Apple: `threadgroup_barrier`
+### 11. Special registers
 
-WAVE defines four scopes (wave, workgroup, device, system) and two operations (`barrier` for execution synchronization, `fence` for memory ordering).
+Sixteen special registers expose thread, wave, workgroup, and grid identity and dimensions. They include lane index and wave width. Programs read them through `mov_sr`.
 
-### 7. Structured Control Flow
+## What was excluded
 
-Every GPU ISA provides conditional branch and loop constructs. While the encoding differs (NVIDIA uses explicit branch targets, AMD uses scalar branch instructions, Intel uses structured EU control flow), all support the structured subset of `if/else/endif` and `loop/break/endloop`.
+The mandatory compute core does not imply support for every target feature. The specification distinguishes optional capabilities from required operations.
 
-WAVE uses structured control flow exclusively. Arbitrary `goto`-style branches are not part of the ISA because not all vendors support them at the hardware level - some (notably Intel and Apple) require structured control flow.
+### Tensor/matrix operations
 
-### 8. Atomic Operations
+Matrix acceleration varies by format, tile shape, and target. WAVE defines optional matrix operations; these require separate capability and lowering support. Scalar arithmetic is not a performance-equivalent substitute for dedicated matrix hardware.
 
-Read-modify-write operations with guaranteed atomicity. Every vendor provides atomics on both local and device memory. The common set includes: add, subtract (or negate-add), AND, OR, XOR, min, max, exchange, and compare-and-swap.
+### Texture sampling
 
-WAVE defines all of these with explicit scope annotations. Backends translate to vendor-specific instructions, working around gaps (e.g., PTX lacks `atom.sub`, so the backend emits `neg` + `atom.add`).
+Texture sampling includes descriptors, filtering, and coordinate rules outside the core's explicit byte-addressed memory operations.
 
-### 9. Wave-Level Operations
+### Ray tracing
 
-Operations that communicate values across lanes within a wave. Every vendor provides:
+Ray traversal and intersection acceleration are outside the compute core described here.
 
-- **Shuffle** - read a value from another lane.
-- **Reduction** - combine values across all lanes (sum, min, max).
-- **Ballot** - produce a bitmask of per-lane predicates.
+### Asynchronous copy
 
-These operations exist in hardware because they enable critical GPU algorithms (parallel prefix sum, warp-level reduction) without going through shared memory.
+An asynchronous copy has completion and ordering requirements beyond an ordinary load/store sequence. Support must account for those requirements and the target's capabilities.
 
-### 10. Type Conversion
+### Variable wave width
 
-Widening, narrowing, and format conversions between integer and floating-point types. Every vendor provides dedicated conversion instructions (e.g., `cvt.f32.s32` in PTX, `v_cvt_f32_i32` in AMD GCN).
+Wave width is a parameter. A program that explicitly communicates among 32 lanes still requires that grouping to be preserved on another target. Changing width does not authorize changing a collective's result.
 
-WAVE defines explicit conversion instructions between all supported type pairs: `i32`, `u32`, `f32`, `f16`, `f64`, and `bool`.
+## Universal occupancy equation
 
-### 11. Special Registers
+A register-capacity bound for resident waves is:
 
-Read-only hardware identity registers that provide:
-
-- Thread ID within the workgroup (x, y, z)
-- Workgroup ID within the grid (x, y, z)
-- Workgroup dimensions (x, y, z)
-- Grid dimensions
-- Wave width
-- Lane ID within the wave
-
-Every vendor provides these values, though the access mechanism varies (NVIDIA uses special registers like `%tid.x`, AMD uses scalar registers loaded at dispatch, Intel uses EU thread payload registers, Apple uses `thread_position_in_threadgroup`).
-
-WAVE defines 16 special registers (`sr_tid_x` through `sr_wave_width`) providing uniform access.
-
-## What Was Excluded
-
-The following capabilities were present in one or more vendor ISAs but excluded from WAVE because they failed the universality, hardware, or irreducibility requirements:
-
-### Tensor/Matrix Operations
-
-NVIDIA's Tensor Cores, AMD's Matrix Cores, and Intel's XMX engines provide hardware-accelerated matrix multiply-accumulate. These were excluded because:
-
-- Apple GPUs do not provide equivalent hardware-level matrix operations.
-- The matrix tile sizes and data types differ significantly across vendors (NVIDIA: 16x16x16, AMD: 32x32, Intel: 8x16).
-- They can be decomposed into standard arithmetic on the WAVE primitives (at a performance cost, which is acceptable for a portability-first ISA).
-
-### Texture Sampling
-
-All GPUs provide texture sampling hardware, but the interface is deeply vendor-specific (descriptor formats, filtering modes, coordinate systems). Texture operations are also higher-level than ISA primitives - they are built on top of memory loads with hardware interpolation.
-
-### Ray Tracing
-
-NVIDIA RT Cores, AMD Ray Accelerators, and Intel Ray Tracing Units provide hardware ray-box and ray-triangle intersection. These were excluded because support is not universal across all microarchitectures within each vendor (let alone across vendors) and the interfaces are not yet stable.
-
-### Asynchronous Copy
-
-NVIDIA's `cp.async` and AMD's equivalent provide asynchronous memory copy from global to shared memory. These were excluded because Apple and older Intel architectures do not provide hardware-level async copy, and the operation can be decomposed into load + barrier + store sequences.
-
-### Variable Wave Width
-
-Some AMD architectures support runtime wave width selection (wave32 vs. wave64). WAVE treats wave width as a configuration parameter rather than an ISA-level construct - the emulator and backends handle it, but the ISA instructions themselves are wave-width-agnostic.
-
-## Universal Occupancy Equation
-
-The analysis revealed that despite architectural differences, every vendor's occupancy model reduces to the same equation:
-
-```
+```text
 O = floor(F / (R * W * w))
 ```
 
-Where:
-
-- **F** = Total register file size per compute unit (vendor-specific constant)
-- **R** = Registers used per thread (determined by the compiler, reported in `.wbin` metadata)
-- **W** = Wave width (vendor-specific: 32 for NVIDIA/Apple, 32 or 64 for AMD, variable for Intel)
-- **w** = Target waves per compute unit (tuning parameter)
-
-This equation governs how many waves can execute concurrently on a single compute unit. Backends use it with vendor-specific values for `F` and `W` to calculate optimal launch configurations.
-
-The universality of this equation is a direct consequence of the register file primitive - since every vendor provides a per-thread register file that is partitioned across concurrent waves, the occupancy tradeoff between register usage and parallelism is structurally identical everywhere.
+`F` is register storage in bytes, `R` is machine registers per lane, `W` is lanes per wave, and `w` is bytes per register. Allocation granularity, workgroup placement, local memory, and hardware limits can lower actual occupancy. WAVE register indices alone do not determine it. See [Occupancy equation](/internals/occupancy-equation/).

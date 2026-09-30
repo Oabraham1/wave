@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIP kernel wrapper generation. Emits the #include directives, __device__ inline
-//!
-//! helper functions for float/half bitcasting (rf/ri/rh/rhi/rh2/rh2i), and the
-//! __global__ kernel function signature with standard HIP parameters. Dynamic shared
-//! memory is declared via extern __shared__ in the kernel body.
+//! Generate HIP C++ kernel declarations and conversion helpers.
 
 #[must_use]
 pub fn emit_file_header() -> String {

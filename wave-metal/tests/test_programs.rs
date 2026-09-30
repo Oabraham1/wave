@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration tests for full WAVE program compilation. Builds complete WBIN files
-//!
-//! containing multi-instruction programs, compiles them to MSL, and verifies the
-//! output is structurally correct with proper kernel signatures, register declarations,
-//! instruction translations, and control flow nesting.
+//! Check Metal output for complete WAVE programs.
 
 use wave_metal::compile;
 
@@ -16,27 +12,34 @@ const MODIFIER_SHIFT: u32 = 4;
 const EXTENDED_RS2_SHIFT: u32 = 24;
 const SYNC_MODIFIER_OFFSET: u8 = 8;
 
-fn encode_word0(opcode: u8, rd: u8, rs1: u8, modifier: u8, pred_reg: u8, pred_neg: bool) -> u32 {
+fn encode_word0(
+    opcode: u8,
+    rd: u8,
+    rs1: u8,
+    modifier: u8,
+    pred_reg: u8,
+    negate_predicate: bool,
+) -> u32 {
     (u32::from(opcode) << OPCODE_SHIFT)
         | (u32::from(rd) << RD_SHIFT)
         | (u32::from(rs1) << RS1_SHIFT)
         | (u32::from(modifier) << MODIFIER_SHIFT)
         | u32::from(pred_reg & 0x03)
-        | if pred_neg { 1 << 2 } else { 0 }
+        | if negate_predicate { 1 << 2 } else { 0 }
 }
 
 fn encode_ext(rs2: u8) -> u32 {
     u32::from(rs2) << EXTENDED_RS2_SHIFT
 }
 
-/// Single-word instruction (4 bytes)
+/// Single-word instruction, 4 bytes
 fn single(opcode: u8, rd: u8, rs1: u8, modifier: u8) -> Vec<u8> {
     encode_word0(opcode, rd, rs1, modifier, 0, false)
         .to_le_bytes()
         .to_vec()
 }
 
-/// Extended instruction (8 bytes: word0 + word1 with rs2)
+/// Extended instruction, 8 bytes: word0 + word1 with rs2
 fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> Vec<u8> {
     let mut v = encode_word0(opcode, rd, rs1, modifier, 0, false)
         .to_le_bytes()
@@ -45,19 +48,19 @@ fn extended(opcode: u8, rd: u8, rs1: u8, rs2: u8, modifier: u8) -> Vec<u8> {
     v
 }
 
-/// Halt: Control opcode 0x3F, modifier = Halt(1) + SYNC_MODIFIER_OFFSET(8) = 9
+/// Halt: Control opcode 0x3F, modifier = Halt(1) + `SYNC_MODIFIER_OFFSET(8)` = 9
 /// Halt does NOT read word1
 fn halt() -> Vec<u8> {
     single(0x3F, 0, 0, 1 + SYNC_MODIFIER_OFFSET)
 }
 
-/// MovSr: Misc opcode 0x41, modifier=2, rs1=sr_index
-/// MovSr does NOT read word1
+/// `MovSr`: Misc opcode 0x41, modifier=2, `rs1=sr_index`
+/// `MovSr` does NOT read word1
 fn mov_sr(rd: u8, sr: u8) -> Vec<u8> {
     single(0x41, rd, sr, 2)
 }
 
-/// MovImm: Misc opcode 0x41, modifier=1, word1=immediate
+/// `MovImm`: Misc opcode 0x41, modifier=1, word1=immediate
 fn mov_imm(rd: u8, imm: u32) -> Vec<u8> {
     let mut code = encode_word0(0x41, rd, 0, 1, 0, false)
         .to_le_bytes()
@@ -71,9 +74,9 @@ fn build_wbin(kernel_name: &str, reg_count: u32, local_mem: u32, code: &[u8]) ->
     let name_bytes: Vec<u8> = kernel_name.bytes().chain(std::iter::once(0)).collect();
 
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -198,8 +201,12 @@ fn test_conditional_program() {
     let msl = compile(&wbin).unwrap();
 
     assert!(msl.contains("p1 = r0 < r1;"), "MSL: {msl}");
-    assert!(msl.contains("if (p1) {"), "MSL: {msl}");
-    assert!(msl.contains("} else {"), "MSL: {msl}");
+    assert!(
+        msl.contains("const bool _wave_condition_0 = p1;"),
+        "MSL: {msl}"
+    );
+    assert!(msl.contains("_wave_active = _wave_else_0;"), "MSL: {msl}");
+    assert!(msl.contains("_wave_active = _wave_entry_0;"), "MSL: {msl}");
 }
 
 #[test]

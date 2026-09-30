@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Control flow MSL emission. Provides formatting functions that translate WAVE
-//!
-//! structured control flow instructions (if/else/endif, loop/endloop, break/continue)
-//! into equivalent MSL C++ control flow statements. MSL supports structured control
-//! flow natively so the mapping is direct with no branch lowering required.
+//! Translate structured WAVE branches and loops into Metal control flow.
 
 use crate::registers::pred;
 

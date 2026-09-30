@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! C/C++ kernel parser producing HIR.
-//!
-//! Parses a subset of C/C++ suitable for GPU kernels using line-based
-//! parsing for the restricted kernel subset. Supports `__kernel` functions,
-//! basic types, arithmetic, if/else, and array indexing.
+//! Parse the supported C/C++ kernel subset into HIR.
 
 use crate::diagnostics::CompileError;
 use crate::hir::expr::{BinOp, Dimension, Expr, Literal};
@@ -24,6 +20,7 @@ pub fn parse_cpp(source: &str) -> Result<Kernel, CompileError> {
     parser.parse_kernel()
 }
 
+#[derive(Debug)]
 struct CppParser<'a> {
     lines: &'a [&'a str],
     pos: usize,
@@ -92,7 +89,10 @@ impl<'a> CppParser<'a> {
             if parts.is_empty() {
                 continue;
             }
-            let name_part = parts.last().unwrap().trim_start_matches('*');
+            let name_part = parts
+                .last()
+                .expect("parameter has at least two parts")
+                .trim_start_matches('*');
             let is_pointer = param.contains('*');
             let type_str = parts[0];
 
@@ -200,11 +200,19 @@ impl<'a> CppParser<'a> {
 
         let value = parse_c_expr(rhs)?;
 
-        if lhs_clean.contains('[') {
-            let bracket_pos = lhs_clean.find('[').unwrap();
-            let bracket_end = lhs_clean.find(']').unwrap();
-            let base_name = lhs_clean[..bracket_pos].trim();
-            let index_str = &lhs_clean[bracket_pos + 1..bracket_end];
+        if let Some((base_name, subscript)) = lhs_clean.split_once('[') {
+            let (index_str, suffix) =
+                subscript
+                    .split_once(']')
+                    .ok_or_else(|| CompileError::ParseError {
+                        message: format!("missing closing bracket in assignment: {lhs_clean}"),
+                    })?;
+            if !suffix.trim().is_empty() {
+                return Err(CompileError::ParseError {
+                    message: format!("unexpected text after subscript: {suffix}"),
+                });
+            }
+            let base_name = base_name.trim();
 
             let base = Expr::Var(base_name.to_string());
             let index = parse_c_expr(index_str)?;
@@ -325,14 +333,14 @@ mod tests {
 
     #[test]
     fn test_parse_cpp_vector_add() {
-        let source = r#"
+        let source = r"
 __kernel void vector_add(float* a, float* b, float* out, uint32_t n) {
     uint32_t gid = thread_id();
     if (gid < n) {
         out[gid] = a[gid] + b[gid];
     }
 }
-"#;
+";
         let kernel = parse_cpp(source).unwrap();
         assert_eq!(kernel.name, "vector_add");
         assert_eq!(kernel.params.len(), 4);
@@ -342,13 +350,17 @@ __kernel void vector_add(float* a, float* b, float* out, uint32_t n) {
 
     #[test]
     fn test_parse_cpp_simple() {
-        let source = r#"
+        let source = r"
 void test(uint32_t n) {
     uint32_t x = 42;
 }
-"#;
+";
         let kernel = parse_cpp(source).unwrap();
         assert_eq!(kernel.name, "test");
         assert_eq!(kernel.body.len(), 1);
+    }
+    #[test]
+    fn malformed_subscript_returns_an_error() {
+        assert!(parse_cpp("void broken(float* a) {\n a[0 = 1;\n}").is_err());
     }
 }

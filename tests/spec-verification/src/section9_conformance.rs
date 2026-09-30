@@ -1,9 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 9: Conformance tests
-//!
-//! Verifies implementation conformance requirements.
+//! Section 9: Conformance tests Verifies implementation conformance requirements.
 
 use crate::harness::*;
 
@@ -231,7 +229,7 @@ fn test_register_bounds_checking() -> TestResult {
 
 .kernel test_register_bounds
 .registers 16
-    ; Use registers 0-15 (within declared .registers 16)
+    ; Use registers 0-15 within the declared .registers 16
     mov_imm r0, 0
     mov_imm r1, 1
     mov_imm r2, 2
@@ -288,7 +286,7 @@ fn test_register_bounds_checking() -> TestResult {
                 details: if passed {
                     "All 16 registers accessible and correct".to_string()
                 } else {
-                    format!("Sum = {} (expected 120)", value)
+                    format!("Sum = {}; expected 120", value)
                 },
                 cycles: result.cycles,
             }

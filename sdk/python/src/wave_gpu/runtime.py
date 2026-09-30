@@ -10,6 +10,8 @@ path keeps all data in memory (no temp files, no process spawning) and
 includes a kernel cache that makes repeated compilations near-instant.
 """
 
+from __future__ import annotations
+
 import ctypes
 import os
 import platform
@@ -17,7 +19,6 @@ import struct
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from .array import WaveArray
 from .device import detect_gpu
@@ -44,11 +45,11 @@ _VENDOR_IDS = {
     "emulator": 4,
 }
 
-_lib: Optional[ctypes.CDLL] = None
+_lib: ctypes.CDLL | None = None
 _lib_load_attempted = False
 
 
-def _find_shared_lib() -> Optional[str]:
+def _find_shared_lib() -> str | None:
     """Find the wave-runtime shared library."""
     if platform.system() == "Darwin":
         lib_name = "libwave_runtime.dylib"
@@ -72,7 +73,7 @@ def _find_shared_lib() -> Optional[str]:
     return None
 
 
-def _load_lib() -> Optional[ctypes.CDLL]:
+def _load_lib() -> ctypes.CDLL | None:
     """Load the wave-runtime shared library, returning None if unavailable."""
     global _lib, _lib_load_attempted
     if _lib_load_attempted:
@@ -206,10 +207,10 @@ def _translate_inprocess(wbin: bytes, vendor: str) -> str:
 
 def _emulate_inprocess(
     wbin: bytes,
-    buffers: List[WaveArray],
-    scalars: List[int],
-    grid: Tuple[int, int, int],
-    workgroup: Tuple[int, int, int],
+    buffers: list[WaveArray],
+    scalars: list[int],
+    grid: tuple[int, int, int],
+    workgroup: tuple[int, int, int],
 ) -> None:
     """Run a kernel on the emulator in-process via the shared library."""
     lib = _load_lib()
@@ -217,7 +218,7 @@ def _emulate_inprocess(
         _emulate_subprocess(wbin, buffers, scalars, grid, workgroup)
         return
 
-    offsets: List[int] = []
+    offsets: list[int] = []
     offset = 0
     mem_data = bytearray()
     for buf in buffers:
@@ -309,6 +310,7 @@ def _compile_subprocess(source: str, language: str = "python") -> bytes:
             [compiler, src_path, "--output", wbin_path, "--lang", language],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Compilation failed:\n{result.stderr}\n{result.stdout}")
@@ -339,6 +341,7 @@ def _translate_subprocess(wbin: bytes, vendor: str) -> str:
             [backend, wbin_path],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(
@@ -354,10 +357,10 @@ def _translate_subprocess(wbin: bytes, vendor: str) -> str:
 
 def _emulate_subprocess(
     wbin: bytes,
-    buffers: List[WaveArray],
-    scalars: List[int],
-    grid: Tuple[int, int, int],
-    workgroup: Tuple[int, int, int],
+    buffers: list[WaveArray],
+    scalars: list[int],
+    grid: tuple[int, int, int],
+    workgroup: tuple[int, int, int],
 ) -> None:
     """Run a kernel on the emulator via subprocess (fallback)."""
     emulator = _find_tool("wave-emu")
@@ -368,7 +371,7 @@ def _emulate_subprocess(
             f.write(wbin)
 
         mem_path = os.path.join(tmpdir, "memory.bin")
-        offsets: List[int] = []
+        offsets: list[int] = []
         offset = 0
 
         mem_data = bytearray()
@@ -397,7 +400,7 @@ def _emulate_subprocess(
         for i, scalar in enumerate(scalars):
             cmd.extend(["--reg", f"{len(buffers) + i}={scalar}"])
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise RuntimeError(
                 f"Emulator execution failed:\n{result.stderr}\n{result.stdout}"
@@ -431,10 +434,10 @@ def translate_wbin(wbin: bytes, vendor: str) -> str:
 
 def launch_emulator(
     wbin: bytes,
-    buffers: List[WaveArray],
-    scalars: List[int],
-    grid: Tuple[int, int, int],
-    workgroup: Tuple[int, int, int],
+    buffers: list[WaveArray],
+    scalars: list[int],
+    grid: tuple[int, int, int],
+    workgroup: tuple[int, int, int],
 ) -> None:
     """Launch a kernel on the WAVE emulator."""
     _emulate_inprocess(wbin, buffers, scalars, grid, workgroup)
@@ -446,8 +449,8 @@ class CompiledKernel:
     def __init__(self, source: str, language: str = "python") -> None:
         self._source = source
         self._language = language
-        self._wbin: Optional[bytes] = None
-        self._vendor_cache: Dict[str, str] = {}
+        self._wbin: bytes | None = None
+        self._vendor_cache: dict[str, str] = {}
 
     def _ensure_compiled(self) -> bytes:
         if self._wbin is None:
@@ -456,10 +459,10 @@ class CompiledKernel:
 
     def launch(
         self,
-        buffers: List[WaveArray],
-        scalars: List[int],
-        grid: Tuple[int, int, int] = (1, 1, 1),
-        workgroup: Tuple[int, int, int] = (256, 1, 1),
+        buffers: list[WaveArray],
+        scalars: list[int],
+        grid: tuple[int, int, int] = (1, 1, 1),
+        workgroup: tuple[int, int, int] = (256, 1, 1),
     ) -> None:
         """Launch the kernel with the given arguments."""
         wbin = self._ensure_compiled()

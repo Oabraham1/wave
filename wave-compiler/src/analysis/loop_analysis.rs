@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Loop detection, nesting depth, and induction variable analysis.
-//!
-//! Detects natural loops by finding back edges in the CFG, then
-//! determines loop bodies, nesting relationships, and identifies
-//! simple induction variables for optimization.
+//! Find natural loops, nesting relationships, and induction variables from control-flow back
+//! edges.
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,23 +13,24 @@ use crate::mir::value::BlockId;
 /// A natural loop in the CFG.
 #[derive(Debug, Clone)]
 pub struct NaturalLoop {
-    /// Loop header block (dominates all blocks in the loop).
+    /// Loop header block, dominates all blocks in the loop.
     pub header: BlockId,
     /// Back edge source block.
     pub latch: BlockId,
-    /// All blocks in the loop body (including header).
+    /// All blocks in the loop body, including header.
     pub body: HashSet<BlockId>,
-    /// Nesting depth (0 for outermost loops).
+    /// Nesting depth, 0 for outermost loops.
     pub depth: u32,
 }
 
+#[derive(Debug)]
 /// Result of loop analysis.
 pub struct LoopInfo {
     /// Detected natural loops.
     pub loops: Vec<NaturalLoop>,
     /// Back edges in the CFG.
     pub back_edges: Vec<(BlockId, BlockId)>,
-    /// Loop depth for each block (0 if not in any loop).
+    /// Loop depth for each block, 0 if not in any loop.
     pub block_depth: HashMap<BlockId, u32>,
 }
 
@@ -75,7 +73,7 @@ impl LoopInfo {
         }
     }
 
-    /// Returns the loop depth of a block (0 if not in any loop).
+    /// Returns the loop depth of a block, 0 if not in any loop.
     #[must_use]
     pub fn depth(&self, block: BlockId) -> u32 {
         self.block_depth.get(&block).copied().unwrap_or(0)
@@ -210,6 +208,6 @@ mod tests {
         let loop_info = LoopInfo::compute(&cfg, &dom);
 
         assert!(loop_info.loops.is_empty());
-        assert!(loop_info.back_edges.is_empty());
+        assert_eq!(loop_info.back_edges, [] as [(BlockId, BlockId); 0]);
     }
 }

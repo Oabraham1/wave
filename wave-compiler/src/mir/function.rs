@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! MIR function/kernel representation with control flow graph.
-//!
-//! A `MirFunction` contains basic blocks forming a CFG, along with
-//! type information for all SSA values and kernel parameter metadata.
+//! MIR function/kernel representation with control flow graph. A `MirFunction` contains basic
+//! blocks forming a CFG, along with type information for all SSA values and kernel parameter
+//! metadata.
 
 use std::collections::HashMap;
 
@@ -19,7 +18,7 @@ pub struct MirParam {
     pub value: ValueId,
     /// Parameter type.
     pub ty: MirType,
-    /// Parameter name (for debugging).
+    /// Parameter name, for debugging.
     pub name: String,
 }
 
@@ -85,6 +84,35 @@ impl MirFunction {
         self.value_types.get(&value).copied()
     }
 
+    /// Resolve substitutions in instruction, phi, and terminator operands.
+    pub(crate) fn replace_uses(&mut self, replacements: &HashMap<ValueId, ValueId>) {
+        for block in &mut self.blocks {
+            for phi in &mut block.phis {
+                for (_, value) in &mut phi.incoming {
+                    *value = resolve_value(*value, replacements);
+                }
+            }
+            for inst in &mut block.instructions {
+                inst.map_operands(|value| resolve_value(value, replacements));
+            }
+            if let super::basic_block::Terminator::CondBranch { cond, .. } = &mut block.terminator {
+                *cond = resolve_value(*cond, replacements);
+            }
+        }
+    }
+
+    /// Find an unused SSA value above every value referenced by this function.
+    pub(crate) fn next_value_id(&self) -> Option<u32> {
+        self.blocks
+            .iter()
+            .flat_map(|block| block.defs().into_iter().chain(block.uses()))
+            .chain(self.params.iter().map(|param| param.value))
+            .chain(self.value_types.keys().copied())
+            .map(|value| value.0)
+            .max()
+            .map_or(Some(0), |value| value.checked_add(1))
+    }
+
     /// Compute predecessor blocks for each block.
     #[must_use]
     pub fn predecessors(&self) -> HashMap<BlockId, Vec<BlockId>> {
@@ -97,6 +125,17 @@ impl MirFunction {
         }
         preds
     }
+}
+
+/// Follow acyclic substitutions from eliminated definitions to their sources.
+pub(crate) fn resolve_value(
+    mut value: ValueId,
+    replacements: &HashMap<ValueId, ValueId>,
+) -> ValueId {
+    while let Some(&replacement) = replacements.get(&value) {
+        value = replacement;
+    }
+    value
 }
 
 #[cfg(test)]
@@ -135,7 +174,7 @@ mod tests {
         func.blocks.push(bb2);
 
         let preds = func.predecessors();
-        assert!(preds[&BlockId(0)].is_empty());
+        assert_eq!(preds[&BlockId(0)], [] as [BlockId; 0]);
         assert_eq!(preds[&BlockId(1)], vec![BlockId(0)]);
         assert_eq!(preds[&BlockId(2)], vec![BlockId(0)]);
     }

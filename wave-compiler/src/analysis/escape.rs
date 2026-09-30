@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Escape analysis for stack-to-register promotion.
-//!
-//! Determines which locally-allocated values escape the current scope
-//! (e.g., through stores to device memory or function calls). Non-escaping
-//! values can be promoted from memory to registers.
+//! Find local values that escape through memory stores or calls. Values that stay local can use
+//! registers.
 
 use std::collections::HashSet;
 
@@ -14,6 +11,7 @@ use crate::mir::function::MirFunction;
 use crate::mir::instruction::MirInst;
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Result of escape analysis.
 pub struct EscapeInfo {
     /// Values that escape the local scope.

@@ -1,18 +1,17 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CFG simplification pass.
-//!
-//! Merges basic blocks connected by unconditional branches when the
-//! target has a single predecessor. Removes empty blocks and unreachable
-//! blocks to simplify the control flow graph.
+//! CFG simplification pass. Merges basic blocks connected by unconditional branches when the
+//! target has a single predecessor. Removes empty blocks and unreachable blocks to simplify the
+//! control flow graph.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::pass::Pass;
 use crate::mir::basic_block::Terminator;
 use crate::mir::function::MirFunction;
 
+#[derive(Debug)]
 /// CFG simplification pass.
 pub struct SimplifyCfg;
 
@@ -45,42 +44,66 @@ fn remove_unreachable_blocks(func: &mut MirFunction) -> bool {
 
     let original_count = func.blocks.len();
     func.blocks.retain(|b| reachable.contains(&b.id));
+    for block in &mut func.blocks {
+        for phi in &mut block.phis {
+            phi.incoming.retain(|(bid, _)| reachable.contains(bid));
+        }
+    }
     func.blocks.len() != original_count
 }
 
 fn merge_single_predecessor_blocks(func: &mut MirFunction) -> bool {
-    let preds = func.predecessors();
     let mut changed = false;
-
     loop {
-        let mut merge_found = false;
-        for i in 0..func.blocks.len() {
-            let term = func.blocks[i].terminator.clone();
-            if let Terminator::Branch { target } = term {
-                if let Some(pred_list) = preds.get(&target) {
-                    if pred_list.len() == 1 && pred_list[0] == func.blocks[i].id {
-                        if let Some(target_idx) = func.blocks.iter().position(|b| b.id == target) {
-                            if target_idx != i {
-                                let target_block = func.blocks.remove(target_idx);
-                                let adjusted_i = if target_idx < i { i - 1 } else { i };
-                                func.blocks[adjusted_i]
-                                    .instructions
-                                    .extend(target_block.instructions);
-                                func.blocks[adjusted_i].terminator = target_block.terminator;
-                                merge_found = true;
-                                changed = true;
-                                break;
-                            }
-                        }
+        let preds = func.predecessors();
+        let candidate = func.blocks.iter().enumerate().find_map(|(source, block)| {
+            let Terminator::Branch { target } = block.terminator else {
+                return None;
+            };
+            if target == block.id
+                || target == func.entry
+                || preds.get(&target)?.as_slice() != [block.id]
+            {
+                return None;
+            }
+            let target_index = func.blocks.iter().position(|other| other.id == target)?;
+            let target_block = &func.blocks[target_index];
+            if target_block
+                .phis
+                .iter()
+                .any(|phi| phi.incoming.len() != 1 || phi.incoming[0].0 != block.id)
+            {
+                return None;
+            }
+            Some((source, target_index))
+        });
+        let Some((source, target)) = candidate else {
+            break;
+        };
+        let target_block = func.blocks.remove(target);
+        let source = if target < source { source - 1 } else { source };
+        let source_id = func.blocks[source].id;
+        let replacements: HashMap<_, _> = target_block
+            .phis
+            .iter()
+            .map(|phi| (phi.dest, phi.incoming[0].1))
+            .collect();
+        func.blocks[source]
+            .instructions
+            .extend(target_block.instructions);
+        func.blocks[source].terminator = target_block.terminator;
+        for block in &mut func.blocks {
+            for phi in &mut block.phis {
+                for (predecessor, _) in &mut phi.incoming {
+                    if *predecessor == target_block.id {
+                        *predecessor = source_id;
                     }
                 }
             }
         }
-        if !merge_found {
-            break;
-        }
+        func.replace_uses(&replacements);
+        changed = true;
     }
-
     changed
 }
 

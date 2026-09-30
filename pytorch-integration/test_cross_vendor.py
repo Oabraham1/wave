@@ -144,5 +144,7 @@ s = compare("sgd_update", emu[0], metal[0])
 results[s] += 1
 
 print()
-print(f"Summary: {results['BIT-EXACT']} bit-exact, {results['MATCH']} close match, {results['MISMATCH']} mismatch")
-print(f"Total: {sum(results.values())} kernels tested")
+if results["MISMATCH"]:
+    print(f"Mismatches: {results['MISMATCH']}")
+else:
+    print("Results match within tolerance")

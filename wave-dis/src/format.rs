@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Instruction-to-text formatter. Converts `DecodedInstruction` from wave-decode
-//!
-//! into human-readable WAVE assembly text. Handles all instruction variants,
-//! predication, register naming, and immediate formatting.
+//! Instruction-to-text formatter. Converts `DecodedInstruction` from wave-decode into human-
+//! readable WAVE assembly text. Handles all instruction variants predication, register naming,
+//! and immediate formatting.
 
 use wave_decode::{
     special_register_name, AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, CvtType,
@@ -12,12 +11,13 @@ use wave_decode::{
     Scope, WaveOpType, WaveReduceType,
 };
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct FormatOptions {
     pub show_offsets: bool,
     pub show_raw: bool,
 }
 
+#[derive(Debug)]
 pub struct FormattedLine {
     pub offset: u32,
     pub raw_bytes: Vec<u8>,
@@ -26,6 +26,9 @@ pub struct FormattedLine {
 
 #[must_use]
 pub fn format_instruction(inst: &DecodedInstruction) -> String {
+    if inst.predicate == 0 {
+        return format_operation(&inst.operation);
+    }
     let predicate_prefix = if inst.predicate != 0 {
         if inst.predicate_negated {
             format!("@!p{} ", inst.predicate)
@@ -39,8 +42,90 @@ pub fn format_instruction(inst: &DecodedInstruction) -> String {
     format!("{}{}", predicate_prefix, format_operation(&inst.operation))
 }
 
-#[allow(clippy::too_many_lines)]
 fn format_operation(op: &Operation) -> String {
+    match op {
+        Operation::Iadd { .. }
+        | Operation::Isub { .. }
+        | Operation::Imul { .. }
+        | Operation::ImulHi { .. }
+        | Operation::Imad { .. }
+        | Operation::Idiv { .. }
+        | Operation::Imod { .. }
+        | Operation::Ineg { .. }
+        | Operation::Iabs { .. }
+        | Operation::Imin { .. }
+        | Operation::Imax { .. }
+        | Operation::Iclamp { .. } => format_operation_integer(op),
+        Operation::Fadd { .. }
+        | Operation::Fsub { .. }
+        | Operation::Fmul { .. }
+        | Operation::Fma { .. }
+        | Operation::Fdiv { .. }
+        | Operation::Fneg { .. }
+        | Operation::Fabs { .. }
+        | Operation::Fmin { .. }
+        | Operation::Fmax { .. }
+        | Operation::Fclamp { .. }
+        | Operation::Fsqrt { .. }
+        | Operation::FUnary { .. } => format_operation_float(op),
+        Operation::F16 { .. }
+        | Operation::F16Packed { .. }
+        | Operation::Bf16 { .. }
+        | Operation::Bf16Packed { .. } => format_operation_half(op),
+        Operation::F64 { .. } | Operation::F64DivSqrt { .. } => format_operation_double(op),
+        Operation::And { .. }
+        | Operation::Or { .. }
+        | Operation::Xor { .. }
+        | Operation::Not { .. }
+        | Operation::Shl { .. }
+        | Operation::Shr { .. }
+        | Operation::Sar { .. }
+        | Operation::BitOp { .. } => format_operation_bitwise(op),
+        Operation::Icmp { .. }
+        | Operation::Ucmp { .. }
+        | Operation::Fcmp { .. }
+        | Operation::Select { .. }
+        | Operation::Cvt { .. } => format_operation_compare(op),
+        Operation::LocalLoad { .. }
+        | Operation::LocalStore { .. }
+        | Operation::DeviceLoad { .. }
+        | Operation::DeviceStore { .. } => format_operation_load_store(op),
+        Operation::LocalAtomic { .. }
+        | Operation::LocalAtomicCas { .. }
+        | Operation::DeviceAtomic { .. }
+        | Operation::DeviceAtomicCas { .. } => format_operation_atomic(op),
+        Operation::WaveOp { .. }
+        | Operation::WaveReduce { .. }
+        | Operation::WaveBallot { .. }
+        | Operation::WaveVote { .. }
+        | Operation::MmaLoadA { .. }
+        | Operation::MmaLoadB { .. }
+        | Operation::MmaStoreC { .. }
+        | Operation::MmaCompute { .. } => format_operation_wave(op),
+        Operation::If { .. }
+        | Operation::Else
+        | Operation::Endif
+        | Operation::Loop
+        | Operation::Break { .. }
+        | Operation::Continue { .. }
+        | Operation::Endloop
+        | Operation::Call { .. }
+        | Operation::Return
+        | Operation::Halt
+        | Operation::Barrier
+        | Operation::FenceAcquire { .. }
+        | Operation::FenceRelease { .. }
+        | Operation::FenceAcqRel { .. }
+        | Operation::Wait
+        | Operation::Nop => format_operation_control(op),
+        Operation::Mov { .. }
+        | Operation::MovImm { .. }
+        | Operation::MovSr { .. }
+        | Operation::Unknown { .. } => format_operation_move(op),
+    }
+}
+
+fn format_operation_integer(op: &Operation) -> String {
     match op {
         Operation::Iadd { rd, rs1, rs2 } => format!("iadd r{rd}, r{rs1}, r{rs2}"),
         Operation::Isub { rd, rs1, rs2 } => format!("isub r{rd}, r{rs1}, r{rs2}"),
@@ -54,7 +139,12 @@ fn format_operation(op: &Operation) -> String {
         Operation::Imin { rd, rs1, rs2 } => format!("imin r{rd}, r{rs1}, r{rs2}"),
         Operation::Imax { rd, rs1, rs2 } => format!("imax r{rd}, r{rs1}, r{rs2}"),
         Operation::Iclamp { rd, rs1, rs2, rs3 } => format!("iclamp r{rd}, r{rs1}, r{rs2}, r{rs3}"),
+        _ => unreachable!("format_operation routes only integer operations here"),
+    }
+}
 
+fn format_operation_float(op: &Operation) -> String {
+    match op {
         Operation::Fadd { rd, rs1, rs2 } => format!("fadd r{rd}, r{rs1}, r{rs2}"),
         Operation::Fsub { rd, rs1, rs2 } => format!("fsub r{rd}, r{rs1}, r{rs2}"),
         Operation::Fmul { rd, rs1, rs2 } => format!("fmul r{rd}, r{rs1}, r{rs2}"),
@@ -67,7 +157,12 @@ fn format_operation(op: &Operation) -> String {
         Operation::Fclamp { rd, rs1, rs2, rs3 } => format!("fclamp r{rd}, r{rs1}, r{rs2}, r{rs3}"),
         Operation::Fsqrt { rd, rs1 } => format!("fsqrt r{rd}, r{rs1}"),
         Operation::FUnary { op, rd, rs1 } => format!("{} r{rd}, r{rs1}", funary_mnemonic(*op)),
+        _ => unreachable!("format_operation routes only float operations here"),
+    }
+}
 
+fn format_operation_half(op: &Operation) -> String {
+    match op {
         Operation::F16 {
             op,
             rd,
@@ -123,6 +218,12 @@ fn format_operation(op: &Operation) -> String {
                 format!("{} r{rd}, r{rs1}, r{rs2}", bf16_packed_mnemonic(*op))
             }
         }
+        _ => unreachable!("format_operation routes only half operations here"),
+    }
+}
+
+fn format_operation_double(op: &Operation) -> String {
+    match op {
         Operation::F64 {
             op,
             rd,
@@ -143,7 +244,12 @@ fn format_operation(op: &Operation) -> String {
                 format!("{} r{rd}, r{rs1}", f64_divsqrt_mnemonic(*op))
             }
         }
+        _ => unreachable!("format_operation routes only double operations here"),
+    }
+}
 
+fn format_operation_bitwise(op: &Operation) -> String {
+    match op {
         Operation::And { rd, rs1, rs2 } => format!("and r{rd}, r{rs1}, r{rs2}"),
         Operation::Or { rd, rs1, rs2 } => format!("or r{rd}, r{rs1}, r{rs2}"),
         Operation::Xor { rd, rs1, rs2 } => format!("xor r{rd}, r{rs1}, r{rs2}"),
@@ -159,7 +265,12 @@ fn format_operation(op: &Operation) -> String {
             rs3,
             rs4,
         } => format_bitop(*op, *rd, *rs1, *rs2, *rs3, *rs4),
+        _ => unreachable!("format_operation routes only bitwise operations here"),
+    }
+}
 
+fn format_operation_compare(op: &Operation) -> String {
+    match op {
         Operation::Icmp { op, pd, rs1, rs2 } => {
             format!("icmp_{} p{pd}, r{rs1}, r{rs2}", cmp_suffix(*op))
         }
@@ -169,12 +280,16 @@ fn format_operation(op: &Operation) -> String {
         Operation::Fcmp { op, pd, rs1, rs2 } => {
             format!("fcmp_{} p{pd}, r{rs1}, r{rs2}", cmp_suffix(*op))
         }
-
         Operation::Select { rd, ps, rs1, rs2 } => format!("select r{rd}, p{ps}, r{rs1}, r{rs2}"),
         Operation::Cvt { cvt_type, rd, rs1 } => {
             format!("{} r{rd}, r{rs1}", cvt_mnemonic(*cvt_type))
         }
+        _ => unreachable!("format_operation routes only compare operations here"),
+    }
+}
 
+fn format_operation_load_store(op: &Operation) -> String {
+    match op {
         Operation::LocalLoad { width, rd, addr } => {
             format!("local_load_{} r{rd}, r{addr}", width_suffix(*width))
         }
@@ -187,7 +302,12 @@ fn format_operation(op: &Operation) -> String {
         Operation::DeviceStore { width, addr, value } => {
             format!("device_store_{} r{addr}, r{value}", width_suffix(*width))
         }
+        _ => unreachable!("format_operation routes only load_store operations here"),
+    }
+}
 
+fn format_operation_atomic(op: &Operation) -> String {
+    match op {
         Operation::LocalAtomic {
             op,
             rd,
@@ -249,7 +369,12 @@ fn format_operation(op: &Operation) -> String {
                 format!("atomic_cas.{scope_str} r{addr}, r{expected}, r{desired}")
             }
         }
+        _ => unreachable!("format_operation routes only atomic operations here"),
+    }
+}
 
+fn format_operation_wave(op: &Operation) -> String {
+    match op {
         Operation::WaveOp { op, rd, rs1, rs2 } => {
             if let Some(rs2) = rs2 {
                 format!("{} r{rd}, r{rs1}, r{rs2}", wave_op_mnemonic(*op))
@@ -262,7 +387,16 @@ fn format_operation(op: &Operation) -> String {
         }
         Operation::WaveBallot { rd, ps } => format!("wave_ballot r{rd}, p{ps}"),
         Operation::WaveVote { op, pd, ps } => format!("{} p{pd}, p{ps}", wave_op_mnemonic(*op)),
+        Operation::MmaLoadA { rd, rs1, rs2 } => format!("mma_load_a r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaLoadB { rd, rs1, rs2 } => format!("mma_load_b r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaStoreC { rd, rs1, rs2 } => format!("mma_store_c r{rd}, r{rs1}, r{rs2}"),
+        Operation::MmaCompute { rd, rs1, rs2 } => format!("mma_compute r{rd}, r{rs1}, r{rs2}"),
+        _ => unreachable!("format_operation routes only wave operations here"),
+    }
+}
 
+fn format_operation_control(op: &Operation) -> String {
+    match op {
         Operation::If { ps } => format!("if p{ps}"),
         Operation::Else => "else".to_string(),
         Operation::Endif => "endif".to_string(),
@@ -271,7 +405,6 @@ fn format_operation(op: &Operation) -> String {
         Operation::Continue { ps } => format!("continue p{ps}"),
         Operation::Endloop => "endloop".to_string(),
         Operation::Call { target } => format!("call loc_{target:04X}"),
-
         Operation::Return => "return".to_string(),
         Operation::Halt => "halt".to_string(),
         Operation::Barrier => "barrier".to_string(),
@@ -280,7 +413,12 @@ fn format_operation(op: &Operation) -> String {
         Operation::FenceAcqRel { scope } => format!("fence_acq_rel.{}", scope_suffix(*scope)),
         Operation::Wait => "wait".to_string(),
         Operation::Nop => "nop".to_string(),
+        _ => unreachable!("format_operation routes only control operations here"),
+    }
+}
 
+fn format_operation_move(op: &Operation) -> String {
+    match op {
         Operation::Mov { rd, rs1 } => format!("mov r{rd}, r{rs1}"),
         Operation::MovImm { rd, imm } => {
             if *imm <= 9 {
@@ -293,12 +431,6 @@ fn format_operation(op: &Operation) -> String {
             let sr_name = special_register_name(*sr_index).unwrap_or("sr_unknown");
             format!("mov r{rd}, {sr_name}")
         }
-
-        Operation::MmaLoadA { rd, rs1, rs2 } => format!("mma_load_a r{rd}, r{rs1}, r{rs2}"),
-        Operation::MmaLoadB { rd, rs1, rs2 } => format!("mma_load_b r{rd}, r{rs1}, r{rs2}"),
-        Operation::MmaStoreC { rd, rs1, rs2 } => format!("mma_store_c r{rd}, r{rs1}, r{rs2}"),
-        Operation::MmaCompute { rd, rs1, rs2 } => format!("mma_compute r{rd}, r{rs1}, r{rs2}"),
-
         Operation::Unknown {
             opcode,
             word0,
@@ -310,6 +442,7 @@ fn format_operation(op: &Operation) -> String {
                 format!(".unknown 0x{opcode:02X} ; {word0:08X}")
             }
         }
+        _ => unreachable!("format_operation routes only move operations here"),
     }
 }
 
@@ -556,7 +689,7 @@ mod tests {
             size: 8,
             operation: Operation::MovImm {
                 rd: 7,
-                imm: 0xDEADBEEF,
+                imm: 0xDEAD_BEEF,
             },
             predicate: 0,
             predicate_negated: false,

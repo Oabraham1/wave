@@ -1,21 +1,19 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIR expression types for WAVE GPU kernels.
-//!
-//! Expressions represent computations that produce values, including
-//! arithmetic, memory access, GPU intrinsics, and type conversions.
+//! HIR expression types for WAVE GPU kernels. Expressions represent computations that produce
+//! values, including arithmetic, memory access, GPU intrinsics, and type conversions.
 
 use super::types::{AddressSpace, Type};
 
 /// Dimension index for multi-dimensional GPU dispatch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Dimension {
-    /// X dimension (index 0).
+    /// X dimension, index 0.
     X,
-    /// Y dimension (index 1).
+    /// Y dimension, index 1.
     Y,
-    /// Z dimension (index 2).
+    /// Z dimension, index 2.
     Z,
 }
 
@@ -183,7 +181,7 @@ pub enum Expr {
     WorkgroupSize(Dimension),
     /// Lane ID within wave.
     LaneId,
-    /// Wave width (number of lanes).
+    /// Wave width, number of lanes.
     WaveWidth,
     /// Load from memory.
     Load {
@@ -272,10 +270,10 @@ mod tests {
     #[test]
     fn test_literal_variants() {
         let int_lit = Literal::Int(42);
-        let float_lit = Literal::Float(3.14);
+        let float_lit = Literal::Float(1.25);
         let bool_lit = Literal::Bool(true);
         assert_eq!(int_lit, Literal::Int(42));
-        assert_eq!(float_lit, Literal::Float(3.14));
+        assert_eq!(float_lit, Literal::Float(1.25));
         assert_eq!(bool_lit, Literal::Bool(true));
     }
 }

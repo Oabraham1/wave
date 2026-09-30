@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for memory operation codegen. Verifies global and shared memory loads,
-//!
-//! stores, and atomic operations emit correct PTX instructions with proper address
-//! computation (64-bit for global, 32-bit for shared) and memory space qualifiers.
+//! Check PTX memory widths, address spaces, and atomic operations.
 
 use wave_ptx::compile;
 
@@ -52,13 +49,12 @@ fn extended_scope(
 fn extended3_scope(
     opcode: u8,
     rd: u8,
-    rs1: u8,
-    rs2: u8,
-    rs3: u8,
+    sources: [u8; 3],
     modifier: u8,
     scope: u8,
     pred: u8,
 ) -> Vec<u8> {
+    let [rs1, rs2, rs3] = sources;
     let mut v = encode_word0(opcode, rd, rs1, modifier, pred)
         .to_le_bytes()
         .to_vec();
@@ -79,9 +75,9 @@ fn build_wbin(name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -169,13 +165,13 @@ fn test_device_atomic_add() {
 
 #[test]
 fn test_device_atomic_cas() {
-    let ptx = compile_instrs(&extended3_scope(0x3D, 5, 3, 4, 6, 8, 2, 0));
+    let ptx = compile_instrs(&extended3_scope(0x3D, 5, [3, 4, 6], 8, 2, 0));
     assert!(ptx.contains("atom.global.cas.b32"), "PTX: {ptx}");
 }
 
 #[test]
 fn test_fence_cta() {
-    // fence_acquire modifier = 3 + 8 = 11, scope=1 (CTA) in word1
+    // fence_acquire modifier = 3 + 8 = 11, scope=1, CTA, in word1
     let mut code = encode_word0(0x3F, 0, 0, 11, 0).to_le_bytes().to_vec();
     code.extend_from_slice(&1u32.to_le_bytes()); // scope=1 in word1
     let ptx = compile_instrs(&code);
@@ -184,7 +180,7 @@ fn test_fence_cta() {
 
 #[test]
 fn test_fence_gl() {
-    // fence_acquire modifier = 3 + 8 = 11, scope=2 (Device/GL) in word1
+    // fence_acquire modifier = 3 + 8 = 11, scope=2, Device/GL, in word1
     let mut code = encode_word0(0x3F, 0, 0, 11, 0).to_le_bytes().to_vec();
     code.extend_from_slice(&2u32.to_le_bytes()); // scope=2 in word1
     let ptx = compile_instrs(&code);

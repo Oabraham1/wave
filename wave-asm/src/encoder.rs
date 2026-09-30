@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Instruction encoder. Converts AST instructions to 32-bit or 64-bit machine words.
-//!
-//! Handles operand encoding, predication bits, and resolves label references via
-//! the symbol table. Returns `EncodedInstruction` (single or extended format).
+//! Encode AST instructions into WAVE words, including predicates and resolved labels.
 
 use crate::ast::{
     Immediate, Instruction, Operand, Predicate, Register, RegisterKind, Span, Spanned,
@@ -51,6 +48,7 @@ impl EncodedInstruction {
     }
 }
 
+#[derive(Debug)]
 pub struct Encoder<'a> {
     symbols: &'a SymbolTable,
     current_offset: u32,
@@ -65,6 +63,11 @@ impl<'a> Encoder<'a> {
         }
     }
 
+    /// Encode an instruction and advance the byte offset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unknown opcodes, invalid operands, unresolved labels, or binary size overflow.
     pub fn encode_instruction(
         &mut self,
         inst: &Instruction,
@@ -76,15 +79,18 @@ impl<'a> Encoder<'a> {
                 span,
             })?;
 
-        self.validate_operand_count(inst, sig, span)?;
+        Self::validate_operand_count(inst, sig, span)?;
 
         let encoded = self.encode_with_signature(inst, sig, span)?;
-        self.current_offset += encoded.size_bytes() as u32;
+        let size = if encoded.word1.is_some() { 8 } else { 4 };
+        self.current_offset = self
+            .current_offset
+            .checked_add(size)
+            .ok_or(AssemblerError::BinaryTooLarge)?;
         Ok(encoded)
     }
 
     fn validate_operand_count(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         span: Span,
@@ -125,7 +131,7 @@ impl<'a> Encoder<'a> {
         let opcode = sig.opcode.as_u8();
         let mut word0 = u32::from(opcode) << OPCODE_SHIFT;
 
-        word0 |= self.encode_predicate(&inst.predicate);
+        word0 |= Self::encode_predicate(inst.predicate.as_ref());
 
         if let Some(modifier) = sig.modifier {
             word0 |= (u32::from(modifier) & MODIFIER_MASK) << MODIFIER_SHIFT;
@@ -133,18 +139,18 @@ impl<'a> Encoder<'a> {
 
         match sig.opcode {
             Opcode::LocalAtomic | Opcode::DeviceAtomic => {
-                self.encode_atomic(inst, sig, word0, span)
+                Self::encode_atomic(inst, sig, word0, span)
             }
-            Opcode::Misc => self.encode_misc(inst, sig, word0, span),
+            Opcode::Misc => Self::encode_misc(inst, sig, word0, span),
             Opcode::Control => self.encode_control(inst, sig, word0, span),
-            Opcode::WaveOp => self.encode_wave_op(inst, sig, word0, span),
-            Opcode::Select => self.encode_select(inst, word0, span),
-            _ if sig.extended => self.encode_extended(inst, sig, word0, span),
-            _ => self.encode_base(inst, sig, word0, span),
+            Opcode::WaveOp => Self::encode_wave_op(inst, sig, word0, span),
+            Opcode::Select => Self::encode_select(inst, word0, span),
+            _ if sig.extended => Self::encode_extended(inst, sig, word0, span),
+            _ => Self::encode_base(inst, sig, word0, span),
         }
     }
 
-    fn encode_predicate(&self, pred: &Option<Predicate>) -> u32 {
+    fn encode_predicate(pred: Option<&Predicate>) -> u32 {
         match pred {
             Some(p) => {
                 let reg = u32::from(p.register) & PRED_REG_MASK;
@@ -156,7 +162,6 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_base(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         mut word0: u32,
@@ -168,24 +173,24 @@ impl<'a> Encoder<'a> {
         for (i, (kind, operand)) in sig.operands.iter().zip(inst.operands.iter()).enumerate() {
             match kind {
                 OperandKind::Rd => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word0 |= u32::from(reg) << RD_SHIFT;
                 }
                 OperandKind::Rs1 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word0 |= u32::from(reg) << RS1_SHIFT;
                 }
                 OperandKind::Rs2 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
                     needs_extended = true;
                 }
                 OperandKind::Pd => {
-                    let pred = self.expect_predicate(operand)?;
+                    let pred = Self::expect_predicate(operand)?;
                     word0 |= u32::from(pred) << RD_SHIFT;
                 }
                 OperandKind::PdSrc => {
-                    let pred = self.expect_predicate(operand)?;
+                    let pred = Self::expect_predicate(operand)?;
                     if i == 0 {
                         word0 |= u32::from(pred) << RS1_SHIFT;
                     } else {
@@ -194,7 +199,7 @@ impl<'a> Encoder<'a> {
                     }
                 }
                 OperandKind::Scope => {
-                    let scope = self.expect_scope(operand)?;
+                    let scope = Self::expect_scope(operand)?;
                     word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                     needs_extended = true;
                 }
@@ -215,7 +220,6 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_extended(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         mut word0: u32,
@@ -226,35 +230,35 @@ impl<'a> Encoder<'a> {
         for (i, (kind, operand)) in sig.operands.iter().zip(inst.operands.iter()).enumerate() {
             match kind {
                 OperandKind::Rd => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word0 |= u32::from(reg) << RD_SHIFT;
                 }
                 OperandKind::Rs1 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word0 |= u32::from(reg) << RS1_SHIFT;
                 }
                 OperandKind::Rs2 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
                 }
                 OperandKind::Rs3 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word1 |= u32::from(reg) << EXTENDED_RS3_SHIFT;
                 }
                 OperandKind::Rs4 => {
-                    let reg = self.expect_register(operand)?;
+                    let reg = Self::expect_register(operand)?;
                     word1 |= u32::from(reg) << EXTENDED_RS4_SHIFT;
                 }
                 OperandKind::Imm32 => {
-                    let imm = self.expect_immediate(operand)?;
+                    let imm = Self::expect_immediate(operand)?;
                     word1 = imm;
                 }
                 OperandKind::Pd => {
-                    let pred = self.expect_predicate(operand)?;
+                    let pred = Self::expect_predicate(operand)?;
                     word0 |= u32::from(pred) << RD_SHIFT;
                 }
                 OperandKind::PdSrc => {
-                    let pred = self.expect_predicate(operand)?;
+                    let pred = Self::expect_predicate(operand)?;
                     if i == 0 {
                         word0 |= u32::from(pred) << RS1_SHIFT;
                     } else {
@@ -262,7 +266,7 @@ impl<'a> Encoder<'a> {
                     }
                 }
                 OperandKind::Scope => {
-                    let scope = self.expect_scope(operand)?;
+                    let scope = Self::expect_scope(operand)?;
                     word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                 }
                 _ => {}
@@ -273,7 +277,6 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_atomic(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         mut word0: u32,
@@ -294,28 +297,28 @@ impl<'a> Encoder<'a> {
             match kind {
                 OperandKind::OptionalRd => {
                     if !is_non_returning {
-                        let reg = self.expect_register(&inst.operands[operand_idx])?;
+                        let reg = Self::expect_register(&inst.operands[operand_idx])?;
                         word0 |= u32::from(reg) << RD_SHIFT;
                         operand_idx += 1;
                     }
                 }
                 OperandKind::Rs1 => {
-                    let reg = self.expect_register(&inst.operands[operand_idx])?;
+                    let reg = Self::expect_register(&inst.operands[operand_idx])?;
                     word0 |= u32::from(reg) << RS1_SHIFT;
                     operand_idx += 1;
                 }
                 OperandKind::Rs2 => {
-                    let reg = self.expect_register(&inst.operands[operand_idx])?;
+                    let reg = Self::expect_register(&inst.operands[operand_idx])?;
                     word1 |= u32::from(reg) << EXTENDED_RS2_SHIFT;
                     operand_idx += 1;
                 }
                 OperandKind::Rs3 if is_cas => {
-                    let reg = self.expect_register(&inst.operands[operand_idx])?;
+                    let reg = Self::expect_register(&inst.operands[operand_idx])?;
                     word1 |= u32::from(reg) << EXTENDED_RS3_SHIFT;
                     operand_idx += 1;
                 }
                 OperandKind::Scope => {
-                    let scope = self.expect_scope(&inst.operands[operand_idx])?;
+                    let scope = Self::expect_scope(&inst.operands[operand_idx])?;
                     word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                     operand_idx += 1;
                 }
@@ -328,7 +331,7 @@ impl<'a> Encoder<'a> {
             }
         }
 
-        // All atomics now need extended word for rs2
+        // Atomic instructions encode rs2 in the extended word.
         Ok(EncodedInstruction::extended(word0, word1))
     }
 
@@ -350,7 +353,7 @@ impl<'a> Encoder<'a> {
                 {
                     let mut word1: u32 = 0;
                     if !inst.operands.is_empty() {
-                        let scope = self.expect_scope(&inst.operands[0])?;
+                        let scope = Self::expect_scope(&inst.operands[0])?;
                         word1 |= (scope as u32) << EXTENDED_SCOPE_SHIFT;
                     }
                     Ok(EncodedInstruction::extended(word0, word1))
@@ -364,13 +367,13 @@ impl<'a> Encoder<'a> {
                     || op == ControlOp::Continue as u8 =>
                 {
                     if !inst.operands.is_empty() {
-                        let pred = self.expect_predicate(&inst.operands[0])?;
+                        let pred = Self::expect_predicate(&inst.operands[0])?;
                         word0 |= u32::from(pred) << RS1_SHIFT;
                     }
                     Ok(EncodedInstruction::single(word0))
                 }
                 op if op == ControlOp::Call as u8 => {
-                    let label = self.expect_label(&inst.operands[0])?;
+                    let label = Self::expect_label(&inst.operands[0])?;
                     let target = self.symbols.resolve(&label).ok_or_else(|| {
                         AssemblerError::UndefinedLabel {
                             label: label.clone(),
@@ -385,7 +388,6 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_wave_op(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         mut word0: u32,
@@ -394,33 +396,33 @@ impl<'a> Encoder<'a> {
         let modifier = sig.modifier.unwrap_or(0);
 
         if modifier == WaveOpType::Ballot as u8 {
-            let rd = self.expect_register(&inst.operands[0])?;
-            let pred = self.expect_predicate(&inst.operands[1])?;
+            let rd = Self::expect_register(&inst.operands[0])?;
+            let pred = Self::expect_predicate(&inst.operands[1])?;
             word0 |= u32::from(rd) << RD_SHIFT;
             word0 |= u32::from(pred) << RS1_SHIFT;
             Ok(EncodedInstruction::single(word0))
         } else if modifier == WaveOpType::Any as u8 || modifier == WaveOpType::All as u8 {
-            let pd = self.expect_predicate(&inst.operands[0])?;
-            let ps = self.expect_predicate(&inst.operands[1])?;
+            let pd = Self::expect_predicate(&inst.operands[0])?;
+            let ps = Self::expect_predicate(&inst.operands[1])?;
             word0 |= u32::from(pd) << RD_SHIFT;
             word0 |= u32::from(ps) << RS1_SHIFT;
             Ok(EncodedInstruction::single(word0))
         } else if modifier >= 8 {
             // Reduce ops: rd, rs1 only - no rs2
-            let rd = self.expect_register(&inst.operands[0])?;
-            let rs1 = self.expect_register(&inst.operands[1])?;
+            let rd = Self::expect_register(&inst.operands[0])?;
+            let rs1 = Self::expect_register(&inst.operands[1])?;
             word0 |= u32::from(rd) << RD_SHIFT;
             word0 |= u32::from(rs1) << RS1_SHIFT;
             Ok(EncodedInstruction::single(word0))
         } else {
             // Shuffle/broadcast variants: rd, rs1 in base, rs2 in extended
-            let rd = self.expect_register(&inst.operands[0])?;
-            let rs1 = self.expect_register(&inst.operands[1])?;
+            let rd = Self::expect_register(&inst.operands[0])?;
+            let rs1 = Self::expect_register(&inst.operands[1])?;
             word0 |= u32::from(rd) << RD_SHIFT;
             word0 |= u32::from(rs1) << RS1_SHIFT;
             let mut word1: u32 = 0;
             if inst.operands.len() > 2 {
-                let rs2 = self.expect_register(&inst.operands[2])?;
+                let rs2 = Self::expect_register(&inst.operands[2])?;
                 word1 |= u32::from(rs2) << EXTENDED_RS2_SHIFT;
             }
             Ok(EncodedInstruction::extended(word0, word1))
@@ -428,15 +430,14 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_select(
-        &self,
         inst: &Instruction,
         mut word0: u32,
         _span: Span,
     ) -> Result<EncodedInstruction, AssemblerError> {
-        let rd = self.expect_register(&inst.operands[0])?;
-        let pd = self.expect_predicate(&inst.operands[1])?;
-        let rs1 = self.expect_register(&inst.operands[2])?;
-        let rs2 = self.expect_register(&inst.operands[3])?;
+        let rd = Self::expect_register(&inst.operands[0])?;
+        let pd = Self::expect_predicate(&inst.operands[1])?;
+        let rs1 = Self::expect_register(&inst.operands[2])?;
+        let rs2 = Self::expect_register(&inst.operands[3])?;
 
         word0 |= u32::from(rd) << RD_SHIFT;
         word0 |= u32::from(pd) << RS1_SHIFT;
@@ -447,7 +448,6 @@ impl<'a> Encoder<'a> {
     }
 
     fn encode_misc(
-        &self,
         inst: &Instruction,
         sig: &InstructionSignature,
         mut word0: u32,
@@ -474,21 +474,21 @@ impl<'a> Encoder<'a> {
 
         match effective_modifier {
             m if m == MiscOp::Mov as u8 => {
-                let rd = self.expect_register(&inst.operands[0])?;
-                let rs1 = self.expect_register(&inst.operands[1])?;
+                let rd = Self::expect_register(&inst.operands[0])?;
+                let rs1 = Self::expect_register(&inst.operands[1])?;
                 word0 |= u32::from(rd) << RD_SHIFT;
                 word0 |= u32::from(rs1) << RS1_SHIFT;
                 Ok(EncodedInstruction::single(word0))
             }
             m if m == MiscOp::MovImm as u8 => {
-                let rd = self.expect_register(&inst.operands[0])?;
-                let imm = self.expect_immediate(&inst.operands[1])?;
+                let rd = Self::expect_register(&inst.operands[0])?;
+                let imm = Self::expect_immediate(&inst.operands[1])?;
                 word0 |= u32::from(rd) << RD_SHIFT;
                 Ok(EncodedInstruction::extended(word0, imm))
             }
             m if m == MiscOp::MovSr as u8 => {
-                let rd = self.expect_register(&inst.operands[0])?;
-                let sr = self.expect_special_register(&inst.operands[1])?;
+                let rd = Self::expect_register(&inst.operands[0])?;
+                let sr = Self::expect_special_register(&inst.operands[1])?;
                 word0 |= u32::from(rd) << RD_SHIFT;
                 word0 |= u32::from(sr) << RS1_SHIFT;
                 Ok(EncodedInstruction::single(word0))
@@ -497,7 +497,7 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn expect_special_register(&self, operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
+    fn expect_special_register(operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
         match &operand.node {
             Operand::Register(Register {
                 kind: RegisterKind::Special,
@@ -508,7 +508,7 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn expect_register(&self, operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
+    fn expect_register(operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
         match &operand.node {
             Operand::Register(reg) => {
                 if reg.kind == RegisterKind::Predicate {
@@ -520,7 +520,7 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn expect_predicate(&self, operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
+    fn expect_predicate(operand: &Spanned<Operand>) -> Result<u8, AssemblerError> {
         match &operand.node {
             Operand::Register(Register {
                 kind: RegisterKind::Predicate,
@@ -531,7 +531,7 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn expect_immediate(&self, operand: &Spanned<Operand>) -> Result<u32, AssemblerError> {
+    fn expect_immediate(operand: &Spanned<Operand>) -> Result<u32, AssemblerError> {
         match &operand.node {
             Operand::Immediate(imm) => imm.as_u32().ok_or(AssemblerError::ImmediateOutOfRange {
                 value: match imm {
@@ -544,14 +544,14 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    fn expect_scope(&self, operand: &Spanned<Operand>) -> Result<Scope, AssemblerError> {
+    fn expect_scope(operand: &Spanned<Operand>) -> Result<Scope, AssemblerError> {
         match &operand.node {
             Operand::Scope(s) => Ok(*s),
             _ => Err(AssemblerError::ExpectedScope { span: operand.span }),
         }
     }
 
-    fn expect_label(&self, operand: &Spanned<Operand>) -> Result<String, AssemblerError> {
+    fn expect_label(operand: &Spanned<Operand>) -> Result<String, AssemblerError> {
         match &operand.node {
             Operand::Label(l) => Ok(l.clone()),
             _ => Err(AssemblerError::ExpectedLabel { span: operand.span }),
@@ -559,6 +559,11 @@ impl<'a> Encoder<'a> {
     }
 }
 
+/// Encode an instruction without a symbol table.
+///
+/// # Errors
+///
+/// Returns an error for unknown opcodes, invalid operands, or unresolved labels.
 pub fn encode_instruction_standalone(
     inst: &Instruction,
     span: Span,
@@ -625,8 +630,8 @@ mod tests {
         assert_eq!(opcode, Opcode::Iadd as u32);
         let pred_reg = (encoded.word0 >> PRED_REG_SHIFT) & PRED_REG_MASK;
         assert_eq!(pred_reg, 1);
-        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
-        assert_eq!(pred_neg, 0);
+        let negate_predicate = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
+        assert_eq!(negate_predicate, 0);
     }
 
     #[test]
@@ -636,8 +641,8 @@ mod tests {
         assert_eq!(opcode, Opcode::Fadd as u32);
         let pred_reg = (encoded.word0 >> PRED_REG_SHIFT) & PRED_REG_MASK;
         assert_eq!(pred_reg, 2);
-        let pred_neg = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
-        assert_eq!(pred_neg, 1);
+        let negate_predicate = (encoded.word0 >> PRED_NEG_SHIFT) & PRED_NEG_MASK;
+        assert_eq!(negate_predicate, 1);
     }
 
     #[test]

@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Wave shuffle and collective operations. Implements cross-lane communication
-//!
-//! (shuffle, broadcast), vote operations (ballot, any, all), and reductions
-//! (prefix sum, reduce add/min/max). Operates only on active threads.
+//! Wave shuffle and collective operations. Implements cross-lane communication, shuffle,
+//! broadcast, vote operations, ballot, any, all, and reductions, prefix sum, reduce add/min/max.
+//! Operates only on active threads.
 
 use crate::wave::Wave;
 
@@ -12,7 +11,7 @@ pub fn wave_shuffle(wave: &mut Wave, rd: u8, rs1: u8, rs_lane: u8) {
     let wave_width = wave.wave_width;
     let active_mask = wave.active_mask;
 
-    let mut results = vec![0u32; wave_width as usize];
+    let mut results = [0u32; 64];
 
     for lane in 0..wave_width {
         if (active_mask & (1u64 << lane)) != 0 {
@@ -34,7 +33,7 @@ pub fn wave_shuffle_up(wave: &mut Wave, rd: u8, rs1: u8, rs_delta: u8) {
     let wave_width = wave.wave_width;
     let active_mask = wave.active_mask;
 
-    let mut results = vec![0u32; wave_width as usize];
+    let mut results = [0u32; 64];
 
     for lane in 0..wave_width {
         if (active_mask & (1u64 << lane)) != 0 {
@@ -57,13 +56,12 @@ pub fn wave_shuffle_down(wave: &mut Wave, rd: u8, rs1: u8, rs_delta: u8) {
     let wave_width = wave.wave_width;
     let active_mask = wave.active_mask;
 
-    let mut results = vec![0u32; wave_width as usize];
+    let mut results = [0u32; 64];
 
     for lane in 0..wave_width {
         if (active_mask & (1u64 << lane)) != 0 {
             let delta = wave.threads[lane as usize].read_register(rs_delta);
-            let src_lane = lane + delta;
-            if src_lane < wave_width {
+            if let Some(src_lane) = lane.checked_add(delta).filter(|&src| src < wave_width) {
                 results[lane as usize] = wave.threads[src_lane as usize].read_register(rs1);
             }
         }
@@ -80,7 +78,7 @@ pub fn wave_shuffle_xor(wave: &mut Wave, rd: u8, rs1: u8, rs_mask: u8) {
     let wave_width = wave.wave_width;
     let active_mask = wave.active_mask;
 
-    let mut results = vec![0u32; wave_width as usize];
+    let mut results = [0u32; 64];
 
     for lane in 0..wave_width {
         if (active_mask & (1u64 << lane)) != 0 {
@@ -136,7 +134,8 @@ pub fn wave_ballot(wave: &mut Wave, rd: u8, pd_src: u8) {
         }
     }
 
-    let ballot_lo = ballot as u32;
+    let [a, b, c, d, ..] = ballot.to_le_bytes();
+    let ballot_lo = u32::from_le_bytes([a, b, c, d]);
 
     for lane in 0..wave_width {
         if (active_mask & (1u64 << lane)) != 0 {
@@ -259,10 +258,20 @@ mod tests {
     use super::*;
 
     fn create_test_wave() -> Wave {
-        let mut wave = Wave::new(8, 32, 0, [0, 0, 0], [8, 1, 1], [1, 1, 1], 0, 8, 1);
+        let mut wave = Wave::new(crate::wave::WaveConfig {
+            wave_width: 8,
+            register_count: 32,
+            wave_id: 0,
+            workgroup_id: [0, 0, 0],
+            workgroup_size: [8, 1, 1],
+            grid_size: [1, 1, 1],
+            base_thread_index: 0,
+            total_threads_in_workgroup: 8,
+            num_waves: 1,
+        });
         for i in 0..8 {
-            wave.threads[i].write_register(0, (i * 10) as u32);
-            wave.threads[i].write_register(1, i as u32);
+            wave.threads[i].write_register(0, u32::try_from(i * 10).unwrap());
+            wave.threads[i].write_register(1, u32::try_from(i).unwrap());
         }
         wave
     }
@@ -272,7 +281,7 @@ mod tests {
         let mut wave = create_test_wave();
 
         for i in 0..8 {
-            wave.threads[i].write_register(2, (7 - i) as u32);
+            wave.threads[i].write_register(2, u32::try_from(7 - i).unwrap());
         }
 
         wave_shuffle(&mut wave, 3, 0, 2);
@@ -322,7 +331,7 @@ mod tests {
         wave_ballot(&mut wave, 5, 0);
 
         for i in 0..8 {
-            assert_eq!(wave.threads[i].read_register(5), 0b01010101);
+            assert_eq!(wave.threads[i].read_register(5), 0b0101_0101);
         }
     }
 
@@ -384,7 +393,7 @@ mod tests {
         wave_prefix_sum(&mut wave, 1, 0);
 
         for i in 0..8 {
-            assert_eq!(wave.threads[i].read_register(1), i as u32);
+            assert_eq!(wave.threads[i].read_register(1), u32::try_from(i).unwrap());
         }
     }
 
@@ -404,7 +413,7 @@ mod tests {
         let mut wave = create_test_wave();
 
         for i in 0..8 {
-            wave.threads[i].write_register(0, (100 - i * 5) as u32);
+            wave.threads[i].write_register(0, u32::try_from(100 - i * 5).unwrap());
         }
 
         wave_reduce_min(&mut wave, 5, 0);
@@ -428,7 +437,7 @@ mod tests {
     #[test]
     fn test_wave_ops_respect_active_mask() {
         let mut wave = create_test_wave();
-        wave.active_mask = 0b00001111;
+        wave.active_mask = 0b0000_1111;
 
         for i in 0..8 {
             wave.threads[i].write_register(0, 1);
@@ -438,5 +447,51 @@ mod tests {
 
         assert_eq!(wave.threads[0].read_register(5), 4);
         assert_eq!(wave.threads[4].read_register(5), 0);
+    }
+    #[test]
+    fn shuffle_reads_sources_before_overlapping_writes() {
+        for width in [1, 4, 32, 64] {
+            let mut wave = Wave::new(crate::wave::WaveConfig {
+                wave_width: width,
+                register_count: 4,
+                wave_id: 0,
+                workgroup_id: [0; 3],
+                workgroup_size: [width, 1, 1],
+                grid_size: [1; 3],
+                base_thread_index: 0,
+                total_threads_in_workgroup: width,
+                num_waves: 1,
+            });
+            for (lane, thread) in wave.threads.iter_mut().enumerate() {
+                thread.write_register(0, u32::try_from(lane).unwrap());
+                thread.write_register(1, width - 1 - u32::try_from(lane).unwrap());
+            }
+            wave_shuffle(&mut wave, 0, 0, 1);
+            for (lane, thread) in wave.threads.iter().enumerate() {
+                assert_eq!(
+                    thread.read_register(0),
+                    width - 1 - u32::try_from(lane).unwrap()
+                );
+            }
+            wave.active_mask = 1;
+            wave_shuffle(&mut wave, 1, 0, 1);
+            assert_eq!(wave.threads[0].read_register(1), 0);
+            if width > 1 {
+                assert_eq!(wave.threads[1].read_register(1), width - 2);
+            }
+        }
+    }
+
+    #[test]
+    fn shuffle_down_handles_large_offsets() {
+        let mut wave = create_test_wave();
+        for thread in &mut wave.threads {
+            thread.write_register(2, u32::MAX);
+        }
+        wave_shuffle_down(&mut wave, 0, 0, 2);
+        assert!(wave
+            .threads
+            .iter()
+            .all(|thread| thread.read_register(0) == 0));
     }
 }

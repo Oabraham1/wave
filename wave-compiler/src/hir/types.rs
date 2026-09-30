@@ -1,18 +1,16 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Type system for WAVE GPU kernels.
-//!
-//! All types must be representable in WAVE registers. The type system
-//! covers scalar types, pointers with address spaces, fixed-size arrays,
-//! and void for functions with no return value.
+//! Type system for WAVE GPU kernels. All types must be representable in WAVE registers. The type
+//! system covers scalar types, pointers with address spaces, fixed-size arrays and void for
+//! functions with no return value.
 
 /// Memory address spaces for GPU memory hierarchy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AddressSpace {
-    /// Per-thread private memory (registers/stack).
+    /// Per-thread private memory, registers/stack.
     Private,
-    /// Workgroup shared memory (scratchpad).
+    /// Workgroup shared memory, scratchpad.
     Local,
     /// Global device memory.
     Device,
@@ -27,11 +25,11 @@ pub enum Type {
     I32,
     /// 32-bit floating point.
     F32,
-    /// 16-bit floating point (stored in lower half of 32-bit register).
+    /// 16-bit floating point, stored in lower half of 32-bit register.
     F16,
-    /// 64-bit floating point (register pair).
+    /// 64-bit floating point, register pair.
     F64,
-    /// Boolean predicate (maps to WAVE predicate register).
+    /// Boolean predicate, maps to WAVE predicate register.
     Bool,
     /// Pointer to memory in a specific address space.
     Ptr(AddressSpace),

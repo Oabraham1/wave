@@ -1,27 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Library root. Public API exposes `assemble()` and `assemble_with_options()` for
-//!
-//! converting .wave source text to .wbin binary. Coordinates lexer, parser,
-//! symbol resolution, instruction encoding, and output generation.
-
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc,
-    clippy::unused_self,
-    clippy::needless_pass_by_value,
-    clippy::unnecessary_wraps,
-    clippy::ref_option,
-    clippy::if_not_else,
-    clippy::struct_excessive_bools,
-    clippy::too_many_lines,
-    clippy::must_use_candidate,
-    clippy::too_many_arguments,
-    clippy::redundant_closure_for_method_calls
-)]
+//! Library root. Public API exposes `assemble()` and `assemble_with_options()` for converting
+//! .wave source text to .wbin binary. Coordinates lexer, parser symbol resolution, instruction
+//! encoding, and output generation.
 
 pub mod ast;
 pub mod diagnostics;
@@ -43,20 +25,31 @@ use output::WbinWriter;
 use parser::Parser;
 use symbols::{build_symbol_table, validate_label_references};
 
+#[derive(Debug)]
 pub struct AssemblerResult {
     pub binary: Vec<u8>,
     pub warnings: Vec<AssemblerWarning>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct AssemblerOptions {
     pub strip_symbols: bool,
 }
 
+/// Assemble source into a WBIN binary.
+///
+/// # Errors
+///
+/// Returns an error for invalid syntax, operands, labels, kernel declarations, or binary size overflow.
 pub fn assemble(source: &str, source_name: &str) -> Result<AssemblerResult, AssemblerError> {
     assemble_with_options(source, source_name, &AssemblerOptions::default())
 }
 
+/// Assemble source with the requested output options.
+///
+/// # Errors
+///
+/// Returns an error for invalid syntax, operands, labels, kernel declarations, or binary size overflow.
 pub fn assemble_with_options(
     source: &str,
     _source_name: &str,
@@ -86,11 +79,11 @@ pub fn assemble_with_options(
                             span: stmt.span,
                         });
                     }
-                    writer.begin_kernel(name.clone());
+                    writer.begin_kernel(name.clone())?;
                     in_kernel = true;
                 }
                 Directive::End => {
-                    writer.end_kernel();
+                    writer.end_kernel()?;
                     in_kernel = false;
                 }
                 Directive::Registers(count) => {

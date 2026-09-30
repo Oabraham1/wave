@@ -1,20 +1,18 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Compiler error types covering all stages of compilation.
-//!
-//! Errors carry enough context for rich error reporting including
-//! source locations, expected vs found types, and suggestions.
+//! Compiler error types covering all stages of compilation. Errors carry enough context for rich
+//! error reporting including source locations, expected vs found types, and suggestions.
 
 use thiserror::Error;
 
 /// Source location in the input file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceLoc {
-    /// Line number (1-based).
-    pub line: u32,
-    /// Column number (1-based).
-    pub col: u32,
+    /// Line number, 1-based.
+    pub line: usize,
+    /// Column number, 1-based.
+    pub col: usize,
 }
 
 /// Compiler error covering all compilation stages.
@@ -50,7 +48,7 @@ pub enum CompileError {
         message: String,
     },
 
-    /// Internal compiler error (bug).
+    /// Internal compiler error, bug.
     #[error("internal error: {message}")]
     InternalError {
         /// Error message.

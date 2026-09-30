@@ -1,84 +1,66 @@
 ---
-title: Memory Scoping
-description: Why WAVE uses scoped acquire/release memory ordering instead of TSO or fully relaxed semantics.
+title: "Memory scoping"
+description: "Memory-ordering scopes, fences, and acquire/release semantics."
 ---
 
-WAVE adopts a scoped acquire/release memory model that threads the needle between TSO (too restrictive for GPU hardware) and fully relaxed semantics (too weak for programmers to reason about correctly).
+WAVE uses scoped acquire/release ordering. A scope identifies the participating threads; an ordering operation constrains the memory accesses visible to them.
 
-## The Memory Model Spectrum
+## The memory model spectrum
 
-GPU memory models sit on a spectrum:
+Ordinary loads and stores do not establish synchronization between threads. Atomics, fences, and barriers provide the ordering required by an algorithm. A backend must preserve those requirements without assuming that its target follows a CPU memory model such as total store order, or TSO.
 
-- **TSO (Total Store Order)**: Used by x86 CPUs. Every store is immediately visible to all threads in program order. Simple to reason about, but GPUs cannot implement it efficiently --- their deep memory hierarchies, per-CU caches, and asynchronous memory controllers would require constant flushing.
+## Four scope levels
 
-- **Fully relaxed**: Loads and stores can be reordered arbitrarily. Maximizes hardware freedom but pushes all correctness burden onto programmers, who must insert fences everywhere.
-
-- **Scoped acquire/release**: The middle ground. Ordering is enforced only when explicitly requested, and only at the scope where it matters.
-
-## Four Scope Levels
-
-WAVE defines four memory scopes, matching the GPU execution hierarchy:
-
-| Scope | Visibility | Use case |
-|-------|-----------|----------|
-| **Wave** | Lanes within the executing wave | Shuffle results, wave-level reductions |
-| **Workgroup** | All waves in the workgroup | Shared local memory synchronization |
-| **Device** | All waves on the GPU | Global memory coordination between workgroups |
-| **System** | GPU and host CPU | Host-device communication, mapped buffers |
+| Scope | Participants | Use case |
+|---|---|---|
+| Wave | Lanes in the executing wave | Ordering within a wave |
+| Workgroup | Threads in the workgroup | Local-memory communication |
+| Device | Threads on the device | Communication between workgroups |
+| System | Device and host participants | Host-device communication |
 
 ### Why four levels?
 
-Each scope corresponds to a distinct hardware boundary with different latency and coherence characteristics:
+A narrower scope can use a more local synchronization mechanism. The cost depends on the device, the memory involved, and preceding accesses. Wave scope does not make all memory accesses implicitly ordered. A backend must reject a scope it cannot implement.
 
-- **Wave scope** is free --- lanes within a wave share a register file or L0 cache. No fence is needed.
-- **Workgroup scope** requires flushing to the local data store (LDS/SLM/threadgroup memory), which is fast (tens of cycles).
-- **Device scope** requires flushing to L2 or device memory, which is slower (hundreds of cycles).
-- **System scope** requires cache invalidation visible to the CPU's coherence domain, which is the most expensive (potentially thousands of cycles).
+## Acquire/release semantics
 
-Collapsing these into fewer levels would force over-synchronization. For example, if workgroup and device scope were merged, every local memory fence would pay the cost of a global fence.
+Acquire orders subsequent accesses after the acquire operation. Release orders preceding accesses before the release operation. Communication between threads also requires a matching synchronization relationship at a scope that includes both participants.
 
-## Acquire/Release Semantics
-
-WAVE uses acquire/release ordering for atomic operations and fences:
-
-- **Acquire**: No subsequent memory operation in the executing thread can be reordered before this operation. Used when reading shared state ("I need to see everything that happened before the release that made this value visible").
-
-- **Release**: No preceding memory operation in the executing thread can be reordered after this operation. Used when publishing shared state ("everything I wrote before this point must be visible to anyone who acquires").
-
-```
-; Producer (wave 0)
-store.global [addr], r0            ; write data
-fence.release.workgroup            ; ensure store is visible at workgroup scope
-store.global.release [flag], r1    ; signal completion
-
-; Consumer (wave 1)
-load.global.acquire r2, [flag]     ; acquire: see all stores before the release
-load.global [addr], r3             ; guaranteed to see r0's value
-```
+A producer publishes data before a release operation. A consumer must observe that publication through the corresponding acquire operation before reading the data. A fence alone does not prove that the producer has finished.
 
 ### Scoped fences
 
-The `scope` field in the instruction encoding (bits [6:5]) specifies the fence scope. A `fence.release.workgroup` ensures visibility only within the workgroup --- it does not flush to device-wide caches. A `fence.release.device` flushes further. The backend maps each scope to the appropriate vendor-specific mechanism.
+Scoped instructions store their scope in word1 bits [1:0]. The assembler accepts `fence_acquire`, `fence_release`, and `fence_acq_rel` followed by a scope.
 
-## Vendor Memory Model Mapping
+```asm
+fence_release workgroup
+fence_acquire device
+fence_acq_rel system
+```
 
-| Concept | NVIDIA | AMD | Intel | Apple |
-|---------|--------|-----|-------|-------|
-| **Formal model** | Axiomatic (published with PTX) | Operational (`S_WAITCNT` counters) | Scoreboard-based | Implicit (async loads) |
-| **Workgroup fence** | `membar.cta` | `s_waitcnt lgkmcnt(0)` | `fence.slm` | `threadgroup_barrier(mem_flags::mem_threadgroup)` |
-| **Device fence** | `membar.gpu` | `s_waitcnt vmcnt(0)` | `fence.ugm` | `threadgroup_barrier(mem_flags::mem_device)` |
-| **System fence** | `membar.sys` | `s_waitcnt vmcnt(0)` + cache flush | `fence.ugm.sys` | Not directly exposed |
-| **Acquire** | `ld.acquire` | `s_waitcnt` + `buffer_gl0_inv` | `load.ugm.ca` | Implicit via load ordering |
-| **Release** | `st.release` | `s_waitcnt` before store | `store.ugm.uc` | Implicit via store ordering |
+These examples show syntax, not a complete producer-consumer protocol.
+
+## Vendor memory model mapping
+
+The backends emit the following fence operations:
+
+| Scope | PTX | HIP | SYCL | Metal |
+|---|---|---|---|---|
+| Wave | `membar.cta` | `__threadfence_block` | Sub-group scope | SIMD-group scope |
+| Workgroup | `membar.cta` | `__threadfence_block` | Workgroup scope | Threadgroup scope |
+| Device | `membar.gl` | `__threadfence` | Device scope | Device scope |
+| System | `membar.sys` | `__threadfence_system` | System scope | Rejected |
+
+SYCL uses `atomic_fence` with the requested order and scope. Metal uses `atomic_thread_fence` with sequentially consistent ordering and both threadgroup and device memory flags. This stronger ordering preserves the requested acquire/release requirements.
 
 ### Key observation
 
-Every vendor provides mechanisms that map naturally to scoped acquire/release. No vendor requires TSO. No vendor leaves ordering fully relaxed at the ISA level --- they all provide some form of scoped fencing. WAVE's model captures the common denominator.
+A memory fence orders accesses without requiring threads to rendezvous. A workgroup barrier coordinates arrival as well as memory ordering. Replacing a device fence with a workgroup barrier changes the participating threads and is not a valid scope translation.
 
-## Why Not Relaxed + Fences Everywhere?
+## Why not relaxed + fences everywhere?
 
-A fully relaxed model with explicit fences would technically work, but it shifts the correctness burden entirely to the programmer (or compiler). Experience from C11/C++11 memory models shows that relaxed atomics are a persistent source of bugs. By making acquire/release the default for atomic operations and providing scoped fences, WAVE ensures that the most common synchronization patterns are correct by construction.
+The instruction contract identifies the required ordering and scope. The programmer or compiler must choose operations that establish the algorithm's synchronization relationship. Acquire/release operations make that relationship explicit; they do not make unsynchronized algorithms correct automatically.
 
-## Why Not TSO?
+## Why not TSO?
 
-TSO would require that every store become globally visible before any subsequent load executes. On a GPU with 64+ active waves per compute unit, each with 32--64 lanes, this would require serializing thousands of concurrent stores through a single coherence point. The performance cost would eliminate the GPU's primary advantage: massive parallelism. Every vendor's hardware is designed around relaxed ordering with explicit synchronization points, and WAVE's model respects this reality.
+GPU programs coordinate at several scopes and use distinct local and device memory spaces. WAVE expresses those requirements directly rather than requiring a target to implement a CPU ordering model.

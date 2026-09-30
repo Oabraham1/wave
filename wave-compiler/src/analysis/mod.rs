@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Analysis passes for MIR: CFG, dominance, liveness, alias, escape, and loop analysis.
-//!
-//! Analysis passes compute information used by optimization passes and
-//! the register allocator. They do not modify the IR.
+//! Analysis passes for MIR: CFG, dominance, liveness, alias, escape, and loop analysis. Analysis
+//! passes compute information used by optimization passes and the register allocator. They do
+//! not modify the IR.
 
 pub mod alias;
 pub mod cfg;

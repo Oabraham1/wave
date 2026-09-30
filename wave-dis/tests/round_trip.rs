@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Round-trip integration tests. Assemble source, disassemble binary, reassemble
-//!
-//! disassembled output, and verify both binaries are byte-identical. This proves
-//! both assembler and disassembler are correct inverses of each other.
+//! Check that assembling disassembled output reproduces the original binary.
 
 use wave_asm::assemble;
 use wave_dis::{disassemble_wbin, DisassemblyOptions};
@@ -33,7 +30,7 @@ fn round_trip_test(source: &str) {
 
 #[test]
 fn test_round_trip_integer_arithmetic() {
-    let source = r#"
+    let source = r"
 .kernel test_int
 .registers 8
     iadd r0, r1, r2
@@ -47,13 +44,13 @@ fn test_round_trip_integer_arithmetic() {
     imax r4, r5, r6
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_float_arithmetic() {
-    let source = r#"
+    let source = r"
 .kernel test_float
 .registers 8
     fadd r0, r1, r2
@@ -67,13 +64,13 @@ fn test_round_trip_float_arithmetic() {
     fsqrt r4, r5
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_bitwise() {
-    let source = r#"
+    let source = r"
 .kernel test_bitwise
 .registers 8
     and r0, r1, r2
@@ -85,13 +82,13 @@ fn test_round_trip_bitwise() {
     sar r3, r4, r5
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_memory() {
-    let source = r#"
+    let source = r"
 .kernel test_memory
 .registers 8
     device_load_u32 r0, r1
@@ -100,13 +97,13 @@ fn test_round_trip_memory() {
     local_store_u32 r6, r0
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_special_registers() {
-    let source = r#"
+    let source = r"
 .kernel test_sr
 .registers 8
     mov r0, sr_thread_id_x
@@ -116,13 +113,13 @@ fn test_round_trip_special_registers() {
     mov r4, sr_grid_size_x
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_mov_imm() {
-    let source = r#"
+    let source = r"
 .kernel test_mov
 .registers 8
     mov_imm r0, 0
@@ -132,13 +129,13 @@ fn test_round_trip_mov_imm() {
     mov r4, r0
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_compare() {
-    let source = r#"
+    let source = r"
 .kernel test_cmp
 .registers 8
     icmp_eq p1, r0, r1
@@ -147,13 +144,13 @@ fn test_round_trip_compare() {
     fcmp_lt p2, r0, r1
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_convert() {
-    let source = r#"
+    let source = r"
 .kernel test_cvt
 .registers 8
     cvt_f32_i32 r0, r1
@@ -162,39 +159,39 @@ fn test_round_trip_convert() {
     cvt_u32_f32 r6, r0
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_sync() {
-    let source = r#"
+    let source = r"
 .kernel test_sync
 .registers 4
     barrier
     nop
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_workgroup_size() {
-    let source = r#"
+    let source = r"
 .kernel test_wg
 .registers 4
 .workgroup_size 64, 4, 1
     mov r0, sr_thread_id_x
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_multiple_kernels() {
-    let source = r#"
+    let source = r"
 .kernel kernel_a
 .registers 4
     mov_imm r0, 1
@@ -208,13 +205,13 @@ fn test_round_trip_multiple_kernels() {
     iadd r2, r0, r1
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }
 
 #[test]
 fn test_round_trip_vec_add() {
-    let source = r#"
+    let source = r"
 .kernel vec_add
 .registers 8
 .workgroup_size 256, 1, 1
@@ -237,6 +234,6 @@ fn test_round_trip_vec_add() {
     device_store_u32 r6, r2
     halt
 .end
-"#;
+";
     round_trip_test(source);
 }

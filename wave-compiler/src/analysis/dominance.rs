@@ -1,19 +1,19 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Dominator tree and dominance frontier computation.
-//!
-//! Uses the Cooper-Harvey-Kennedy algorithm for efficient dominator tree
-//! construction. The dominance frontier is used by SSA construction (mem2reg).
+//! Dominator tree and dominance frontier computation. Uses the Cooper-Harvey-Kennedy algorithm
+//! for efficient dominator tree construction. The dominance frontier is used by SSA
+//! construction, mem2reg.
 
 use std::collections::{HashMap, HashSet};
 
 use super::cfg::Cfg;
 use crate::mir::value::BlockId;
 
+#[derive(Debug)]
 /// Dominator tree for a CFG.
 pub struct DomTree {
-    /// Immediate dominator of each block (entry has no idom).
+    /// Immediate dominator of each block, entry has no idom.
     pub idom: HashMap<BlockId, BlockId>,
     /// Children in the dominator tree.
     pub children: HashMap<BlockId, Vec<BlockId>>,

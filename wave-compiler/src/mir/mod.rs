@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Mid-Level Intermediate Representation (MIR) for WAVE kernels.
-//!
-//! MIR is in SSA form with explicit control flow graphs, phi nodes,
-//! and typed virtual registers. It is the primary representation for
-//! analysis and optimization passes.
+//! Typed SSA representation with basic blocks and phi nodes for analysis and optimization.
 
 pub mod basic_block;
 pub mod builder;

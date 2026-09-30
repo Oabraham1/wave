@@ -1,10 +1,10 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Test harness for WAVE specification verification. Assembles WAVE programs,
-//!
-//! runs them on the emulator, and verifies results against expected values.
+//! Test harness for WAVE specification verification. Assembles WAVE programs runs them on the
+//! emulator, and verifies results against expected values.
 
+use std::fmt::Write as _;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -13,8 +13,6 @@ pub enum TestError {
     AssemblyFailed(String),
     #[error("execution failed: {0}")]
     ExecutionFailed(String),
-    #[error("verification failed: {0}")]
-    VerificationFailed(String),
     #[error("io error: {0}")]
     IoError(#[from] std::io::Error),
 }
@@ -24,7 +22,6 @@ pub struct EmulatorConfig {
     pub wave_width: u32,
     pub local_memory_size: u32,
     pub device_memory_size: u32,
-    pub max_cycles: u64,
     pub max_instructions: u64,
     pub trace: bool,
 }
@@ -35,7 +32,6 @@ impl Default for EmulatorConfig {
             wave_width: 4,
             local_memory_size: 16384,
             device_memory_size: 65536,
-            max_cycles: 100_000,
             max_instructions: 100_000,
             trace: false,
         }
@@ -56,7 +52,6 @@ pub struct TestResult {
 pub struct ExecutionResult {
     pub device_memory: Vec<u8>,
     pub cycles: u64,
-    pub instructions_executed: u64,
 }
 
 pub fn assemble(source: &str, source_name: &str) -> Result<Vec<u8>, TestError> {
@@ -77,6 +72,7 @@ pub fn run_kernel(
     let emu_config = EmuConfig {
         grid_dim: grid,
         workgroup_dim: workgroup,
+        use_kernel_workgroup_size: false,
         register_count: 32,
         local_memory_size: config.local_memory_size as usize,
         device_memory_size: config.device_memory_size as usize,
@@ -110,7 +106,6 @@ pub fn run_kernel(
     Ok(ExecutionResult {
         device_memory,
         cycles: result.stats.instructions_executed,
-        instructions_executed: result.stats.instructions_executed,
     })
 }
 
@@ -125,17 +120,6 @@ pub fn run_test(
     run_kernel(&binary, grid, workgroup, config, initial_device_memory)
 }
 
-pub fn read_u8(memory: &[u8], offset: usize) -> u8 {
-    memory.get(offset).copied().unwrap_or(0)
-}
-
-pub fn read_u16(memory: &[u8], offset: usize) -> u16 {
-    if offset + 2 > memory.len() {
-        return 0;
-    }
-    u16::from_le_bytes([memory[offset], memory[offset + 1]])
-}
-
 pub fn read_u32(memory: &[u8], offset: usize) -> u32 {
     if offset + 4 > memory.len() {
         return 0;
@@ -148,52 +132,8 @@ pub fn read_u32(memory: &[u8], offset: usize) -> u32 {
     ])
 }
 
-pub fn read_u64(memory: &[u8], offset: usize) -> u64 {
-    if offset + 8 > memory.len() {
-        return 0;
-    }
-    u64::from_le_bytes([
-        memory[offset],
-        memory[offset + 1],
-        memory[offset + 2],
-        memory[offset + 3],
-        memory[offset + 4],
-        memory[offset + 5],
-        memory[offset + 6],
-        memory[offset + 7],
-    ])
-}
-
 pub fn read_f32(memory: &[u8], offset: usize) -> f32 {
     f32::from_bits(read_u32(memory, offset))
-}
-
-pub fn read_f64(memory: &[u8], offset: usize) -> f64 {
-    f64::from_bits(read_u64(memory, offset))
-}
-
-pub fn check_u32(memory: &[u8], offset: usize, expected: u32) -> bool {
-    read_u32(memory, offset) == expected
-}
-
-pub fn check_f32(memory: &[u8], offset: usize, expected: f32, tolerance: f32) -> bool {
-    let actual = read_f32(memory, offset);
-    if expected.is_nan() {
-        return actual.is_nan();
-    }
-    if expected.is_infinite() {
-        return actual.is_infinite() && actual.signum() == expected.signum();
-    }
-    (actual - expected).abs() <= tolerance
-}
-
-pub fn check_slice_u32(memory: &[u8], offset: usize, expected: &[u32]) -> bool {
-    for (i, &exp) in expected.iter().enumerate() {
-        if read_u32(memory, offset + i * 4) != exp {
-            return false;
-        }
-    }
-    true
 }
 
 pub fn format_memory_u32(memory: &[u8], offset: usize, count: usize) -> String {
@@ -202,7 +142,8 @@ pub fn format_memory_u32(memory: &[u8], offset: usize, count: usize) -> String {
         if i > 0 {
             result.push_str(", ");
         }
-        result.push_str(&format!("0x{:08x}", read_u32(memory, offset + i * 4)));
+        write!(result, "0x{:08x}", read_u32(memory, offset + i * 4))
+            .expect("writing to String cannot fail");
     }
     result
 }
@@ -244,7 +185,3 @@ macro_rules! spec_test {
 }
 
 pub const COMPLETION_FLAG: u32 = 0xDEADBEEF;
-
-pub fn check_completion(memory: &[u8], offset: usize) -> bool {
-    read_u32(memory, offset) == COMPLETION_FLAG
-}

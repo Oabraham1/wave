@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for individual instruction codegen. Constructs minimal WBIN files with
-//!
-//! specific WAVE instructions, compiles them to SYCL, and verifies the output contains
-//! expected SYCL code fragments including sycl:: math functions, sub-group operations,
-//! atomic_ref patterns, bit_cast helpers, and nd_item special register accessors.
+//! Check SYCL C++ output for individual WAVE instructions.
 
 use wave_sycl::compile;
 
@@ -80,9 +76,9 @@ fn build_wbin(name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 

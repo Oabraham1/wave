@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Loop-invariant code motion pass.
-//!
-//! Identifies instructions inside loops whose operands do not change
-//! across iterations and moves them to the loop preheader.
+//! Loop-invariant code motion pass. Identifies instructions inside loops whose operands do not
+//! change across iterations and moves them to the loop preheader.
 
 use std::collections::HashSet;
 
@@ -16,6 +14,7 @@ use crate::mir::function::MirFunction;
 use crate::mir::instruction::MirInst;
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Loop-invariant code motion pass.
 pub struct Licm;
 
@@ -32,56 +31,80 @@ impl Pass for Licm {
         let mut changed = false;
 
         for natural_loop in &loop_info.loops {
-            let mut defs_in_loop: HashSet<ValueId> = HashSet::new();
-            for &bid in &natural_loop.body {
-                if let Some(block) = func.block(bid) {
-                    for inst in &block.instructions {
-                        if let Some(dest) = inst.dest() {
-                            defs_in_loop.insert(dest);
-                        }
-                    }
-                }
+            let mut outside = cfg
+                .preds(natural_loop.header)
+                .iter()
+                .filter(|bid| !natural_loop.body.contains(bid));
+            let Some(&preheader) = outside.next() else {
+                continue;
+            };
+            if outside.next().is_some() || cfg.succs(preheader) != [natural_loop.header] {
+                continue;
             }
 
-            let mut invariant_insts: Vec<(usize, MirInst)> = Vec::new();
-
-            for &bid in &natural_loop.body {
-                if let Some(block) = func.block(bid) {
-                    for (idx, inst) in block.instructions.iter().enumerate() {
-                        if inst.has_side_effects() {
-                            continue;
-                        }
-                        let all_operands_invariant =
-                            inst.operands().iter().all(|op| !defs_in_loop.contains(op));
-                        if all_operands_invariant {
+            let mut defs_in_loop: HashSet<ValueId> = func
+                .blocks
+                .iter()
+                .filter(|block| natural_loop.body.contains(&block.id))
+                .flat_map(|block| {
+                    block
+                        .phis
+                        .iter()
+                        .map(|phi| phi.dest)
+                        .chain(block.instructions.iter().filter_map(MirInst::dest))
+                })
+                .collect();
+            let mut hoisted = Vec::new();
+            loop {
+                let count = hoisted.len();
+                for block in &mut func.blocks {
+                    if !natural_loop.body.contains(&block.id) {
+                        continue;
+                    }
+                    hoisted.extend(block.instructions.extract_if(.., |inst| {
+                        let invariant = safe_to_hoist(inst)
+                            && inst
+                                .operand_iter()
+                                .all(|value| !defs_in_loop.contains(&value));
+                        if invariant {
                             if let Some(dest) = inst.dest() {
-                                invariant_insts.push((idx, inst.clone()));
                                 defs_in_loop.remove(&dest);
                             }
                         }
-                    }
+                        invariant
+                    }));
+                }
+                if count == hoisted.len() {
+                    break;
                 }
             }
-
-            if !invariant_insts.is_empty() {
-                let preds = cfg.preds(natural_loop.header);
-                let preheader = preds
-                    .iter()
-                    .find(|p| !natural_loop.body.contains(p))
-                    .copied();
-
-                if let Some(pre_bid) = preheader {
-                    if let Some(pre_block) = func.block_mut(pre_bid) {
-                        for (_, inst) in &invariant_insts {
-                            pre_block.instructions.push(inst.clone());
-                        }
-                        changed = true;
-                    }
-                }
+            if !hoisted.is_empty() {
+                // CFG predecessors refer to blocks in this function.
+                func.block_mut(preheader)
+                    .expect("preheader belongs to the function")
+                    .instructions
+                    .extend(hoisted);
+                changed = true;
             }
         }
 
         changed
+    }
+}
+
+fn safe_to_hoist(inst: &MirInst) -> bool {
+    use crate::hir::expr::BinOp;
+    match inst {
+        MirInst::BinOp { op, .. } => !matches!(op, BinOp::Div | BinOp::FloorDiv | BinOp::Mod),
+        MirInst::Const { .. } | MirInst::UnaryOp { .. } | MirInst::Cast { .. } => true,
+        MirInst::Load { .. }
+        | MirInst::Store { .. }
+        | MirInst::Call { .. }
+        | MirInst::Shuffle { .. }
+        | MirInst::ReadSpecialReg { .. }
+        | MirInst::AtomicRmw { .. }
+        | MirInst::Barrier
+        | MirInst::Fence { .. } => false,
     }
 }
 
@@ -143,6 +166,8 @@ mod tests {
         let pass = Licm;
         let changed = pass.run(&mut func);
         assert!(changed);
-        assert!(!func.blocks[0].instructions.is_empty());
+        assert_eq!(func.blocks[0].instructions.len(), 1);
+        assert_eq!(func.blocks[1].instructions, [] as [MirInst; 0]);
+        assert!(!pass.run(&mut func));
     }
 }

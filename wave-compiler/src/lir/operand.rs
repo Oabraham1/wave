@@ -1,13 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! LIR operand types: virtual registers, physical registers, and immediates.
-//!
-//! Operands represent the inputs and outputs of near-WAVE instructions.
-//! Before register allocation, virtual registers are used. After allocation,
-//! physical registers replace them.
+//! Virtual registers, physical registers, and immediate operands for LIR.
 
-/// Virtual register identifier (before register allocation).
+/// Virtual register identifier, before register allocation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VReg(pub u32);
 
@@ -17,7 +13,7 @@ impl std::fmt::Display for VReg {
     }
 }
 
-/// Physical register identifier (after register allocation).
+/// Physical register identifier, after register allocation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PhysReg(pub u8);
 
@@ -27,7 +23,7 @@ impl std::fmt::Display for PhysReg {
     }
 }
 
-/// Predicate register (p0-p3).
+/// Predicate register, p0-p3.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PReg(pub u8);
 
@@ -40,29 +36,29 @@ impl std::fmt::Display for PReg {
 /// Special register index for GPU intrinsics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecialReg {
-    /// Thread ID X (sr0).
+    /// Thread ID X, sr0.
     ThreadIdX,
-    /// Thread ID Y (sr1).
+    /// Thread ID Y, sr1.
     ThreadIdY,
-    /// Thread ID Z (sr2).
+    /// Thread ID Z, sr2.
     ThreadIdZ,
-    /// Wave ID (sr3).
+    /// Wave ID, sr3.
     WaveId,
-    /// Lane ID (sr4).
+    /// Lane ID, sr4.
     LaneId,
-    /// Workgroup ID X (sr5).
+    /// Workgroup ID X, sr5.
     WorkgroupIdX,
-    /// Workgroup ID Y (sr6).
+    /// Workgroup ID Y, sr6.
     WorkgroupIdY,
-    /// Workgroup ID Z (sr7).
+    /// Workgroup ID Z, sr7.
     WorkgroupIdZ,
-    /// Workgroup size X (sr8).
+    /// Workgroup size X, sr8.
     WorkgroupSizeX,
-    /// Workgroup size Y (sr9).
+    /// Workgroup size Y, sr9.
     WorkgroupSizeY,
-    /// Workgroup size Z (sr10).
+    /// Workgroup size Z, sr10.
     WorkgroupSizeZ,
-    /// Wave width (sr14).
+    /// Wave width, sr14.
     WaveWidth,
 }
 

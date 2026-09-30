@@ -1,17 +1,14 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI entry point for the WAVE PTX backend. Reads a WBIN binary file, translates
-//!
-//! it to PTX assembly using the `wave_ptx::compile` API, and writes the resulting
-//! PTX text to an output file or stdout. Supports --sm flag for target SM version.
+//! Translate WBIN files into PTX from the command line.
 
 use clap::Parser;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "wave-ptx")]
 #[command(
     about = "WAVE PTX backend - translates WAVE binary (.wbin) to NVIDIA PTX assembly (.ptx)"
@@ -27,34 +24,16 @@ struct Cli {
     sm: u32,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
-    let wbin_data = match fs::read(&cli.input) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("error: cannot read '{}': {e}", cli.input.display());
-            process::exit(1);
-        }
-    };
-
-    let ptx = match wave_ptx::compile(&wbin_data, cli.sm) {
-        Ok(ptx) => ptx,
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
-    };
-
-    match cli.output {
-        Some(path) => {
-            if let Err(e) = fs::write(&path, &ptx) {
-                eprintln!("error: cannot write '{}': {e}", path.display());
-                process::exit(1);
-            }
-        }
-        None => {
-            print!("{ptx}");
-        }
+    let wbin_data = fs::read(&cli.input)
+        .map_err(|error| format!("cannot read '{}': {error}", cli.input.display()))?;
+    let ptx = wave_ptx::compile(&wbin_data, cli.sm)?;
+    if let Some(path) = cli.output {
+        fs::write(&path, &ptx)
+            .map_err(|error| format!("cannot write '{}': {error}", path.display()))?;
+    } else {
+        io::stdout().lock().write_all(ptx.as_bytes())?;
     }
+    Ok(())
 }

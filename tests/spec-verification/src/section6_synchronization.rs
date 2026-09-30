@@ -1,9 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 6: Synchronization tests
-//!
-//! Verifies barrier, fence, and wait operations.
+//! Section 6: Synchronization tests Verifies barrier, fence, and wait operations.
 
 use crate::harness::*;
 
@@ -16,7 +14,7 @@ pub fn run_tests() -> Vec<TestResult> {
     ]
 }
 
-/// Barrier with single wave (should just continue).
+/// Barrier with single wave, should just continue.
 fn test_barrier_single_wave() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 6.13 Synchronization
@@ -132,10 +130,7 @@ fn test_barrier_two_waves() -> TestResult {
                 spec_section: "6.13".to_string(),
                 spec_claim: "Barrier synchronizes two waves".to_string(),
                 passed,
-                details: format!(
-                    "Wave 1 read 0x{:x} (expected 0x12345678)",
-                    value
-                ),
+                details: format!("Wave 1 read 0x{:x}; expected 0x12345678", value),
                 cycles: result.cycles,
             }
         }
@@ -216,7 +211,7 @@ fn test_barrier_multiple() -> TestResult {
                 spec_section: "6.13".to_string(),
                 spec_claim: "Multiple barriers work correctly".to_string(),
                 passed,
-                details: format!("Final value = {} (expected 111)", value),
+                details: format!("Final value = {}; expected 111", value),
                 cycles: result.cycles,
             }
         }
@@ -291,14 +286,14 @@ fn test_barrier_in_loop() -> TestResult {
     match run_test(SOURCE, [1, 1, 1], [8, 1, 1], &config, None) {
         Ok(result) => {
             let value = read_u32(&result.device_memory, 0);
-            let passed = value == 3;  // Incremented 3 times
+            let passed = value == 3; // Incremented 3 times
 
             TestResult {
                 name: "test_barrier_in_loop".to_string(),
                 spec_section: "6.13".to_string(),
                 spec_claim: "Barrier works inside loops".to_string(),
                 passed,
-                details: format!("Loop count = {} (expected 3)", value),
+                details: format!("Loop count = {}; expected 3", value),
                 cycles: result.cycles,
             }
         }

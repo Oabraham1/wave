@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WAVE binary (.wbin) file generation.
-//!
-//! Assembles encoded WAVE instructions into the WBIN container format
-//! with header, code section, symbol table, and kernel metadata.
+//! WBIN file generation. Assembles encoded WAVE instructions into the WBIN
+//! container format with header, code section, symbol table, and kernel metadata.
 
 use crate::diagnostics::CompileError;
 use crate::emit::wave_emit::{emit_instruction, RegMap};
@@ -26,37 +24,39 @@ pub fn generate_wbin(
     reg_map: &RegMap,
     register_count: u32,
 ) -> Result<Vec<u8>, CompileError> {
-    let mut code_bytes = Vec::new();
+    let mut output = vec![0; WBIN_HEADER_SIZE as usize];
     for inst in instructions {
-        let encoded = emit_instruction(inst, reg_map);
-        code_bytes.extend_from_slice(&encoded.to_bytes());
+        emit_instruction(inst, reg_map)?.append_to(&mut output);
     }
 
     let code_offset = WBIN_HEADER_SIZE;
-    #[allow(clippy::cast_possible_truncation)]
-    let code_size = code_bytes.len() as u32;
+    let code_size = binary_size(output.len() - WBIN_HEADER_SIZE as usize)?;
 
     let kernel_name_bytes = kernel_name.as_bytes();
-    let symbol_offset = code_offset + code_size;
-    #[allow(clippy::cast_possible_truncation)]
-    let symbol_size = (kernel_name_bytes.len() + 1) as u32;
+    let symbol_offset = code_offset
+        .checked_add(code_size)
+        .ok_or_else(binary_too_large)?;
+    let symbol_size = binary_size(kernel_name_bytes.len())?
+        .checked_add(1)
+        .ok_or_else(binary_too_large)?;
 
-    let metadata_offset = symbol_offset + symbol_size;
+    let metadata_offset = symbol_offset
+        .checked_add(symbol_size)
+        .ok_or_else(binary_too_large)?;
     let metadata_size = 4 + KERNEL_METADATA_SIZE;
 
-    let mut output = Vec::new();
-
-    output.extend_from_slice(WBIN_MAGIC);
-    output.extend_from_slice(&WBIN_VERSION.to_le_bytes());
-    output.extend_from_slice(&0u16.to_le_bytes());
-    output.extend_from_slice(&code_offset.to_le_bytes());
-    output.extend_from_slice(&code_size.to_le_bytes());
-    output.extend_from_slice(&symbol_offset.to_le_bytes());
-    output.extend_from_slice(&symbol_size.to_le_bytes());
-    output.extend_from_slice(&metadata_offset.to_le_bytes());
-    output.extend_from_slice(&metadata_size.to_le_bytes());
-
-    output.extend_from_slice(&code_bytes);
+    output[0..4].copy_from_slice(WBIN_MAGIC);
+    output[4..6].copy_from_slice(&WBIN_VERSION.to_le_bytes());
+    for (bytes, value) in output[8..32].as_chunks_mut::<4>().0.iter_mut().zip([
+        code_offset,
+        code_size,
+        symbol_offset,
+        symbol_size,
+        metadata_offset,
+        metadata_size,
+    ]) {
+        bytes.copy_from_slice(&value.to_le_bytes());
+    }
 
     output.extend_from_slice(kernel_name_bytes);
     output.push(0);
@@ -75,6 +75,16 @@ pub fn generate_wbin(
     Ok(output)
 }
 
+fn binary_too_large() -> CompileError {
+    CompileError::CodegenError {
+        message: "binary exceeds the WBIN 32-bit size limit".into(),
+    }
+}
+
+fn binary_size(size: usize) -> Result<u32, CompileError> {
+    u32::try_from(size).map_err(|_| binary_too_large())
+}
+
 /// Count the maximum physical register used in the LIR instructions.
 #[must_use]
 pub fn count_registers(instructions: &[LirInst], reg_map: &RegMap) -> u32 {
@@ -86,7 +96,7 @@ pub fn count_registers(instructions: &[LirInst], reg_map: &RegMap) -> u32 {
                 max_reg = phys + 1;
             }
         }
-        for src in inst.src_vregs() {
+        for src in inst.src_vreg_iter() {
             let phys = reg_map.get(&src).map_or(src.0, |p| u32::from(p.0));
             if phys + 1 > max_reg {
                 max_reg = phys + 1;

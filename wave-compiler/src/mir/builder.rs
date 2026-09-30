@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! MIR construction helper for building functions incrementally.
-//!
-//! The builder provides a convenient API for creating basic blocks,
-//! emitting instructions, and managing SSA value generation.
+//! MIR construction helper for building functions incrementally. The builder provides a
+//! convenient API for creating basic blocks emitting instructions, and managing SSA value
+//! generation.
 
 use super::basic_block::{BasicBlock, Terminator};
 use super::function::{MirFunction, MirParam};
@@ -14,6 +13,7 @@ use super::value::{BlockId, IdGenerator, ValueId};
 use crate::hir::expr::BinOp;
 use crate::hir::types::AddressSpace;
 
+#[derive(Debug)]
 /// Builder for constructing MIR functions incrementally.
 pub struct MirBuilder {
     func: MirFunction,

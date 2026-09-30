@@ -1,9 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 7: Capabilities tests
-//!
-//! Verifies capability queries and optional feature detection.
+//! Section 7: Capabilities tests Verifies capability queries and optional feature detection.
 
 use crate::harness::*;
 
@@ -46,7 +44,7 @@ fn test_query_wave_width() -> TestResult {
                 spec_section: "7.1".to_string(),
                 spec_claim: "sr_wave_width returns correct value".to_string(),
                 passed,
-                details: format!("sr_wave_width = {} (expected 4)", wave_width),
+                details: format!("sr_wave_width = {}; expected 4", wave_width),
                 cycles: result.cycles,
             }
         }
@@ -64,7 +62,7 @@ fn test_query_wave_width() -> TestResult {
 fn test_query_max_registers() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 7.1 Capabilities
-; Claim: "MAX_REGISTERS >= 32" (assembler currently supports 32)
+; Claim: "MAX_REGISTERS >= 32"
 
 .kernel test_query_max_registers
 .registers 32
@@ -114,7 +112,7 @@ fn test_query_local_memory_size() -> TestResult {
 
 .kernel test_query_local_memory_size
 .registers 4
-    ; Write to offset 16380 (last word before 16384)
+    ; Write to offset 16380 ; the last word before 16384
     mov_imm r0, 0x12345678
     mov_imm r1, 16380
     local_store_u32 r1, r0
@@ -261,7 +259,7 @@ fn test_cap_f64_present() -> TestResult {
                 spec_section: "7.2".to_string(),
                 spec_claim: "F64 operations work when enabled".to_string(),
                 passed,
-                details: format!("dadd(2.0, 3.0) = {} (expected 5.0)", value),
+                details: format!("dadd(2.0, 3.0) = {}; expected 5.0", value),
                 cycles: result.cycles,
             }
         }

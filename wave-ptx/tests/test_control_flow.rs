@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Unit tests for control flow lowering. Verifies that WAVE structured control flow
-//!
-//! (if/else/endif, loop/break/continue/endloop) is correctly lowered to PTX predicated
-//! branches with properly generated and placed labels.
+//! Check captured masks for eligible branches and PTX branch labels for loops.
 
 use wave_ptx::compile;
 
@@ -42,9 +39,9 @@ fn build_wbin(code: &[u8]) -> Vec<u8> {
     let mut data = Vec::new();
     let name = b"test_kernel\0";
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name.len() as u32;
+    let symbol_size = u32::try_from(name.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 
@@ -85,9 +82,16 @@ fn test_if_endif() {
     code.extend_from_slice(&extended(0x00, 5, 3, 4, 0, 0));
     code.extend_from_slice(&single(0x3F, 0, 0, 2, 0));
     let ptx = compile_instrs(&code);
-    assert!(ptx.contains("@!%p1 bra $L_else_0;"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("and.pred %wave_condition_0, %p1, %p1;"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("add.s32 %r5, %r3, %r4;"), "PTX: {ptx}");
-    assert!(ptx.contains("$L_else_0:"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("and.pred %wave_active, %wave_else_0, %wave_else_0;"),
+        "PTX: {ptx}"
+    );
+    assert!(!ptx.contains("bra"), "PTX: {ptx}");
 }
 
 #[test]
@@ -99,10 +103,20 @@ fn test_if_else_endif() {
     code.extend_from_slice(&extended(0x01, 5, 3, 4, 0, 0));
     code.extend_from_slice(&single(0x3F, 0, 0, 2, 0));
     let ptx = compile_instrs(&code);
-    assert!(ptx.contains("@!%p1 bra $L_else_0;"), "PTX: {ptx}");
-    assert!(ptx.contains("bra.uni $L_endif_0;"), "PTX: {ptx}");
-    assert!(ptx.contains("$L_else_0:"), "PTX: {ptx}");
-    assert!(ptx.contains("$L_endif_0:"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("and.pred %wave_condition_0, %p1, %p1;"),
+        "PTX: {ptx}"
+    );
+
+    assert!(
+        ptx.contains("and.pred %wave_active, %wave_else_0, %wave_else_0;"),
+        "PTX: {ptx}"
+    );
+    assert!(!ptx.contains("bra"), "PTX: {ptx}");
+    assert!(
+        ptx.contains("and.pred %wave_active, %wave_entry_0, %wave_entry_0;"),
+        "PTX: {ptx}"
+    );
     assert!(ptx.contains("add.s32 %r5, %r3, %r4;"), "PTX: {ptx}");
     assert!(ptx.contains("sub.s32 %r5, %r3, %r4;"), "PTX: {ptx}");
 }

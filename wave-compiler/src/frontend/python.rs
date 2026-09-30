@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Python kernel parser producing HIR.
-//!
-//! Parses a subset of Python suitable for GPU kernels: function definitions
-//! with type annotations, arithmetic, comparisons, if/else, for `range()`,
-//! array indexing, and GPU intrinsics (`thread_id`, barrier, etc.).
-//! Uses line-by-line parsing for the restricted kernel subset.
+//! Parse the supported Python kernel subset into HIR.
 
 use crate::diagnostics::CompileError;
 use crate::hir::expr::{BinOp, BuiltinFunc, Dimension, Expr, Literal, UnaryOp};
@@ -25,6 +20,7 @@ pub fn parse_python(source: &str) -> Result<Kernel, CompileError> {
     parser.parse_kernel()
 }
 
+#[derive(Debug)]
 struct PythonParser<'a> {
     lines: &'a [&'a str],
     pos: usize,
@@ -583,7 +579,11 @@ impl<'a> PythonParser<'a> {
             "int" | "u32" => {
                 if args.len() == 1 {
                     Ok(Expr::Cast {
-                        expr: Box::new(args.into_iter().next().unwrap()),
+                        expr: Box::new(
+                            args.into_iter()
+                                .next()
+                                .expect("argument count is exactly one"),
+                        ),
                         to: Type::U32,
                     })
                 } else {
@@ -595,7 +595,11 @@ impl<'a> PythonParser<'a> {
             "float" | "f32" => {
                 if args.len() == 1 {
                     Ok(Expr::Cast {
-                        expr: Box::new(args.into_iter().next().unwrap()),
+                        expr: Box::new(
+                            args.into_iter()
+                                .next()
+                                .expect("argument count is exactly one"),
+                        ),
                         to: Type::F32,
                     })
                 } else {
@@ -645,7 +649,7 @@ fn is_valid_identifier(s: &str) -> bool {
         return false;
     }
     let mut chars = s.chars();
-    let first = chars.next().unwrap();
+    let first = chars.next().expect("identifier was checked to be nonempty");
     if !first.is_alphabetic() && first != '_' {
         return false;
     }
@@ -658,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_parse_vector_add() {
-        let source = r#"
+        let source = r"
 from wave import kernel, f32, thread_id
 
 @kernel
@@ -666,7 +670,7 @@ def vector_add(a: f32[:], b: f32[:], out: f32[:], n: u32):
     gid = thread_id()
     if gid < n:
         out[gid] = a[gid] + b[gid]
-"#;
+";
         let kernel = parse_python(source).unwrap();
         assert_eq!(kernel.name, "vector_add");
         assert_eq!(kernel.params.len(), 4);
@@ -679,12 +683,12 @@ def vector_add(a: f32[:], b: f32[:], out: f32[:], n: u32):
 
     #[test]
     fn test_parse_simple_assign() {
-        let source = r#"
+        let source = r"
 @kernel
 def test(n: u32):
     x = 42
     y = x + 1
-"#;
+";
         let kernel = parse_python(source).unwrap();
         assert_eq!(kernel.name, "test");
         assert_eq!(kernel.body.len(), 2);
@@ -728,8 +732,8 @@ def test(n: u32):
             Expr::Literal(Literal::Int(42))
         );
         assert_eq!(
-            parser.parse_expr("3.14").unwrap(),
-            Expr::Literal(Literal::Float(3.14))
+            parser.parse_expr("1.25").unwrap(),
+            Expr::Literal(Literal::Float(1.25))
         );
     }
 }

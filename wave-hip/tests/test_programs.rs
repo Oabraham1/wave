@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Integration tests for full WAVE program compilation to HIP. Builds complete WBIN
-//!
-//! files containing multi-instruction programs, compiles them to HIP C++, and verifies
-//! the output is structurally correct with proper __global__ declarations, register
-//! declarations, instruction translations, and control flow.
+//! Check HIP C++ output for complete WAVE programs.
 
 use wave_hip::compile;
 
@@ -44,7 +40,7 @@ fn halt() -> Vec<u8> {
 }
 
 fn mov_sr(rd: u8, sr: u8) -> Vec<u8> {
-    // MiscOp uses opcode 0x41, modifier 2 = MovSr, single-word (decoder doesn't read word1)
+    // MiscOp uses opcode 0x41, modifier 2 = MovSr, single-word, decoder doesn't read word1
     single(0x41, rd, sr, 2, 0)
 }
 
@@ -60,9 +56,9 @@ fn build_wbin(name: &str, reg_count: u32, local_mem: u32, code: &[u8]) -> Vec<u8
     let mut data = Vec::new();
     let name_bytes: Vec<u8> = name.bytes().chain(std::iter::once(0)).collect();
     let code_offset: u32 = 0x20;
-    let code_size = code.len() as u32;
+    let code_size = u32::try_from(code.len()).unwrap();
     let symbol_offset = code_offset + code_size;
-    let symbol_size = name_bytes.len() as u32;
+    let symbol_size = u32::try_from(name_bytes.len()).unwrap();
     let metadata_offset = symbol_offset + symbol_size;
     let metadata_size: u32 = 4 + 32;
 

@@ -1,22 +1,20 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Live range computation for virtual registers.
-//!
-//! Computes the program points where each virtual register is live,
-//! represented as intervals over instruction indices in the flat LIR.
+//! Live range computation for virtual registers. Computes the program points where each virtual
+//! register is live represented as intervals over instruction indices in the flat LIR.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::lir::instruction::LirInst;
 use crate::lir::operand::VReg;
 
-/// A live range interval [start, end) for a virtual register.
+/// An inclusive live range interval for a virtual register.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveRange {
-    /// First instruction index where the value is defined.
+    /// First instruction index covered by the interval.
     pub start: usize,
-    /// Last instruction index where the value is used (inclusive).
+    /// Last instruction index covered by the interval.
     pub end: usize,
 }
 
@@ -38,7 +36,18 @@ impl LiveRange {
     }
 }
 
-/// Compute live ranges for all virtual registers in a LIR instruction sequence.
+/// Compute inclusive live ranges, preserving values needed on loop back edges.
+///
+/// # Examples
+///
+/// ```
+/// use wave_compiler::lir::{instruction::LirInst, operand::VReg};
+/// use wave_compiler::regalloc::live_range::{compute_live_ranges, LiveRange};
+///
+/// let instructions = [LirInst::MovImm { dest: VReg(0), value: 7 }];
+/// let ranges = compute_live_ranges(&instructions);
+/// assert_eq!(ranges[&VReg(0)], LiveRange { start: 0, end: 0 });
+/// ```
 #[must_use]
 pub fn compute_live_ranges(instructions: &[LirInst]) -> HashMap<VReg, LiveRange> {
     let mut ranges: HashMap<VReg, LiveRange> = HashMap::new();
@@ -61,7 +70,7 @@ pub fn compute_live_ranges(instructions: &[LirInst]) -> HashMap<VReg, LiveRange>
                 });
         }
 
-        for src in inst.src_vregs() {
+        for src in inst.src_vreg_iter() {
             ranges
                 .entry(src)
                 .and_modify(|r| {
@@ -79,7 +88,58 @@ pub fn compute_live_ranges(instructions: &[LirInst]) -> HashMap<VReg, LiveRange>
         }
     }
 
+    let mut loops = Vec::new();
+    for (index, instruction) in instructions.iter().enumerate() {
+        match instruction {
+            LirInst::Loop => loops.push(index),
+            LirInst::Endloop => {
+                if let Some(start) = loops.pop() {
+                    extend_loop_inputs(instructions, &mut ranges, start, index);
+                }
+            }
+            _ => {}
+        }
+    }
+
     ranges
+}
+
+fn extend_loop_inputs(
+    instructions: &[LirInst],
+    ranges: &mut HashMap<VReg, LiveRange>,
+    start: usize,
+    end: usize,
+) {
+    let mut defined = HashSet::new();
+    let mut scopes = Vec::new();
+    for instruction in &instructions[start + 1..end] {
+        for source in instruction.src_vreg_iter() {
+            if !defined.contains(&source) {
+                // A read before a dominating definition needs the value on every back edge.
+                if let Some(range) = ranges.get_mut(&source) {
+                    range.start = range.start.min(start);
+                    range.end = range.end.max(end);
+                }
+            }
+        }
+        if let Some(destination) = instruction.dest_vreg() {
+            defined.insert(destination);
+        }
+        match instruction {
+            LirInst::If { .. } | LirInst::Loop => scopes.push(defined.clone()),
+            LirInst::Else => {
+                if let Some(entry) = scopes.last() {
+                    defined.clone_from(entry);
+                }
+            }
+            LirInst::Endif | LirInst::Endloop => {
+                if let Some(entry) = scopes.pop() {
+                    defined = entry;
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Collect all virtual registers used in the instruction sequence.
@@ -90,7 +150,7 @@ pub fn collect_vregs(instructions: &[LirInst]) -> HashSet<VReg> {
         if let Some(dest) = inst.dest_vreg() {
             vregs.insert(dest);
         }
-        for src in inst.src_vregs() {
+        for src in inst.src_vreg_iter() {
             vregs.insert(src);
         }
     }

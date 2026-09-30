@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WAVE compiler: compiles high-level GPU kernel code to WAVE ISA binaries.
-//!
-//! Supports Python, Rust, C++, and TypeScript frontends. Includes a full
-//! optimization pipeline with SSA-based analysis and graph coloring register
-//! allocation.
+//! Compile Python, Rust, C++, and TypeScript kernels to WAVE binaries.
 
 pub mod analysis;
 pub mod diagnostics;

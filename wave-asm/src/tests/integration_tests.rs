@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! End-to-end assembler tests. Each test feeds source text through the full
-//!
-//! pipeline (lexer, parser, encoder, output) and verifies binary format, error
-//! handling, or warning generation.
+//! End-to-end assembler tests. Each test feeds source text through the full pipeline, lexer,
+//! parser, encoder, output, and verifies binary format, error handling, or warning generation.
 
 use crate::{assemble, diagnostics::AssemblerError};
 
@@ -14,25 +12,24 @@ fn assemble_program(source: &str) -> Result<Vec<u8>, AssemblerError> {
 
 #[test]
 fn test_integration_simple_kernel() {
-    let source = r#"
+    let source = r"
 .kernel simple
 .registers 16
     mov_imm r0, 42
     iadd r1, r0, r0
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
 
     let binary = result.unwrap();
-    assert!(!binary.is_empty());
-    assert_eq!(&binary[0..4], b"WAVE");
+    assert_eq!(binary.get(..4), Some(b"WAVE".as_slice()));
 }
 
 #[test]
 fn test_integration_with_labels() {
-    let source = r#"
+    let source = r"
 .kernel with_labels
 .registers 8
     mov_imm r0, 0
@@ -41,7 +38,7 @@ fn test_integration_with_labels() {
         iadd r0, r0, r1
     endif
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -49,7 +46,7 @@ fn test_integration_with_labels() {
 
 #[test]
 fn test_integration_memory_ops() {
-    let source = r#"
+    let source = r"
 .kernel memory_test
 .registers 4
 .local_memory 1024
@@ -58,7 +55,7 @@ fn test_integration_memory_ops() {
     device_load_u32 r0, r1
     device_store_u32 r2, r3
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -66,14 +63,14 @@ fn test_integration_memory_ops() {
 
 #[test]
 fn test_integration_predicated_instructions() {
-    let source = r#"
+    let source = r"
 .kernel predicated
 .registers 4
     icmp_eq p0, r0, r1
     @p0 iadd r2, r0, r1
     @!p0 isub r2, r0, r1
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -81,7 +78,7 @@ fn test_integration_predicated_instructions() {
 
 #[test]
 fn test_integration_wave_ops() {
-    let source = r#"
+    let source = r"
 .kernel wave_ops
 .registers 4
     wave_shuffle r0, r1, r2
@@ -90,7 +87,7 @@ fn test_integration_wave_ops() {
     icmp_eq p0, r0, r1
     wave_ballot r2, p0
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -98,7 +95,7 @@ fn test_integration_wave_ops() {
 
 #[test]
 fn test_integration_floating_point() {
-    let source = r#"
+    let source = r"
 .kernel float_ops
 .registers 8
     fadd r0, r1, r2
@@ -106,7 +103,7 @@ fn test_integration_floating_point() {
     fma r6, r0, r1, r2
     fsqrt r7, r0
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -114,7 +111,7 @@ fn test_integration_floating_point() {
 
 #[test]
 fn test_integration_control_flow() {
-    let source = r#"
+    let source = r"
 .kernel control_flow
 .registers 4
     mov_imm r0, 0
@@ -126,7 +123,7 @@ loop
 endloop
     barrier
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -134,7 +131,7 @@ endloop
 
 #[test]
 fn test_integration_synchronization() {
-    let source = r#"
+    let source = r"
 .kernel sync_test
 .registers 2
     barrier
@@ -142,7 +139,7 @@ fn test_integration_synchronization() {
     fence_release .device
     wait
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -150,7 +147,7 @@ fn test_integration_synchronization() {
 
 #[test]
 fn test_integration_multiple_kernels() {
-    let source = r#"
+    let source = r"
 .kernel kernel1
 .registers 4
     iadd r0, r1, r2
@@ -160,7 +157,7 @@ fn test_integration_multiple_kernels() {
 .registers 8
     fadd r0, r1, r2
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -179,12 +176,12 @@ fn test_integration_multiple_kernels() {
 
 #[test]
 fn test_integration_error_undefined_label() {
-    let source = r#"
+    let source = r"
 .kernel error_test
 .registers 2
     call undefined_function
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(matches!(result, Err(AssemblerError::UndefinedLabel { .. })));
@@ -192,11 +189,11 @@ fn test_integration_error_undefined_label() {
 
 #[test]
 fn test_integration_error_unclosed_kernel() {
-    let source = r#"
+    let source = r"
 .kernel unclosed
 .registers 2
     nop
-"#;
+";
 
     let result = assemble_program(source);
     assert!(matches!(result, Err(AssemblerError::UnclosedKernel { .. })));
@@ -204,9 +201,9 @@ fn test_integration_error_unclosed_kernel() {
 
 #[test]
 fn test_integration_error_instruction_outside_kernel() {
-    let source = r#"
+    let source = r"
 iadd r0, r1, r2
-"#;
+";
 
     let result = assemble_program(source);
     assert!(matches!(
@@ -217,11 +214,11 @@ iadd r0, r1, r2
 
 #[test]
 fn test_integration_error_unknown_instruction() {
-    let source = r#"
+    let source = r"
 .kernel test
     unknown_op r0, r1
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(matches!(
@@ -232,12 +229,12 @@ fn test_integration_error_unknown_instruction() {
 
 #[test]
 fn test_integration_wide_registers() {
-    let source = r#"
+    let source = r"
 .kernel register_test
 .registers 64
     nop
 .end
-"#;
+";
 
     let result = assemble(source, "test.wave");
     assert!(result.is_ok());
@@ -248,7 +245,7 @@ fn test_integration_wide_registers() {
 
 #[test]
 fn test_integration_bitwise_ops() {
-    let source = r#"
+    let source = r"
 .kernel bitwise
 .registers 4
     and r0, r1, r2
@@ -259,7 +256,7 @@ fn test_integration_bitwise_ops() {
     shr r0, r1, r2
     sar r0, r1, r2
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -267,7 +264,7 @@ fn test_integration_bitwise_ops() {
 
 #[test]
 fn test_integration_comparison_select() {
-    let source = r#"
+    let source = r"
 .kernel compare
 .registers 4
     icmp_eq p0, r0, r1
@@ -275,7 +272,7 @@ fn test_integration_comparison_select() {
     fcmp_lt p2, r0, r1
     select r3, p0, r0, r1
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -283,7 +280,7 @@ fn test_integration_comparison_select() {
 
 #[test]
 fn test_integration_type_conversion() {
-    let source = r#"
+    let source = r"
 .kernel convert
 .registers 4
     cvt_f32_i32 r0, r1
@@ -291,7 +288,7 @@ fn test_integration_type_conversion() {
     cvt_f32_f16 r0, r1
     cvt_f16_f32 r2, r3
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -299,14 +296,14 @@ fn test_integration_type_conversion() {
 
 #[test]
 fn test_integration_cache_hints() {
-    let source = r#"
+    let source = r"
 .kernel cache_test
 .registers 4
     device_load_u32.cached r0, r1
     device_load_u32.uncached r2, r3
     device_load_u32.streaming r0, r1
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -314,14 +311,14 @@ fn test_integration_cache_hints() {
 
 #[test]
 fn test_integration_special_registers() {
-    let source = r#"
+    let source = r"
 .kernel special_regs
 .registers 4
     mov r0, sr_thread_id_x
     mov r1, sr_workgroup_id_x
     mov r2, sr_wave_width
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -329,7 +326,7 @@ fn test_integration_special_registers() {
 
 #[test]
 fn test_integration_forward_label_reference() {
-    let source = r#"
+    let source = r"
 .kernel forward_ref
 .registers 2
     call my_function
@@ -338,7 +335,7 @@ my_function:
     nop
     return
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -346,7 +343,7 @@ my_function:
 
 #[test]
 fn test_integration_all_special_registers() {
-    let source = r#"
+    let source = r"
 .kernel test_all_sr
 .registers 16
     mov r0, sr_thread_id_x
@@ -366,7 +363,7 @@ fn test_integration_all_special_registers() {
     mov r14, sr_wave_width
     mov r15, sr_num_waves
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -390,8 +387,16 @@ fn test_integration_all_special_registers() {
         let modifier = (word >> 4) & 0x0F;
 
         assert_eq!(opcode, 0x41, "instruction {i}: expected Misc opcode (0x41)");
-        assert_eq!(rd, i as u32, "instruction {i}: expected rd={i}");
-        assert_eq!(rs1, i as u32, "instruction {i}: expected sr index {i}");
+        assert_eq!(
+            rd,
+            u32::try_from(i).unwrap(),
+            "instruction {i}: expected rd={i}"
+        );
+        assert_eq!(
+            rs1,
+            u32::try_from(i).unwrap(),
+            "instruction {i}: expected sr index {i}"
+        );
         assert_eq!(
             modifier, 2,
             "instruction {i}: expected MovSr modifier (2), got {modifier}"
@@ -401,7 +406,7 @@ fn test_integration_all_special_registers() {
 
 #[test]
 fn test_integration_mov_sr_explicit_syntax() {
-    let source = r#"
+    let source = r"
 .kernel test_mov_sr
 .registers 4
     mov_sr r0, sr_thread_id_x
@@ -409,7 +414,7 @@ fn test_integration_mov_sr_explicit_syntax() {
     mov_sr r2, sr_wave_width
     mov_sr r3, sr_num_waves
 .end
-"#;
+";
 
     let result = assemble_program(source);
     assert!(result.is_ok());
@@ -458,12 +463,12 @@ fn test_integration_special_register_encoding_correctness() {
 
     for (sr_name, expected_index) in test_cases {
         let source = format!(
-            r#"
+            r"
 .kernel test_sr
 .registers 4
     mov r0, {sr_name}
 .end
-"#
+"
         );
 
         let result = assemble_program(&source);
@@ -490,55 +495,55 @@ fn test_integration_special_register_encoding_correctness() {
 
 #[test]
 fn test_integration_mma_load_a() {
-    let source = r#"
+    let source = r"
 .kernel mma_test
 .registers 8
     mma_load_a r0, r1, r2
 .end
-"#;
+";
     let result = assemble_program(source);
     assert!(result.is_ok(), "mma_load_a should assemble: {result:?}");
 }
 
 #[test]
 fn test_integration_mma_load_b() {
-    let source = r#"
+    let source = r"
 .kernel mma_test
 .registers 8
     mma_load_b r0, r1, r2
 .end
-"#;
+";
     let result = assemble_program(source);
     assert!(result.is_ok(), "mma_load_b should assemble: {result:?}");
 }
 
 #[test]
 fn test_integration_mma_store_c() {
-    let source = r#"
+    let source = r"
 .kernel mma_test
 .registers 8
     mma_store_c r0, r1, r2
 .end
-"#;
+";
     let result = assemble_program(source);
     assert!(result.is_ok(), "mma_store_c should assemble: {result:?}");
 }
 
 #[test]
 fn test_integration_mma_compute() {
-    let source = r#"
+    let source = r"
 .kernel mma_test
 .registers 8
     mma_compute r0, r1, r2
 .end
-"#;
+";
     let result = assemble_program(source);
     assert!(result.is_ok(), "mma_compute should assemble: {result:?}");
 }
 
 #[test]
 fn test_integration_mma_special_registers() {
-    let source = r#"
+    let source = r"
 .kernel mma_sr_test
 .registers 8
     mov_sr r0, sr_mma_supported
@@ -546,7 +551,7 @@ fn test_integration_mma_special_registers() {
     mov_sr r2, sr_mma_n
     mov_sr r3, sr_mma_k
 .end
-"#;
+";
     let result = assemble_program(source);
     assert!(
         result.is_ok(),
@@ -556,12 +561,12 @@ fn test_integration_mma_special_registers() {
 
 #[test]
 fn test_integration_mma_encoding() {
-    let source = r#"
+    let source = r"
 .kernel mma_enc
 .registers 8
     mma_load_a r0, r1, r2
 .end
-"#;
+";
     let binary = assemble_program(source).unwrap();
 
     let code_offset = u32::from_le_bytes([binary[8], binary[9], binary[10], binary[11]]) as usize;
@@ -593,4 +598,46 @@ fn test_integration_mma_encoding() {
 
     let rs2 = (word1 >> 24) & 0xFF;
     assert_eq!(rs2, 2, "rs2 should be r2");
+}
+
+#[test]
+fn rejects_negative_or_oversized_directives() {
+    for directive in [
+        ".registers -1",
+        ".local_memory -1",
+        ".workgroup_size -1, 1, 1",
+        ".registers 4294967296",
+    ] {
+        let source = format!(".kernel invalid\n{directive}\nhalt\n.end\n");
+        assert!(
+            crate::assemble(&source, "test.wave").is_err(),
+            "{directive}"
+        );
+    }
+}
+
+#[test]
+fn floating_immediate_uses_f32_bits() {
+    assert_eq!(
+        crate::ast::Immediate::Float(1.25).as_u32(),
+        Some(1.25f32.to_bits())
+    );
+}
+
+#[test]
+fn stripped_metadata_follows_code() {
+    let source = ".kernel stripped\nhalt\n.end\n";
+    let binary = crate::assemble_with_options(
+        source,
+        "test.wave",
+        &crate::AssemblerOptions {
+            strip_symbols: true,
+        },
+    )
+    .unwrap()
+    .binary;
+    let word = |offset| u32::from_le_bytes(binary[offset..offset + 4].try_into().unwrap());
+    assert_eq!(word(24), word(8) + word(12));
+    assert_eq!(word(16), 0);
+    assert_eq!(word(20), 0);
 }

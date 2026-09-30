@@ -1,19 +1,13 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Multi-device kernel launch, tensor sharding, and gradient all-reduce.
-//!
-//! Extends the WAVE runtime with data-parallel training primitives. Tensors
-//! are split along a chosen dimension (typically the batch axis) and each
-//! shard is dispatched to a separate device. After each device computes its
-//! local gradients, all-reduce averages them across devices. For single-GPU
-//! systems (e.g. Apple M-series) these operations are no-ops that preserve
-//! correctness and let the same code path run everywhere.
+//! Split tensors across devices, launch each shard, and average gradients on the host.
 
 use crate::device::{DeviceInfo, GpuVendor};
 use crate::error::RuntimeError;
 use crate::launcher::launch_kernel;
 use crate::memory::DeviceBuffer;
+use num_traits::ToPrimitive;
 
 /// A tensor shard bound to a specific device.
 #[derive(Debug)]
@@ -22,7 +16,7 @@ pub struct TensorShard {
     pub device_id: usize,
     /// The buffer holding this shard's data.
     pub buffer: DeviceBuffer,
-    /// Offset into the original tensor (in elements).
+    /// Offset into the original tensor, in elements.
     pub offset: usize,
     /// Number of elements in this shard.
     pub count: usize,
@@ -58,7 +52,7 @@ pub fn launch_on_device(
     )
 }
 
-/// Split a buffer along the first (batch) dimension across devices.
+/// Split a buffer along the first, batch, dimension across devices.
 ///
 /// Divides the buffer into `devices.len()` contiguous chunks. The last shard
 /// absorbs any remainder when the element count is not evenly divisible.
@@ -155,6 +149,7 @@ pub enum ReduceStrategy {
 }
 
 /// Determine the best reduce strategy for a set of devices.
+#[must_use]
 pub fn select_reduce_strategy(devices: &[DeviceInfo]) -> ReduceStrategy {
     if devices.len() <= 1 {
         return ReduceStrategy::SingleDevice;
@@ -170,15 +165,9 @@ pub fn select_reduce_strategy(devices: &[DeviceInfo]) -> ReduceStrategy {
 
 /// All-reduce: average gradient buffers across devices in place.
 ///
-/// After each device computes local gradients, this function averages them
-/// so every device holds the same mean gradient. The strategy is chosen
-/// automatically:
-///
-/// - Single device: no-op (returns input unchanged).
-/// - Same vendor: host-side averaging (vendor-native NCCL/RCCL planned).
-/// - Cross-vendor: host-side averaging via CPU.
-///
-/// All buffers must have the same element count and type (`f32`).
+/// The host sums values in buffer order, then divides by the number of buffers.
+/// Every buffer receives the mean. A single buffer is unchanged.
+/// All buffers must have the same element count and type, `f32`.
 ///
 /// # Errors
 ///
@@ -191,12 +180,9 @@ pub fn allreduce_average(buffers: &mut [DeviceBuffer]) -> Result<(), RuntimeErro
         ));
     }
 
-    if buffers.len() == 1 {
-        return Ok(());
-    }
-
     let count = buffers[0].count;
     for buf in buffers.iter() {
+        let _ = buf.iter_f32()?;
         if buf.count != count {
             return Err(RuntimeError::InvalidArgument(format!(
                 "allreduce buffer size mismatch: expected {count}, got {}",
@@ -205,36 +191,42 @@ pub fn allreduce_average(buffers: &mut [DeviceBuffer]) -> Result<(), RuntimeErro
         }
     }
 
+    if buffers.len() == 1 {
+        return Ok(());
+    }
     let n_buffers = buffers.len();
-    let values: Vec<Vec<f32>> = buffers
-        .iter()
-        .map(DeviceBuffer::to_f32)
-        .collect::<Result<Vec<_>, _>>()?;
-
     let mut averaged = vec![0.0_f32; count];
-    for vals in &values {
-        for (i, &v) in vals.iter().enumerate() {
-            averaged[i] += v;
+    for buffer in buffers.iter() {
+        for (sum, value) in averaged.iter_mut().zip(buffer.iter_f32()?) {
+            *sum += value;
         }
     }
-    #[allow(clippy::cast_precision_loss)]
-    let scale = 1.0 / n_buffers as f32;
+    // The reduction and its normalization use the buffer's f32 precision.
+    let scale = 1.0
+        / n_buffers.to_f32().ok_or_else(|| {
+            RuntimeError::InvalidArgument("buffer count exceeds f32 range".into())
+        })?;
     for val in &mut averaged {
         *val *= scale;
     }
 
-    let result = DeviceBuffer::from_f32(&averaged);
-    for buf in buffers.iter_mut() {
-        buf.data.clone_from(&result.data);
+    if let Some((first, rest)) = buffers.split_first_mut() {
+        for (bytes, value) in first.data.as_chunks_mut::<4>().0.iter_mut().zip(averaged) {
+            bytes.copy_from_slice(&value.to_le_bytes());
+        }
+        for buffer in rest {
+            buffer.data.copy_from_slice(&first.data);
+        }
     }
 
     Ok(())
 }
 
-/// Replicate a buffer to all devices (for broadcasting model weights).
+/// Replicate a buffer to all devices, for broadcasting model weights.
 ///
 /// Returns one clone of the buffer per device. On a single device this
 /// returns a one-element vector containing a clone of the input.
+#[must_use]
 pub fn replicate_buffer(buffer: &DeviceBuffer, devices: &[DeviceInfo]) -> Vec<DeviceBuffer> {
     devices.iter().map(|_| buffer.clone()).collect()
 }
@@ -330,11 +322,11 @@ mod tests {
         let buf0 = DeviceBuffer::from_f32(&[2.0, 4.0, 6.0]);
         let buf1 = DeviceBuffer::from_f32(&[4.0, 6.0, 8.0]);
 
-        let mut bufs = vec![buf0, buf1];
-        allreduce_average(&mut bufs).unwrap();
+        let mut buffers = vec![buf0, buf1];
+        allreduce_average(&mut buffers).unwrap();
 
-        assert_eq!(bufs[0].to_f32().unwrap(), vec![3.0, 5.0, 7.0]);
-        assert_eq!(bufs[1].to_f32().unwrap(), vec![3.0, 5.0, 7.0]);
+        assert_eq!(buffers[0].to_f32().unwrap(), vec![3.0, 5.0, 7.0]);
+        assert_eq!(buffers[1].to_f32().unwrap(), vec![3.0, 5.0, 7.0]);
     }
 
     #[test]
@@ -388,5 +380,48 @@ mod tests {
         let buf = DeviceBuffer::from_f32(&[1.0]);
         let result = shard_tensor(&buf, &[], 0);
         assert!(result.is_err());
+    }
+    #[test]
+    fn reduction_preserves_buffer_order_and_float_edges() {
+        let mut buffers = vec![
+            DeviceBuffer::from_f32(&[1.0e20, -0.0, f32::INFINITY, f32::NAN]),
+            DeviceBuffer::from_f32(&[1.0, -0.0, f32::NEG_INFINITY, 2.0]),
+            DeviceBuffer::from_f32(&[-1.0e20, -0.0, 0.0, 3.0]),
+        ];
+        allreduce_average(&mut buffers).unwrap();
+        let values = buffers[0].to_f32().unwrap();
+        assert_eq!(values[0].to_bits(), 0.0_f32.to_bits());
+        assert_eq!(values[1].to_bits(), 0.0_f32.to_bits());
+        assert!(values[2].is_nan());
+        assert!(values[3].is_nan());
+        assert!(buffers.iter().all(|buffer| buffer.data == buffers[0].data));
+    }
+
+    #[test]
+    fn reduction_rejects_invalid_buffers_without_writing() {
+        for invalid in [
+            DeviceBuffer {
+                count: 2,
+                data: vec![0; 4],
+                element_type: crate::memory::ElementType::F32,
+            },
+            DeviceBuffer {
+                count: 2,
+                data: vec![0; 9],
+                element_type: crate::memory::ElementType::F32,
+            },
+            DeviceBuffer::from_u32(&[1, 2]),
+        ] {
+            let mut buffers = vec![DeviceBuffer::from_f32(&[2.0, 4.0]), invalid];
+            let bytes: Vec<_> = buffers.iter().map(|buffer| buffer.data.clone()).collect();
+            assert!(allreduce_average(&mut buffers).is_err());
+            assert_eq!(
+                buffers
+                    .iter()
+                    .map(|buffer| &buffer.data)
+                    .collect::<Vec<_>>(),
+                bytes.iter().collect::<Vec<_>>()
+            );
+        }
     }
 }

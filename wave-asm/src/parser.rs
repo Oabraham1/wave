@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Recursive descent parser. Converts token stream to AST (Program of Statements).
-//!
-//! Each line is one statement: directive, label, or instruction with optional
-//! predicate and operands. Errors carry byte spans for diagnostic reporting.
+//! Parse tokens into directives, labels, and instructions. Errors carry source spans.
 
 use crate::ast::{
     Directive, Immediate, Instruction, Operand, Predicate, Program, Register, RegisterHalf,
@@ -14,6 +11,7 @@ use crate::diagnostics::AssemblerError;
 use crate::lexer::{SpannedToken, Token};
 use crate::opcodes::{lookup_special_register, CacheHint, Scope, MAX_REGISTER_INDEX};
 
+#[derive(Debug)]
 pub struct Parser {
     tokens: Vec<SpannedToken>,
     position: usize,
@@ -28,6 +26,11 @@ impl Parser {
         }
     }
 
+    /// Parse tokens into an assembly program.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed directives, operands, or instructions.
     pub fn parse(&mut self) -> Result<Program, AssemblerError> {
         let mut statements = Vec::new();
 
@@ -75,19 +78,19 @@ impl Parser {
             }
             "end" => Directive::End,
             "registers" => {
-                let count = self.expect_integer()? as u32;
+                let count = self.expect_u32()?;
                 Directive::Registers(count)
             }
             "local_memory" => {
-                let size = self.expect_integer()? as u32;
+                let size = self.expect_u32()?;
                 Directive::LocalMemory(size)
             }
             "workgroup_size" => {
-                let x = self.expect_integer()? as u32;
-                self.expect_token(Token::Comma)?;
-                let y = self.expect_integer()? as u32;
-                self.expect_token(Token::Comma)?;
-                let z = self.expect_integer()? as u32;
+                let x = self.expect_u32()?;
+                self.expect_token(&Token::Comma)?;
+                let y = self.expect_u32()?;
+                self.expect_token(&Token::Comma)?;
+                let z = self.expect_u32()?;
                 Directive::WorkgroupSize(x, y, z)
             }
             _ => {
@@ -108,7 +111,7 @@ impl Parser {
             unreachable!()
         };
 
-        self.expect_token(Token::Colon)?;
+        self.expect_token(&Token::Colon)?;
 
         let end_span = self.previous_span();
         Ok(Spanned::new(
@@ -211,7 +214,7 @@ impl Parser {
             Some(Token::Register(reg)) => {
                 let reg = reg.clone();
                 self.advance();
-                let register = self.parse_register_name(&reg, span)?;
+                let register = Self::parse_register_name(&reg, span)?;
                 Ok(Spanned::new(Operand::Register(register), span))
             }
             Some(Token::PredicateReg(reg)) => {
@@ -267,7 +270,7 @@ impl Parser {
             Some(Token::Identifier(name)) => {
                 let name = name.clone();
                 self.advance();
-                let operand = self.parse_identifier_operand(&name, span)?;
+                let operand = Ok(Self::parse_identifier_operand(&name))?;
                 Ok(Spanned::new(operand, span))
             }
             Some(Token::Dot) => {
@@ -305,7 +308,7 @@ impl Parser {
         }
     }
 
-    fn parse_register_name(&self, name: &str, span: Span) -> Result<Register, AssemblerError> {
+    fn parse_register_name(name: &str, span: Span) -> Result<Register, AssemblerError> {
         let (base, half) = if let Some(dot_pos) = name.find('.') {
             let (base, suffix) = name.split_at(dot_pos);
             let half = match &suffix[1..] {
@@ -339,13 +342,13 @@ impl Parser {
         })
     }
 
-    fn parse_identifier_operand(&self, name: &str, _span: Span) -> Result<Operand, AssemblerError> {
+    fn parse_identifier_operand(name: &str) -> Operand {
         match name {
-            "wave" => Ok(Operand::Scope(Scope::Wave)),
-            "workgroup" => Ok(Operand::Scope(Scope::Workgroup)),
-            "device" => Ok(Operand::Scope(Scope::Device)),
-            "system" => Ok(Operand::Scope(Scope::System)),
-            _ => Ok(Operand::Label(name.to_string())),
+            "wave" => Operand::Scope(Scope::Wave),
+            "workgroup" => Operand::Scope(Scope::Workgroup),
+            "device" => Operand::Scope(Scope::Device),
+            "system" => Operand::Scope(Scope::System),
+            _ => Operand::Label(name.to_string()),
         }
     }
 
@@ -354,7 +357,11 @@ impl Parser {
     }
 
     fn advance(&mut self) -> SpannedToken {
-        let token = self.tokens[self.position].clone();
+        let current = &mut self.tokens[self.position];
+        let token = SpannedToken {
+            token: std::mem::replace(&mut current.token, Token::Eof),
+            span: current.span,
+        };
         self.position += 1;
         token
     }
@@ -390,8 +397,8 @@ impl Parser {
             .map_or(Span::new(0, 0), |t| t.span)
     }
 
-    fn expect_token(&mut self, expected: Token) -> Result<SpannedToken, AssemblerError> {
-        if self.check(&expected) {
+    fn expect_token(&mut self, expected: &Token) -> Result<SpannedToken, AssemblerError> {
+        if self.check(expected) {
             Ok(self.advance())
         } else {
             Err(AssemblerError::UnexpectedToken {
@@ -413,6 +420,14 @@ impl Parser {
                 span: self.current_span(),
             }),
         }
+    }
+
+    fn expect_u32(&mut self) -> Result<u32, AssemblerError> {
+        let value = self.expect_integer()?;
+        u32::try_from(value).map_err(|_| AssemblerError::ImmediateOutOfRange {
+            value,
+            span: self.previous_span(),
+        })
     }
 
     fn expect_integer(&mut self) -> Result<i64, AssemblerError> {

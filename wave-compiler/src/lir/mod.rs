@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Low-Level Intermediate Representation (LIR) for WAVE kernels.
-//!
-//! LIR is close to WAVE machine instructions but uses virtual registers.
-//! Each LIR instruction maps 1:1 to a WAVE ISA instruction. After
-//! register allocation, virtual registers are replaced with physical ones.
+//! WAVE instructions with virtual registers. Register allocation assigns physical registers
+//! before emission.
 
 pub mod display;
 pub mod instruction;

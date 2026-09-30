@@ -1,14 +1,10 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIR to MIR lowering: flattens structured control flow into a CFG
-//! and constructs SSA form with explicit basic blocks and terminators.
-//!
-//! Each HIR statement is translated into MIR instructions within basic
-//! blocks. Control flow constructs (if/else, for, while) are lowered
-//! into conditional branches between blocks. For-loop variables use
-//! phi nodes at the loop header to merge initial and updated values.
+//! Lower HIR into MIR basic blocks and SSA values. Loop-header phi nodes merge initial and
+//! updated values.
 
+use num_traits::ToPrimitive;
 use std::collections::HashMap;
 
 use crate::diagnostics::CompileError;
@@ -47,6 +43,7 @@ pub fn lower_kernel(kernel: &Kernel) -> Result<MirFunction, CompileError> {
     Ok(lowerer.builder.finish())
 }
 
+#[derive(Debug)]
 struct HirToMirLowerer {
     builder: MirBuilder,
     variables: HashMap<String, ValueId>,
@@ -270,11 +267,9 @@ impl HirToMirLowerer {
 
         self.finalize_for_loop_phis(
             header_block,
-            preheader_block,
-            latch_block,
+            [preheader_block, latch_block],
             phi_dest,
-            start_val,
-            updated,
+            [start_val, updated],
             &loop_carried,
         );
 
@@ -312,17 +307,18 @@ impl HirToMirLowerer {
         loop_carried
     }
 
-    #[allow(clippy::too_many_arguments)]
+    // Phi construction needs the three predecessor blocks and their incoming values.
+
     fn finalize_for_loop_phis(
         &mut self,
         header_block: crate::mir::value::BlockId,
-        preheader_block: crate::mir::value::BlockId,
-        latch_block: crate::mir::value::BlockId,
+        predecessors: [crate::mir::value::BlockId; 2],
         phi_dest: ValueId,
-        start_val: ValueId,
-        updated: ValueId,
+        values: [ValueId; 2],
         loop_carried: &[(String, ValueId, ValueId, MirType)],
     ) {
+        let [preheader_block, latch_block] = predecessors;
+        let [start_val, updated] = values;
         if let Some(header_bb) = self.builder.get_block_mut(header_block) {
             header_bb.phis.push(PhiNode {
                 dest: phi_dest,
@@ -375,6 +371,29 @@ impl HirToMirLowerer {
         Ok(())
     }
 
+    fn lower_literal(&mut self, literal: &Literal) -> Result<ValueId, CompileError> {
+        match literal {
+            Literal::Int(v) => {
+                let value = i32::try_from(*v).map_err(|_| CompileError::CodegenError {
+                    message: format!("integer literal {v} does not fit i32"),
+                })?;
+                Ok(self.builder.emit_const(ConstValue::I32(value)))
+            }
+            Literal::UInt(v) => {
+                let value = u32::try_from(*v).map_err(|_| CompileError::CodegenError {
+                    message: format!("unsigned literal {v} does not fit u32"),
+                })?;
+                Ok(self.builder.emit_const(ConstValue::U32(value)))
+            }
+            // The frontend's default float type is the WAVE f32 register type.
+            Literal::Float(v) => Ok(self.builder.emit_const(ConstValue::F32(
+                v.to_f32()
+                    .expect("f64 to f32 conversion supports every float value"),
+            ))),
+            Literal::Bool(v) => Ok(self.builder.emit_const(ConstValue::Bool(*v))),
+        }
+    }
+
     fn lower_expr(&mut self, expr: &Expr) -> Result<ValueId, CompileError> {
         match expr {
             Expr::Var(name) => self
@@ -382,15 +401,7 @@ impl HirToMirLowerer {
                 .get(name)
                 .copied()
                 .ok_or_else(|| CompileError::UndefinedVariable { name: name.clone() }),
-            Expr::Literal(lit) => match lit {
-                #[allow(clippy::cast_possible_truncation)] // GPU literal narrowing: i64 -> i32
-                Literal::Int(v) => Ok(self.builder.emit_const(ConstValue::I32(*v as i32))),
-                #[allow(clippy::cast_possible_truncation)] // GPU literal narrowing: u64 -> u32
-                Literal::UInt(v) => Ok(self.builder.emit_const(ConstValue::U32(*v as u32))),
-                #[allow(clippy::cast_possible_truncation)] // GPU literal narrowing: f64 -> f32
-                Literal::Float(v) => Ok(self.builder.emit_const(ConstValue::F32(*v as f32))),
-                Literal::Bool(v) => Ok(self.builder.emit_const(ConstValue::Bool(*v))),
-            },
+            Expr::Literal(lit) => self.lower_literal(lit),
             Expr::BinOp { op, lhs, rhs } => {
                 let l = self.lower_expr(lhs)?;
                 let r = self.lower_expr(rhs)?;
@@ -619,7 +630,13 @@ mod tests {
         };
         let func = lower_kernel(&kernel).unwrap();
         assert_eq!(func.block_count(), 1);
-        assert!(!func.blocks[0].instructions.is_empty());
+        assert_eq!(
+            func.blocks[0].instructions,
+            [MirInst::Const {
+                dest: ValueId(0),
+                value: ConstValue::I32(42),
+            }]
+        );
     }
 
     #[test]

@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Optimization pipeline for MIR.
-//!
-//! Includes dead code elimination, common subexpression elimination,
-//! constant folding, loop-invariant code motion, strength reduction,
-//! SCCP, mem2reg, loop unrolling, and CFG simplification.
-//! Passes are run in a fixed order until no pass reports changes.
+//! Run MIR optimization passes until no pass reports a change.
 
 pub mod constant_fold;
 pub mod cse;
@@ -105,6 +100,6 @@ mod tests {
         func.blocks.push(bb);
 
         optimize(&mut func, OptLevel::O1);
-        assert!(func.blocks[0].instructions.is_empty());
+        assert_eq!(func.blocks[0].instructions, [] as [MirInst; 0]);
     }
 }

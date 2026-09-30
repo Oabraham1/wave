@@ -1,4 +1,4 @@
-# WAVE Documentation
+# WAVE documentation
 
 Source for wave.ojima.me. Built with Astro Starlight.
 

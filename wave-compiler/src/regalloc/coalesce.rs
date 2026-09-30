@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Move coalescing to reduce register-to-register copies.
-//!
-//! If two virtual registers connected by a move instruction do not
-//! interfere, they can be merged into one, eliminating the move.
+//! Move coalescing to reduce register-to-register copies. If two virtual registers connected by
+//! a move instruction do not interfere, they can be merged into one, eliminating the move.
 
 use std::collections::HashMap;
 
@@ -12,6 +10,7 @@ use super::interference::InterferenceGraph;
 use crate::lir::instruction::LirInst;
 use crate::lir::operand::VReg;
 
+#[derive(Debug)]
 /// Result of coalescing.
 pub struct CoalesceResult {
     /// Mapping from coalesced `VReg`s to their representative `VReg`.

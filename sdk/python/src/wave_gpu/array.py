@@ -3,17 +3,19 @@
 
 """Array types for WAVE GPU kernel data."""
 
-from typing import List, Sequence, Union
+from __future__ import annotations
+
+from collections.abc import Sequence
 
 
 class WaveArray:
     """CPU-side array that can be passed to WAVE GPU kernels."""
 
-    def __init__(self, data: Sequence[Union[int, float]], dtype: str = "f32") -> None:
-        self.data: List[float] = [float(x) for x in data]
+    def __init__(self, data: Sequence[int | float], dtype: str = "f32") -> None:
+        self.data: list[float] = [float(x) for x in data]
         self.dtype: str = dtype
 
-    def to_list(self) -> List[float]:
+    def to_list(self) -> list[float]:
         """Return the array contents as a Python list."""
         return list(self.data)
 
@@ -27,7 +29,7 @@ class WaveArray:
         return f"WaveArray({self.data}, dtype='{self.dtype}')"
 
 
-def array(data: Sequence[Union[int, float]], dtype: str = "f32") -> WaveArray:
+def array(data: Sequence[int | float], dtype: str = "f32") -> WaveArray:
     """Create a WAVE array from a Python sequence."""
     return WaveArray(data, dtype)
 

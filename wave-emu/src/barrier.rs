@@ -1,11 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Workgroup barrier synchronization. Tracks which waves have reached the barrier,
-//!
-//! releases all waves when the full workgroup is synchronized, and advances their
-//! PCs past the barrier instruction. Single-threaded emulation makes memory
-//! visibility automatic.
+//! Track wave arrivals at a workgroup barrier and release them when the workgroup is
+//! synchronized.
 
 use crate::wave::{Wave, WaveStatus};
 
@@ -16,6 +13,7 @@ pub struct BarrierState {
 }
 
 impl BarrierState {
+    #[must_use]
     pub fn new(total_waves: u32) -> Self {
         Self {
             waves_at_barrier: 0,
@@ -29,6 +27,7 @@ impl BarrierState {
         }
     }
 
+    #[must_use]
     pub fn all_waves_at_barrier(&self) -> bool {
         let expected_mask = if self.total_waves >= 64 {
             u64::MAX
@@ -42,17 +41,20 @@ impl BarrierState {
         self.waves_at_barrier = 0;
     }
 
+    #[must_use]
     pub fn waiting_count(&self) -> u32 {
         self.waves_at_barrier.count_ones()
     }
 }
 
+#[derive(Debug)]
 pub struct BarrierManager {
     state: BarrierState,
     barrier_pc: Option<u32>,
 }
 
 impl BarrierManager {
+    #[must_use]
     pub fn new(total_waves: u32) -> Self {
         Self {
             state: BarrierState::new(total_waves),
@@ -86,6 +88,7 @@ impl BarrierManager {
         true
     }
 
+    #[must_use]
     pub fn is_wave_at_barrier(&self, wave_id: u32) -> bool {
         if wave_id < 64 {
             (self.state.waves_at_barrier & (1u64 << wave_id)) != 0
@@ -94,10 +97,12 @@ impl BarrierManager {
         }
     }
 
+    #[must_use]
     pub fn waiting_count(&self) -> u32 {
         self.state.waiting_count()
     }
 
+    #[must_use]
     pub fn all_at_barrier(&self) -> bool {
         self.state.all_waves_at_barrier()
     }
@@ -108,17 +113,17 @@ mod tests {
     use super::*;
 
     fn create_test_wave(wave_id: u32) -> Wave {
-        Wave::new(
-            32,
-            32,
+        Wave::new(crate::wave::WaveConfig {
+            wave_width: 32,
+            register_count: 32,
             wave_id,
-            [0, 0, 0],
-            [64, 1, 1],
-            [1, 1, 1],
-            wave_id * 32,
-            64,
-            2,
-        )
+            workgroup_id: [0, 0, 0],
+            workgroup_size: [64, 1, 1],
+            grid_size: [1, 1, 1],
+            base_thread_index: wave_id * 32,
+            total_threads_in_workgroup: 64,
+            num_waves: 2,
+        })
     }
 
     #[test]
@@ -131,11 +136,11 @@ mod tests {
         assert_eq!(wave.status, WaveStatus::Suspended);
         assert!(manager.is_wave_at_barrier(0));
 
-        let mut waves = vec![wave];
-        let released = manager.check_and_release(&mut waves);
+        let mut workgroup = vec![wave];
+        let released = manager.check_and_release(&mut workgroup);
         assert!(released);
-        assert_eq!(waves[0].status, WaveStatus::Ready);
-        assert_eq!(waves[0].pc, 0x104);
+        assert_eq!(workgroup[0].status, WaveStatus::Ready);
+        assert_eq!(workgroup[0].pc, 0x104);
     }
 
     #[test]
@@ -154,11 +159,11 @@ mod tests {
         assert!(manager.all_at_barrier());
         assert_eq!(manager.waiting_count(), 2);
 
-        let mut waves = vec![wave0, wave1];
-        let released = manager.check_and_release(&mut waves);
+        let mut workgroup = vec![wave0, wave1];
+        let released = manager.check_and_release(&mut workgroup);
         assert!(released);
 
-        for wave in &waves {
+        for wave in &workgroup {
             assert_eq!(wave.status, WaveStatus::Ready);
             assert_eq!(wave.pc, 0x104);
         }
@@ -178,8 +183,8 @@ mod tests {
         assert!(!manager.all_at_barrier());
         assert_eq!(manager.waiting_count(), 2);
 
-        let mut waves = vec![wave0, wave1];
-        let released = manager.check_and_release(&mut waves);
+        let mut workgroup = vec![wave0, wave1];
+        let released = manager.check_and_release(&mut workgroup);
         assert!(!released);
     }
 
@@ -191,8 +196,8 @@ mod tests {
 
         manager.handle_barrier(&mut wave);
 
-        let mut waves = vec![wave];
-        manager.check_and_release(&mut waves);
+        let mut workgroup = vec![wave];
+        manager.check_and_release(&mut workgroup);
 
         assert_eq!(manager.waiting_count(), 0);
         assert!(!manager.is_wave_at_barrier(0));

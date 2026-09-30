@@ -21,6 +21,9 @@ sdk/js/dist/
 *.wbin
 /tmp/
 
+# Local manuscript workspace
+/paper/
+
 # Notebooks
 *.ipynb
 

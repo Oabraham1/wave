@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WAVE instruction emission and binary generation.
-//!
-//! Converts LIR instructions with physical registers into encoded
-//! WAVE machine code and packages it into the .wbin container format.
+//! WAVE instruction emission and binary generation. Converts LIR instructions with physical
+//! registers into encoded WAVE machine code and packages it into the .wbin container format.
 
 pub mod binary;
 pub mod wave_emit;

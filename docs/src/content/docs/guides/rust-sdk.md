@@ -1,72 +1,72 @@
 ---
-title: Rust SDK
-description: Getting started with the WAVE Rust SDK (wave-sdk) for portable GPU programming.
+title: "Rust SDK"
+description: "Device detection, buffers, compilation, and dispatch with wave-gpu."
 ---
 
-The `wave-sdk` crate provides a safe Rust interface for compiling and launching GPU kernels through the WAVE toolchain. This guide covers device detection, buffer management, kernel compilation, and error handling.
+The `wave-gpu` crate provides device detection, host buffers, kernel compilation, and dispatch through the WAVE runtime.
 
 ## Installation
 
 Add the crate to your project:
 
 ```bash
-cargo add wave-sdk
+cargo add wave-gpu
 ```
 
 Or add it manually in `Cargo.toml`:
 
 ```toml
 [dependencies]
-wave-sdk = "0.1"
+wave-gpu = "0.1"
 ```
 
 For local development against a checkout of the WAVE repo you can use a path dependency:
 
 ```toml
 [dependencies]
-wave-sdk = { path = "../wave-sdk" }
+wave-gpu = { path = "../wave/sdk/rust" }
 ```
 
-## Device Detection
+## Device detection
 
-Call `wave_sdk::device::detect()` to probe for a GPU. It returns a `Result<Device>`:
+Call `wave_gpu::device::detect()` to probe for a GPU. It returns a `Result<Device>`:
 
 ```rust
-use wave_sdk::device;
+use wave_gpu::device;
 
-fn main() -> Result<(), wave_sdk::RuntimeError> {
+fn main() -> Result<(), wave_gpu::RuntimeError> {
     let dev = device::detect()?;
     println!("vendor: {:?}, name: {}", dev.vendor, dev.name);
     Ok(())
 }
 ```
 
-The `vendor` field is a `GpuVendor` enum with the following variants:
+`GpuVendor` has these variants:
 
 | Variant | Description |
 |---|---|
-| `Apple` | Apple integrated GPU (Metal) |
+| `Apple` | Apple integrated GPU; Metal |
 | `Nvidia` | NVIDIA discrete GPU |
 | `Amd` | AMD discrete or integrated GPU |
 | `Intel` | Intel integrated GPU |
 | `Emulator` | Software emulator backend |
 
-## Creating Buffers
+## Creating buffers
 
-Device buffers are created through factory functions in `wave_sdk::array`. Each function returns a `DeviceBuffer`:
+Device buffers are created through factory functions in `wave_gpu::array`. Each function returns a host-side `DeviceBuffer`:
 
 ```rust
-use wave_sdk::array;
+use wave_gpu::array;
 
 // From a slice of f32 values
-let a = array::from_f32(&[1.0, 2.0, 3.0, 4.0])?;
+let a = array::from_f32(&[1.0, 2.0, 3.0, 4.0]);
 
 // Zero-initialized buffer of 1024 f32 elements
-let out = array::zeros_f32(1024)?;
+let out = array::zeros_f32(1024);
 
 // Unsigned integer buffers
-let indices = array::from_u32(&[0, 1, 2, 3])?;
-let counts  = array::zeros_u32(256)?;
+let indices = array::from_u32(&[0, 1, 2, 3]);
+let counts  = array::zeros_u32(256);
 ```
 
 `DeviceBuffer` exposes:
@@ -77,63 +77,63 @@ let counts  = array::zeros_u32(256)?;
 | `to_f32()` | Copy contents to a `Vec<f32>` |
 | `to_u32()` | Copy contents to a `Vec<u32>` |
 
-## Writing and Compiling Kernels
+## Writing and compiling kernels
 
-WAVE compiles kernel source written in any of its supported front-end languages. Pass the source string and a `Language` variant to `wave_sdk::kernel::compile`:
+WAVE compiles kernel source written in any of its supported front-end languages. Pass the source string and a `Language` variant to `wave_gpu::kernel::compile`:
 
 ```rust
-use wave_sdk::kernel::{compile, Language};
+use wave_gpu::kernel::{compile, Language};
 
 let source = r#"
 import wave_gpu
 
 @wave_gpu.kernel
-def vector_add(a, b, out, n):
-    tid = wave_gpu.thread_id()
+def vector_add(a: f32[:], b: f32[:], out: f32[:], n: u32):
+    tid = thread_id()
     if tid < n:
         out[tid] = a[tid] + b[tid]
 "#;
 
-let kernel = compile(source, Language::Python)?;
+let mut kernel = compile(source, Language::Python)?;
 ```
 
-Available `Language` variants: `Python`, `Rust`, `Cpp`, `Typescript`.
+Available `Language` variants: `Python`, `Rust`, `Cpp`, `TypeScript`.
 
-## Launching Kernels
+## Launching kernels
 
-`CompiledKernel::launch` dispatches the kernel on a device. You provide the device handle, a slice of buffer references, a slice of scalar values, and the grid / workgroup dimensions:
+`CompiledKernel::launch` dispatches the kernel on a device. You provide the device handle, mutable buffer references, scalar values, and grid and workgroup dimensions:
 
 ```rust
 let n: u32 = 1024;
-let a   = array::from_f32(&vec![1.0; n as usize])?;
-let b   = array::from_f32(&vec![2.0; n as usize])?;
-let out = array::zeros_f32(n as usize)?;
+let mut a = array::from_f32(&vec![1.0; n as usize]);
+let mut b = array::from_f32(&vec![2.0; n as usize]);
+let mut out = array::zeros_f32(n as usize);
 
 let dev = device::detect()?;
 
 kernel.launch(
     &dev,
-    &[&a, &b, &out],       // buffers
-    &[n.into()],            // scalars
-    [n / 256, 1, 1],        // grid dimensions
-    [256, 1, 1],            // workgroup dimensions
+    &mut [&mut a, &mut b, &mut out],
+    &[n],
+    [n / 256, 1, 1],
+    [256, 1, 1],
 )?;
 ```
 
-Both `grid` and `workgroup` are `[u32; 3]` arrays representing `(x, y, z)` dimensions.
+Both `grid` and `workgroup` are `[u32; 3]` arrays representing `[x, y, z]` dimensions.
 
-## Reading Results
+## Reading results
 
-After launch completes, copy data back to the host:
+After launch, read the updated buffer:
 
 ```rust
 let result: Vec<f32> = out.to_f32()?;
 assert_eq!(result[0], 3.0);
 ```
 
-## Error Handling
+## Error handling
 
-Every fallible operation in `wave-sdk` returns `Result<T, RuntimeError>`. `RuntimeError` covers device detection failures, compilation errors, and launch failures. Use the standard `?` operator or pattern-match:
+Every fallible operation in `wave-gpu` returns `Result<T, RuntimeError>`. `RuntimeError` covers device detection failures, compilation errors, and launch failures. Use the standard `?` operator or pattern-match:
 
 ```rust
 match device::detect() {
@@ -141,12 +141,12 @@ match device::detect() {
     Err(e)  => eprintln!("No device: {e}"),
 }
 
-match kernel.launch(&dev, &[&a, &b, &out], &[n.into()], [4, 1, 1], [256, 1, 1]) {
+match kernel.launch(&dev, &mut [&mut a, &mut b, &mut out], &[n], [4, 1, 1], [256, 1, 1]) {
     Ok(()) => {},
     Err(e) => eprintln!("Launch failed: {e}"),
 }
 ```
 
-## Next Steps
+## Next steps
 
-See the full [Rust API Reference](/reference/rust-api) for detailed type documentation and additional utilities.
+See the [Rust API reference](/reference/rust-api) for types and signatures.

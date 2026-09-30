@@ -1,19 +1,20 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Wave scheduler for multi-wave workgroups. Round-robin selection of ready waves,
-//!
-//! skipping suspended (at barrier) and halted waves. Detects deadlock when no
-//! wave is ready but not all waves are halted.
+//! Wave scheduler for multi-wave workgroups. Round-robin selection of ready waves skipping
+//! suspended, at barrier, and halted waves. Detects deadlock when no wave is ready but not all
+//! waves are halted.
 
 use crate::wave::{Wave, WaveStatus};
 
+#[derive(Debug)]
 pub struct Scheduler {
     last_wave_index: usize,
     wave_count: usize,
 }
 
 impl Scheduler {
+    #[must_use]
     pub fn new(wave_count: usize) -> Self {
         Self {
             last_wave_index: 0,
@@ -37,14 +38,17 @@ impl Scheduler {
         None
     }
 
+    #[must_use]
     pub fn all_halted(&self, waves: &[Wave]) -> bool {
-        waves.iter().all(|w| w.is_halted())
+        waves.iter().all(super::wave::Wave::is_halted)
     }
 
+    #[must_use]
     pub fn any_ready(&self, waves: &[Wave]) -> bool {
-        waves.iter().any(|w| w.is_ready())
+        waves.iter().any(super::wave::Wave::is_ready)
     }
 
+    #[must_use]
     pub fn count_by_status(&self, waves: &[Wave]) -> (usize, usize, usize) {
         let ready = waves
             .iter()
@@ -61,6 +65,7 @@ impl Scheduler {
         (ready, suspended, halted)
     }
 
+    #[must_use]
     pub fn is_deadlocked(&self, waves: &[Wave]) -> bool {
         let (ready, suspended, _halted) = self.count_by_status(waves);
         ready == 0 && suspended > 0
@@ -78,17 +83,17 @@ mod tests {
     fn create_test_waves(count: usize) -> Vec<Wave> {
         (0..count)
             .map(|i| {
-                Wave::new(
-                    32,
-                    32,
-                    i as u32,
-                    [0, 0, 0],
-                    [(count * 32) as u32, 1, 1],
-                    [1, 1, 1],
-                    (i * 32) as u32,
-                    (count * 32) as u32,
-                    count as u32,
-                )
+                Wave::new(crate::wave::WaveConfig {
+                    wave_width: 32,
+                    register_count: 32,
+                    wave_id: u32::try_from(i).unwrap(),
+                    workgroup_id: [0, 0, 0],
+                    workgroup_size: [u32::try_from(count * 32).unwrap(), 1, 1],
+                    grid_size: [1, 1, 1],
+                    base_thread_index: u32::try_from(i * 32).unwrap(),
+                    total_threads_in_workgroup: u32::try_from(count * 32).unwrap(),
+                    num_waves: u32::try_from(count).unwrap(),
+                })
             })
             .collect()
     }

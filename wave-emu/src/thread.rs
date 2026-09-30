@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Per-thread execution state. Each thread has a register file (32 x u32), four
-//!
-//! predicate registers (p0-p3), and read-only special registers populated at
-//! dispatch time (thread/wave/workgroup IDs, dimensions, etc).
+//! Per-thread execution state. Each thread has a register file, 32 x u32, four predicate
+//! registers, p0-p3, and read-only special registers populated at dispatch time,
+//! thread/wave/workgroup IDs, dimensions, etc.
 
 use std::collections::HashMap;
 
@@ -40,6 +39,7 @@ pub struct SpecialRegisters {
 }
 
 impl SpecialRegisters {
+    #[must_use]
     pub fn get(&self, index: u8) -> u32 {
         match index {
             0 => self.thread_id[0],
@@ -68,6 +68,7 @@ impl SpecialRegisters {
 }
 
 impl Thread {
+    #[must_use]
     pub fn new(register_count: u32) -> Self {
         Self {
             registers: vec![0; register_count as usize],
@@ -77,6 +78,7 @@ impl Thread {
         }
     }
 
+    #[must_use]
     pub fn with_special_registers(register_count: u32, special: SpecialRegisters) -> Self {
         Self {
             registers: vec![0; register_count as usize],
@@ -86,6 +88,7 @@ impl Thread {
         }
     }
 
+    #[must_use]
     pub fn read_register(&self, index: u8) -> u32 {
         self.registers.get(index as usize).copied().unwrap_or(0)
     }
@@ -96,6 +99,7 @@ impl Thread {
         }
     }
 
+    #[must_use]
     pub fn read_predicate(&self, index: u8) -> bool {
         self.predicates
             .get(index as usize)
@@ -109,6 +113,7 @@ impl Thread {
         }
     }
 
+    #[must_use]
     pub fn read_special(&self, index: u8) -> u32 {
         self.special_registers.get(index)
     }
@@ -128,8 +133,8 @@ mod tests {
     #[test]
     fn test_thread_register_read_write() {
         let mut thread = Thread::new(32);
-        thread.write_register(5, 0x12345678);
-        assert_eq!(thread.read_register(5), 0x12345678);
+        thread.write_register(5, 0x1234_5678);
+        assert_eq!(thread.read_register(5), 0x1234_5678);
     }
 
     #[test]

@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Two-pass symbol table. Pass 1 collects label definitions and their byte
-//!
-//! offsets. Pass 2 patches forward references in call instructions. Duplicate
-//! labels and unresolved references are reported as errors.
+//! Two-pass symbol table. Pass 1 collects label definitions and their byte offsets. Pass 2
+//! patches forward references in call instructions. Duplicate labels and unresolved references
+//! are reported as errors.
 
 use crate::ast::{Program, Span, Statement};
 use crate::diagnostics::AssemblerError;
@@ -17,6 +16,7 @@ pub struct Symbol {
     pub span: Span,
 }
 
+#[derive(Debug)]
 pub struct SymbolTable {
     symbols: HashMap<String, Symbol>,
 }
@@ -29,6 +29,11 @@ impl SymbolTable {
         }
     }
 
+    /// Define a label at a byte offset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the label is already defined.
     pub fn define(&mut self, name: String, offset: u32, span: Span) -> Result<(), AssemblerError> {
         if self.symbols.contains_key(&name) {
             return Err(AssemblerError::DuplicateLabel { label: name, span });
@@ -54,6 +59,11 @@ impl Default for SymbolTable {
     }
 }
 
+/// Collect label definitions and their byte offsets.
+///
+/// # Errors
+///
+/// Returns an error if a label is defined more than once.
 pub fn build_symbol_table(program: &Program) -> Result<SymbolTable, AssemblerError> {
     let mut symbols = SymbolTable::new();
     let mut current_offset: u32 = 0;
@@ -80,6 +90,11 @@ pub fn build_symbol_table(program: &Program) -> Result<SymbolTable, AssemblerErr
     Ok(symbols)
 }
 
+/// Check that referenced labels exist.
+///
+/// # Errors
+///
+/// Returns an error for an undefined label.
 pub fn validate_label_references(
     program: &Program,
     symbols: &SymbolTable,

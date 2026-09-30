@@ -1,10 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Opcode definitions and constants for WAVE ISA decoding.
-//!
-//! Mirrors the exact opcode assignments from wave-asm to ensure
-//! consistency between assembler, disassembler, and emulator.
+//! Opcode definitions and constants for WAVE ISA decoding. Mirrors the exact opcode assignments
+//! from wave-asm to ensure consistency between assembler, disassembler, and emulator.
 
 pub const OPCODE_SHIFT: u32 = 24;
 pub const OPCODE_MASK: u32 = 0xFF;

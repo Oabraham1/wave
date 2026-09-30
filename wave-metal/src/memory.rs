@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Memory operation MSL emission. Generates Metal code for WAVE local (threadgroup)
-//!
-//! and device memory operations including loads, stores, and atomics. Memory accesses
-//! use byte offsets from the base pointer with pointer casts to the appropriate width
-//! type. Atomics use Metal's `atomic_fetch_*_explicit` functions with `memory_order_relaxed`.
+//! Emit Metal loads, stores, and atomics for device and local memory.
 
 use crate::registers::reg;
 use wave_decode::opcodes::{AtomicOp, MemWidth};
@@ -154,7 +150,7 @@ pub fn emit_atomic_cas(
         "{".to_string(),
         format!("    uint expected_tmp = {r_exp};"),
         format!(
-            "    atomic_compare_exchange_weak_explicit(({space} atomic_uint*)({mem_name} + {r_addr}), &expected_tmp, {r_des}, memory_order_relaxed, memory_order_relaxed);"
+            "    while (!atomic_compare_exchange_weak_explicit(({space} atomic_uint*)({mem_name} + {r_addr}), &expected_tmp, {r_des}, memory_order_relaxed, memory_order_relaxed) && expected_tmp == {r_exp}) {{}}"
         ),
     ];
 

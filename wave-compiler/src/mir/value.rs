@@ -1,12 +1,10 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! SSA value identifiers for MIR.
-//!
-//! Values in MIR are in Static Single Assignment form. Each value is
-//! assigned exactly once and identified by a unique `ValueId`.
+//! SSA value identifiers for MIR. Values in MIR are in Static Single Assignment form. Each value
+//! is assigned exactly once and identified by a unique `ValueId`.
 
-/// Unique identifier for an SSA value (virtual register).
+/// Unique identifier for an SSA value, virtual register.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueId(pub u32);
 
@@ -42,6 +40,7 @@ impl std::fmt::Display for BlockId {
     }
 }
 
+#[derive(Debug)]
 /// Generator for unique value and block IDs.
 pub struct IdGenerator {
     next_value: u32,

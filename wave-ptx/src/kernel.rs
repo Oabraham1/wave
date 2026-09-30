@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! PTX kernel wrapper generation. Emits the PTX module header (.version, .target,
-//!
-//! `.address_size`), the .visible .entry declaration with the device memory pointer
-//! parameter, register declarations for all PTX register classes (.b32, .f32, .pred,
-//! .b64, temporaries), shared memory allocation, and the kernel footer (ret + close).
+//! Generate PTX kernel declarations and conversion helpers.
 
 #[must_use]
 pub fn emit_header(sm_version: u32) -> String {

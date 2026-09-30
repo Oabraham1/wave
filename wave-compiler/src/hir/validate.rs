@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! HIR validation and type checking for WAVE GPU kernels.
-//!
-//! Validates kernel definitions by checking that all variables are defined
-//! before use, types are consistent, and control flow is well-formed.
+//! HIR validation and type checking for WAVE GPU kernels. Validates kernel definitions by
+//! checking that all variables are defined before use, types are consistent, and control flow is
+//! well-formed.
 
 use std::collections::HashMap;
 
@@ -14,6 +13,7 @@ use super::stmt::Stmt;
 use super::types::Type;
 use crate::diagnostics::error::CompileError;
 
+#[derive(Debug)]
 /// Type environment mapping variable names to their types.
 struct TypeEnv {
     scopes: Vec<HashMap<String, Type>>,

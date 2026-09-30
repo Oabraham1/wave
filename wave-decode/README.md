@@ -3,7 +3,7 @@
 Shared instruction decoder for the WAVE ISA. This crate provides:
 
 - **Opcode definitions** matching `wave-asm`'s encoding
-- **Instruction decoding** from binary to structured Rust types
+- **Instruction decoding** from binary to structured types
 - **WBIN container parsing** for reading `.wbin` files
 
 ## Usage
@@ -21,7 +21,7 @@ wave-decode = { path = "../wave-decode" }
 use wave_decode::{Decoder, decode_all};
 
 // Decode from raw bytes
-let code: &[u8] = &[0x01, 0x01, 0x00, 0xFC]; // halt instruction
+let code: &[u8] = &[0x90, 0x00, 0x00, 0x3F]; // halt instruction
 let mut decoder = Decoder::new(code);
 
 while decoder.has_more() {
@@ -74,17 +74,17 @@ The WBIN format is a simple container:
 
 | Offset | Size | Description |
 |--------|------|-------------|
-| 0x00   | 4    | Magic "WAVE" |
-| 0x04   | 2    | Version (0x0001) |
-| 0x06   | 2    | Flags (reserved) |
-| 0x08   | 4    | Code section offset |
-| 0x0C   | 4    | Code section size |
-| 0x10   | 4    | Symbol table offset |
-| 0x14   | 4    | Symbol table size |
-| 0x18   | 4    | Metadata offset |
-| 0x1C   | 4    | Metadata size |
+| 0x00 | 4 | Magic "WAVE" |
+| 0x04 | 2 | Version; 0x0001 |
+| 0x06 | 2 | Flags; reserved |
+| 0x08 | 4 | Code section offset |
+| 0x0C | 4 | Code section size |
+| 0x10 | 4 | Symbol table offset |
+| 0x14 | 4 | Symbol table size |
+| 0x18 | 4 | Metadata offset |
+| 0x1C | 4 | Metadata size |
 
-Followed by the code section, symbol table (null-terminated strings), and kernel metadata.
+Followed by the code section, symbol table, null-terminated strings, and kernel metadata.
 
 ## License
 

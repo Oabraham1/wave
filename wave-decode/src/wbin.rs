@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! WBIN container reader. Parses the .wbin binary format produced by wave-asm,
-//!
-//! extracting header information, code sections, symbols, and kernel metadata.
+//! WBIN container reader. Parses the .wbin binary format produced by wave-asm extracting header
+//! information, code sections, symbols, and kernel metadata.
 
 use thiserror::Error;
 
@@ -71,7 +70,7 @@ pub struct KernelInfo {
 
 #[derive(Debug, Clone)]
 pub struct WbinFile<'a> {
-    data: &'a [u8],
+    code: &'a [u8],
     pub header: WbinHeader,
     pub kernels: Vec<KernelInfo>,
 }
@@ -80,7 +79,6 @@ impl<'a> WbinFile<'a> {
     /// # Errors
     ///
     /// Returns `WbinError` if the binary is malformed or too small.
-    #[allow(clippy::missing_panics_doc)]
     pub fn parse(data: &'a [u8]) -> Result<Self, WbinError> {
         if data.len() < WBIN_HEADER_SIZE {
             return Err(WbinError::FileTooSmall {
@@ -89,7 +87,7 @@ impl<'a> WbinFile<'a> {
             });
         }
 
-        let magic: [u8; 4] = data[0..4].try_into().unwrap();
+        let magic = [data[0], data[1], data[2], data[3]];
         if &magic != WBIN_MAGIC {
             return Err(WbinError::InvalidMagic { actual: magic });
         }
@@ -126,8 +124,10 @@ impl<'a> WbinFile<'a> {
 
         let kernels = Self::parse_kernels(data, &header)?;
 
+        let start = code_offset as usize;
+        let code = &data[start..start + code_size as usize];
         Ok(Self {
-            data,
+            code,
             header,
             kernels,
         })
@@ -146,7 +146,7 @@ impl<'a> WbinFile<'a> {
                 file_size,
             });
         }
-        if (offset as usize + size as usize) > file_size {
+        if u64::from(offset) + u64::from(size) > file_size as u64 {
             return Err(WbinError::InvalidSize {
                 field,
                 offset,
@@ -170,9 +170,8 @@ impl<'a> WbinFile<'a> {
             data[meta_start + 3],
         ]);
 
-        #[allow(clippy::cast_possible_truncation)]
-        let expected_size = 4 + kernel_count * (KERNEL_METADATA_SIZE as u32);
-        if header.metadata_size < expected_size {
+        let available_records = (header.metadata_size as usize - 4) / KERNEL_METADATA_SIZE;
+        if kernel_count as usize > available_records {
             return Err(WbinError::InvalidKernelCount {
                 count: kernel_count,
                 metadata_size: header.metadata_size,
@@ -233,7 +232,7 @@ impl<'a> WbinFile<'a> {
             ]);
 
             let name = if name_offset != 0 && header.symbol_size > 0 {
-                Self::read_string(data, name_offset as usize)?
+                Self::read_string(data, name_offset)?
             } else {
                 String::new()
             };
@@ -253,37 +252,29 @@ impl<'a> WbinFile<'a> {
         Ok(kernels)
     }
 
-    fn read_string(data: &[u8], offset: usize) -> Result<String, WbinError> {
-        let mut end = offset;
+    fn read_string(data: &[u8], offset: u32) -> Result<String, WbinError> {
+        let start = offset as usize;
+        let mut end = start;
         while end < data.len() && data[end] != 0 {
             end += 1;
         }
         if end >= data.len() {
-            #[allow(clippy::cast_possible_truncation)]
-            return Err(WbinError::UnterminatedString {
-                offset: offset as u32,
-            });
+            return Err(WbinError::UnterminatedString { offset });
         }
-        Ok(String::from_utf8_lossy(&data[offset..end]).to_string())
+        Ok(String::from_utf8_lossy(&data[start..end]).to_string())
     }
 
     #[must_use]
     pub fn code(&self) -> &[u8] {
-        let start = self.header.code_offset as usize;
-        let end = start + self.header.code_size as usize;
-        &self.data[start..end]
+        self.code
     }
 
     #[must_use]
     pub fn kernel_code(&self, kernel_index: usize) -> Option<&[u8]> {
         let kernel = self.kernels.get(kernel_index)?;
-        let start = self.header.code_offset as usize + kernel.code_offset as usize;
-        let end = start + kernel.code_size as usize;
-        if end <= self.data.len() {
-            Some(&self.data[start..end])
-        } else {
-            None
-        }
+        let start = kernel.code_offset as usize;
+        let end = start.checked_add(kernel.code_size as usize)?;
+        self.code().get(start..end)
     }
 
     #[must_use]
@@ -330,7 +321,7 @@ mod tests {
         let code_offset: u32 = 0x20;
         let code_size: u32 = 8;
         let symbol_offset: u32 = code_offset + code_size;
-        let symbol_size: u32 = kernel_name.len() as u32;
+        let symbol_size: u32 = u32::try_from(kernel_name.len()).unwrap();
         let metadata_offset: u32 = symbol_offset + symbol_size;
         let metadata_size: u32 = 4 + 32;
 
@@ -434,5 +425,32 @@ mod tests {
         let data_stripped = make_minimal_wbin();
         let wbin_stripped = WbinFile::parse(&data_stripped).unwrap();
         assert!(!wbin_stripped.has_symbols());
+    }
+    #[test]
+    fn rejects_overflowing_kernel_count() {
+        let mut data = make_minimal_wbin();
+        data[36..40].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(matches!(
+            WbinFile::parse(&data),
+            Err(WbinError::InvalidKernelCount { .. })
+        ));
+    }
+
+    #[test]
+    fn kernel_cannot_read_into_symbols_or_metadata() {
+        let data = make_wbin_with_kernel();
+        let mut parsed = WbinFile::parse(&data).unwrap();
+        parsed.kernels[0].code_offset = parsed.header.code_size;
+        assert!(parsed.kernel_code(0).is_none());
+        parsed.kernels[0].code_offset = u32::MAX;
+        assert!(parsed.kernel_code(0).is_none());
+    }
+
+    #[test]
+    fn code_view_keeps_the_validated_range() {
+        let data = make_minimal_wbin();
+        let mut parsed = WbinFile::parse(&data).unwrap();
+        parsed.header.code_offset = u32::MAX;
+        assert_eq!(parsed.code(), &[0; 4]);
     }
 }

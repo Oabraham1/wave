@@ -1,10 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Core simulation engine. Manages waves within a workgroup, coordinates barrier
-//!
-//! synchronization, schedules wave execution, and drives the instruction executor.
-//! A single Core instance handles one workgroup's complete execution.
+//! Run one workgroup, scheduling waves and coordinating barriers.
 
 use crate::barrier::BarrierManager;
 use crate::executor::{Executor, StepResult};
@@ -15,6 +12,7 @@ use crate::wave::Wave;
 use crate::EmulatorConfig;
 use crate::EmulatorError;
 
+#[derive(Debug)]
 pub struct Core<'a> {
     waves: Vec<Wave>,
     local_memory: LocalMemory,
@@ -42,17 +40,17 @@ impl<'a> Core<'a> {
         let mut waves = Vec::with_capacity(num_waves as usize);
         for wave_id in 0..num_waves {
             let base_thread_index = wave_id * config.wave_width;
-            let wave = Wave::new(
-                config.wave_width,
-                config.register_count,
+            let wave = Wave::new(crate::wave::WaveConfig {
+                wave_width: config.wave_width,
+                register_count: config.register_count,
                 wave_id,
                 workgroup_id,
-                config.workgroup_dim,
-                config.grid_dim,
+                workgroup_size: config.workgroup_dim,
+                grid_size: config.grid_dim,
                 base_thread_index,
-                total_threads,
+                total_threads_in_workgroup: total_threads,
                 num_waves,
-            );
+            });
             waves.push(wave);
         }
 
@@ -84,6 +82,11 @@ impl<'a> Core<'a> {
         }
     }
 
+    /// Run until execution halts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid instructions, memory accesses, control flow, deadlock, or an exceeded instruction limit.
     pub fn run(&mut self) -> Result<ExecutionStats, EmulatorError> {
         for _wave in &self.waves {
             self.stats.record_wave();
@@ -100,19 +103,16 @@ impl<'a> Core<'a> {
                 continue;
             }
 
-            let wave_index = match self.scheduler.pick_next_ready(&self.waves) {
-                Some(idx) => idx,
-                None => {
-                    if self.scheduler.is_deadlocked(&self.waves) {
-                        return Err(EmulatorError::Deadlock {
-                            message: format!(
-                                "workgroup ({},{},{}) deadlocked - waves waiting at different barriers",
-                                self.workgroup_id[0], self.workgroup_id[1], self.workgroup_id[2]
-                            ),
-                        });
-                    }
-                    break;
+            let Some(wave_index) = self.scheduler.pick_next_ready(&self.waves) else {
+                if self.scheduler.is_deadlocked(&self.waves) {
+                    return Err(EmulatorError::Deadlock {
+                        message: format!(
+                            "workgroup ({},{},{}) deadlocked - waves waiting at different barriers",
+                            self.workgroup_id[0], self.workgroup_id[1], self.workgroup_id[2]
+                        ),
+                    });
                 }
+                break;
             };
 
             let wave = &mut self.waves[wave_index];
@@ -136,8 +136,7 @@ impl<'a> Core<'a> {
             }
 
             match result {
-                StepResult::Continue => {}
-                StepResult::Halted => {}
+                StepResult::Continue | StepResult::Halted => {}
                 StepResult::Barrier => {
                     self.barrier_manager.handle_barrier(wave);
                 }
@@ -147,14 +146,17 @@ impl<'a> Core<'a> {
         Ok(self.stats.clone())
     }
 
+    #[must_use]
     pub fn waves(&self) -> &[Wave] {
         &self.waves
     }
 
+    #[must_use]
     pub fn local_memory(&self) -> &LocalMemory {
         &self.local_memory
     }
 
+    #[must_use]
     pub fn stats(&self) -> &ExecutionStats {
         &self.stats
     }
@@ -193,11 +195,11 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let mut core = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
+        let mut processor = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
 
-        let stats = core.run().unwrap();
+        let stats = processor.run().unwrap();
         assert_eq!(stats.waves_executed, 1);
-        assert!(core.waves[0].is_halted());
+        assert!(processor.waves[0].is_halted());
     }
 
     #[test]
@@ -215,17 +217,17 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let mut core = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
+        let mut processor = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
 
-        let stats = core.run().unwrap();
+        let stats = processor.run().unwrap();
         assert_eq!(stats.waves_executed, 2);
-        assert!(core.waves[0].is_halted());
-        assert!(core.waves[1].is_halted());
+        assert!(processor.waves[0].is_halted());
+        assert!(processor.waves[1].is_halted());
     }
 
     #[test]
     fn test_core_mov_imm_then_halt() {
-        let mut code = encode_mov_imm(5, 0x12345678);
+        let mut code = encode_mov_imm(5, 0x1234_5678);
         code.extend_from_slice(&encode_halt());
 
         let config = EmulatorConfig {
@@ -239,12 +241,12 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let mut core = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
+        let mut processor = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
 
-        core.run().unwrap();
+        processor.run().unwrap();
 
-        for thread in &core.waves[0].threads {
-            assert_eq!(thread.read_register(5), 0x12345678);
+        for thread in &processor.waves[0].threads {
+            assert_eq!(thread.read_register(5), 0x1234_5678);
         }
     }
 
@@ -263,18 +265,18 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let core = Core::new(&config, &code, &mut device_memory, [1, 0, 0]);
+        let processor = Core::new(&config, &code, &mut device_memory, [1, 0, 0]);
 
         assert_eq!(
-            core.waves[0].threads[0].special_registers.workgroup_id,
+            processor.waves[0].threads[0].special_registers.workgroup_id,
             [1, 0, 0]
         );
         assert_eq!(
-            core.waves[0].threads[0].special_registers.thread_id,
+            processor.waves[0].threads[0].special_registers.thread_id,
             [0, 0, 0]
         );
         assert_eq!(
-            core.waves[0].threads[8].special_registers.thread_id,
+            processor.waves[0].threads[8].special_registers.thread_id,
             [0, 1, 0]
         );
     }
@@ -303,17 +305,15 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let mut core = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
+        let mut processor = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
 
-        core.run().unwrap();
+        processor.run().unwrap();
 
-        for (i, thread) in core.waves[0].threads.iter().enumerate() {
+        for (i, thread) in processor.waves[0].threads.iter().enumerate() {
             assert_eq!(
                 thread.read_register(0),
-                i as u32,
-                "Thread {} should have lane_id {} in r0",
-                i,
-                i
+                u32::try_from(i).unwrap(),
+                "Thread {i} should have lane_id {i} in r0"
             );
         }
     }
@@ -354,14 +354,18 @@ mod tests {
         };
 
         let mut device_memory = DeviceMemory::new(1024);
-        let mut core = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
+        let mut processor = Core::new(&config, &code, &mut device_memory, [0, 0, 0]);
 
-        core.run().unwrap();
+        processor.run().unwrap();
 
         for i in 0..4 {
             let addr = i * 4;
             let value = device_memory.read_u32(addr).unwrap();
-            assert_eq!(value, i as u32, "Address {} should contain {}", addr, i);
+            assert_eq!(
+                value,
+                u32::try_from(i).unwrap(),
+                "Address {addr} should contain {i}"
+            );
         }
     }
 }

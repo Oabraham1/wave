@@ -1,11 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Kernel compilation wrapper for the WAVE runtime.
-//!
-//! Wraps `wave_compiler::compile_source` to compile high-level kernel source
-//! code into WAVE binary (.wbin) format. Supports Python, Rust, C++, and
-//! TypeScript source languages.
+//! Kernel compilation wrapper for the WAVE runtime. Wraps `wave_compiler::compile_source` to
+//! compile high-level kernel source code into WBIN format. Supports Python, Rust,
+//! C++, and TypeScript source languages.
 
 use crate::error::RuntimeError;
 use wave_compiler::{CompilerConfig, Language, OptLevel};
@@ -44,13 +42,13 @@ mod tests {
 
     #[test]
     fn test_compile_python_kernel() {
-        let source = r#"
+        let source = r"
 @kernel
 def vector_add(a: Buffer[f32], b: Buffer[f32], out: Buffer[f32], n: u32):
     gid = thread_id()
     if gid < n:
         out[gid] = a[gid] + b[gid]
-"#;
+";
         let result = compile_kernel(source, Language::Python);
         assert!(result.is_ok());
         let wbin = result.unwrap();

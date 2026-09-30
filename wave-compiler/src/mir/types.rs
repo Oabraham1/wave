@@ -1,17 +1,15 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! MIR type system, lowered from HIR types.
-//!
-//! MIR types are a simpler representation that directly maps to
-//! WAVE register types and memory operations.
+//! MIR type system, lowered from HIR types. MIR types are a simpler representation that directly
+//! maps to WAVE register types and memory operations.
 
 use crate::hir;
 
 /// MIR type, a lowered version of HIR types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MirType {
-    /// 32-bit integer (signed or unsigned).
+    /// 32-bit integer, signed or unsigned.
     I32,
     /// 32-bit float.
     F32,
@@ -21,7 +19,7 @@ pub enum MirType {
     F64,
     /// Boolean predicate.
     Bool,
-    /// Pointer (32-bit address).
+    /// Pointer, 32-bit address.
     Ptr,
 }
 

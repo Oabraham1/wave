@@ -23,14 +23,14 @@ jobs:
 
       - name: Rust formatting
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust tests/spec-verification; do
             (cd $crate && cargo fmt --check)
           done
 
       - name: Rust clippy
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
-            (cd $crate && cargo clippy -- -D warnings)
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust tests/spec-verification; do
+            (cd $crate && cargo clippy --all-targets -- -D warnings)
           done
 
       - name: Python lint
@@ -67,13 +67,13 @@ jobs:
 
       - name: Build all Rust crates
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust tests/spec-verification; do
             (cd $crate && cargo build --release)
           done
 
       - name: Run Rust unit tests
         run: |
-          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust; do
+          for crate in wave-decode wave-asm wave-dis wave-emu wave-compiler wave-metal wave-ptx wave-hip wave-sycl wave-runtime sdk/rust tests/spec-verification; do
             (cd $crate && cargo test)
           done
 
@@ -99,11 +99,10 @@ jobs:
           mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release
           make
-          ./test_vector_add
+          ctest --output-on-failure
 
       - name: Run JS/TS SDK tests
         run: |
           cd sdk/js
-          npm install
-          npx tsc
-          npx ts-node tests/test_vector_add.ts
+          npm ci
+          npm test

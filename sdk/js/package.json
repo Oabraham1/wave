@@ -11,10 +11,18 @@
     "url": "https://github.com/Oabraham1/wave"
   },
   "homepage": "https://wave.ojima.me",
-  "keywords": ["gpu", "cuda", "metal", "hip", "sycl", "compute", "kernel"],
+  "keywords": [
+    "gpu",
+    "cuda",
+    "metal",
+    "hip",
+    "sycl",
+    "compute",
+    "kernel"
+  ],
   "scripts": {
     "build": "tsc",
-    "test": "node --experimental-vm-modules tests/test_vector_add.js"
+    "test": "tsc -p tsconfig.test.json && node build/test/tests/test_vector_add.js"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

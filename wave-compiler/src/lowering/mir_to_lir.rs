@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! MIR to LIR lowering: instruction selection and structured control flow emission.
-//!
-//! Translates MIR instructions to near-WAVE LIR instructions. Analyzes
-//! the CFG to emit structured control flow (If/Endif, Loop/Endloop)
-//! by detecting merge points and back edges. Comparison results are
-//! tracked as predicate registers so `CondBranch` can use them directly.
+//! Select WAVE instructions and reconstruct structured control flow from MIR.
 
 use std::collections::{HashMap, HashSet};
 
@@ -32,6 +27,7 @@ pub fn lower_function(func: &MirFunction) -> Result<Vec<LirInst>, CompileError> 
     Ok(lowerer.instructions)
 }
 
+#[derive(Debug)]
 struct MirToLirLowerer<'a> {
     func: &'a MirFunction,
     instructions: Vec<LirInst>,
@@ -897,7 +893,6 @@ mod tests {
     fn test_lower_simple_function() {
         let func = make_simple_mir();
         let lir = lower_function(&func).unwrap();
-        assert!(!lir.is_empty());
         assert!(lir.iter().any(|i| matches!(i, LirInst::Iadd { .. })));
         assert!(matches!(lir.last(), Some(LirInst::Halt)));
     }

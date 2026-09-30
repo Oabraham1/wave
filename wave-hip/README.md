@@ -1,6 +1,6 @@
 # wave-hip
 
-AMD HIP backend for the WAVE ISA. Translates `.wbin` binaries to HIP C++ (`.hip`) for AMD GPUs via ROCm.
+AMD HIP backend for the WAVE ISA. Translates `.wbin` binaries to HIP C++, `.hip`, for AMD GPUs via ROCm.
 
 ## Build
 
@@ -31,7 +31,7 @@ Requires ROCm and `hipcc`.
 |------|-----|
 | Registers | `uint32_t` local variables |
 | Float bitcast | `__uint_as_float()` / `__float_as_uint()` via `rf()` / `ri()` helpers |
-| Local memory | `extern __shared__ uint8_t local_mem[]` (dynamic shared memory) |
+| Local memory | `extern __shared__ uint8_t local_mem[]`; dynamic shared memory |
 | Device memory | `uint8_t*` pointer arithmetic |
 | Barrier | `__syncthreads()` |
 | Fence | `__threadfence_block()` / `__threadfence()` / `__threadfence_system()` |
@@ -59,6 +59,6 @@ Reduction trees and prefix sums use `for` loops bounded by `warpSize` rather tha
 
 ## License
 
-Copyright (c) 2026 Ojima Abraham. All rights reserved.
+Copyright © 2026 Ojima Abraham. All rights reserved.
 
 Apache License, Version 2.0. See [LICENSE](../LICENSE) for terms.

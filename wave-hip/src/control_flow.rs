@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Control flow HIP emission. Translates WAVE structured control flow instructions
-//!
-//! (if/else/endif, loop/endloop, break/continue) into equivalent HIP C++ control
-//! flow statements. HIP supports structured control flow natively so the mapping is
-//! direct with no branch lowering required, identical to the Metal backend.
+//! Translate structured WAVE branches and loops into HIP C++ control flow.
 
 use crate::registers::pred;
 

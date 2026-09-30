@@ -12,7 +12,6 @@ ASM="$ROOT_DIR/wave-asm/target/release/wave-asm"
 EMU="$ROOT_DIR/wave-emu/target/release/wave-emu"
 COMPILER="$ROOT_DIR/wave-compiler/target/release/wave-compiler"
 
-PASS=0
 FAIL=0
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -25,7 +24,6 @@ fail_msg() {
 
 pass_msg() {
     echo "[PASS] $1"
-    PASS=$((PASS + 1))
 }
 
 check_iota_output() {
@@ -808,5 +806,9 @@ else
 fi
 
 echo ""
-echo "Results: $PASS passed, $FAIL failed"
+if [ "$FAIL" -eq 0 ]; then
+    echo "Emulator checks passed."
+else
+    echo "$FAIL emulator checks failed."
+fi
 exit "$FAIL"

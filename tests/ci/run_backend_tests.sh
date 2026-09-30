@@ -14,7 +14,6 @@ PTX="$ROOT_DIR/wave-ptx/target/release/wave-ptx"
 HIP="$ROOT_DIR/wave-hip/target/release/wave-hip"
 SYCL="$ROOT_DIR/wave-sycl/target/release/wave-sycl"
 
-PASS=0
 FAIL=0
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -27,7 +26,6 @@ fail_msg() {
 
 pass_msg() {
     echo "[PASS] $1"
-    PASS=$((PASS + 1))
 }
 
 check_contains() {
@@ -53,7 +51,7 @@ $metal_ok && pass_msg "Metal codegen (vector_add)"
 
 "$PTX" "$TMPDIR/va.wbin" -o "$TMPDIR/va.ptx"
 ptx_ok=true
-for pattern in ".entry" "%tid" ".reg" "add.f32" ; do
+for pattern in ".entry" "%tid" ".reg" '^[[:space:]]*add\.rn\.f32[[:space:]]' ; do
     if ! check_contains "$TMPDIR/va.ptx" "$pattern"; then
         fail_msg "PTX codegen" "missing pattern: $pattern"
         ptx_ok=false
@@ -85,5 +83,9 @@ done
 $sycl_ok && pass_msg "SYCL codegen (vector_add)"
 
 echo ""
-echo "Results: $PASS passed, $FAIL failed"
+if [ "$FAIL" -eq 0 ]; then
+    echo "Backend checks passed."
+else
+    echo "$FAIL backend checks failed."
+fi
 exit "$FAIL"

@@ -243,6 +243,5 @@ if __name__ == "__main__":
     results.append(compare_grads("dW2 (128x10)", dW2_wave, dW2_pt))
     results.append(compare_grads("db2 (10,)", db2_wave, db2_pt))
 
-    print(f"\nSummary: {results.count('BIT-EXACT')} bit-exact, "
-          f"{results.count('CLOSE')} close, "
-          f"{results.count('DIFFERS')} differs")
+    differences = results.count("DIFFERS")
+    print(f"\nMismatches: {differences}" if differences else "\nGradients match within tolerance")

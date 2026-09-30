@@ -1,25 +1,25 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Common subexpression elimination pass.
-//!
-//! For each instruction, checks if an equivalent computation with the
-//! same operands already exists. If so, replaces the redundant computation
+//! Common subexpression elimination pass. For each instruction, checks if an equivalent
+//! computation with the same operands already exists. If so, replaces the redundant computation
 //! with a reference to the existing value.
 
 use std::collections::HashMap;
 
 use super::pass::Pass;
-use crate::mir::function::MirFunction;
+use crate::mir::function::{resolve_value, MirFunction};
 use crate::mir::instruction::MirInst;
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Common subexpression elimination pass.
 pub struct Cse;
 
-#[derive(Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct ExprKey {
     op: u8,
+    ty: crate::mir::types::MirType,
     lhs: ValueId,
     rhs: ValueId,
 }
@@ -30,42 +30,36 @@ impl Pass for Cse {
     }
 
     fn run(&self, func: &mut MirFunction) -> bool {
-        let mut available: HashMap<ExprKey, ValueId> = HashMap::new();
-        let mut replacements: HashMap<ValueId, ValueId> = HashMap::new();
-        let mut changed = false;
-
+        let mut replacements = HashMap::new();
         for block in &mut func.blocks {
-            for inst in &mut block.instructions {
+            let mut available = HashMap::new();
+            block.instructions.retain_mut(|inst| {
+                inst.map_operands(|value| resolve_value(value, &replacements));
                 if let MirInst::BinOp {
-                    dest, op, lhs, rhs, ..
+                    dest,
+                    op,
+                    lhs,
+                    rhs,
+                    ty,
                 } = inst
                 {
-                    let actual_lhs = *replacements.get(lhs).unwrap_or(lhs);
-                    let actual_rhs = *replacements.get(rhs).unwrap_or(rhs);
-                    *lhs = actual_lhs;
-                    *rhs = actual_rhs;
-
                     let key = ExprKey {
                         op: *op as u8,
-                        lhs: actual_lhs,
-                        rhs: actual_rhs,
+                        ty: *ty,
+                        lhs: *lhs,
+                        rhs: *rhs,
                     };
-
                     if let Some(&existing) = available.get(&key) {
                         replacements.insert(*dest, existing);
-                        *inst = MirInst::Const {
-                            dest: *dest,
-                            value: crate::mir::instruction::ConstValue::I32(0),
-                        };
-                        changed = true;
-                    } else {
-                        available.insert(key, *dest);
+                        return false;
                     }
+                    available.insert(key, *dest);
                 }
-            }
+                true
+            });
         }
-
-        changed
+        func.replace_uses(&replacements);
+        !replacements.is_empty()
     }
 }
 

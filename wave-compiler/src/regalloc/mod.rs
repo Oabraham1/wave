@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Register allocator using graph coloring (Chaitin-Briggs).
-//!
-//! Assigns physical registers to virtual registers. Handles interference
-//! graph construction, move coalescing, graph coloring with pre-colored
-//! parameters, and spill code generation. After allocation, rewrites
-//! `VReg`s to `PhysReg`s in the instruction stream.
+//! Allocate physical registers by coloring the interference graph.
 
 pub mod coalesce;
 pub mod coloring;
@@ -14,48 +9,47 @@ pub mod interference;
 pub mod live_range;
 pub mod spill;
 
-use std::collections::HashMap;
-
+use crate::diagnostics::CompileError;
 use crate::emit::wave_emit::RegMap;
 use crate::lir::instruction::LirInst;
-use crate::lir::operand::VReg;
 
 /// Perform register allocation on LIR instructions.
 ///
 /// Returns the register mapping from `VReg`s to `PhysReg`s.
-/// Pre-colors parameter registers: VReg(0)→PhysReg(0), etc.
-#[must_use]
-pub fn allocate_registers(instructions: &[LirInst], num_params: u32, max_regs: u32) -> RegMap {
+/// Parameter registers retain their argument indices.
+///
+/// # Examples
+///
+/// ```
+/// use wave_compiler::lir::operand::{PhysReg, VReg};
+/// use wave_compiler::regalloc::allocate_registers;
+///
+/// let mapping = allocate_registers(&[], 2, 32).expect("parameter registers fit");
+/// assert_eq!(mapping[&VReg(1)], PhysReg(1));
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the register limit is invalid or live values cannot fit.
+pub fn allocate_registers(
+    instructions: &[LirInst],
+    num_params: u32,
+    max_regs: u32,
+) -> Result<RegMap, CompileError> {
+    if max_regs == 0 || max_regs > 256 || num_params > max_regs {
+        return Err(CompileError::RegAllocError {
+            message: "register limit must be 1 to 256 and cover all kernel parameters".into(),
+        });
+    }
     let ig = interference::InterferenceGraph::build_with_params(instructions, num_params);
-    let coalesce_result = coalesce::coalesce(&ig, max_regs);
     let coloring_result = coloring::color(&ig, max_regs, num_params);
-
-    let mut reg_map: RegMap = HashMap::new();
-
-    for (vreg, phys) in &coloring_result.assignment {
-        let final_vreg = find_representative(&coalesce_result.mapping, *vreg);
-        reg_map.insert(final_vreg, *phys);
-        reg_map.insert(*vreg, *phys);
+    if !coloring_result.spilled.is_empty() {
+        return Err(CompileError::RegAllocError {
+            message: format!("live values exceed the {max_regs}-register limit; automatic spilling is unavailable"),
+        });
     }
 
-    for (coalesced, representative) in &coalesce_result.mapping {
-        if let Some(&phys) = reg_map.get(representative) {
-            reg_map.insert(*coalesced, phys);
-        }
-    }
-
-    reg_map
-}
-
-fn find_representative(mapping: &HashMap<VReg, VReg>, vreg: VReg) -> VReg {
-    let mut current = vreg;
-    while let Some(&next) = mapping.get(&current) {
-        if next == current {
-            break;
-        }
-        current = next;
-    }
-    current
+    Ok(coloring_result.assignment)
 }
 
 /// Count the maximum physical register index used.
@@ -71,7 +65,7 @@ pub fn max_register_used(reg_map: &RegMap) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lir::operand::PhysReg;
+    use crate::lir::operand::{MemWidth, PhysReg, VReg};
 
     #[test]
     fn test_allocate_registers_simple() {
@@ -92,7 +86,8 @@ mod tests {
             LirInst::Halt,
         ];
 
-        let reg_map = allocate_registers(&insts, 0, 32);
+        let reg_map = allocate_registers(&insts, 0, 32).unwrap();
+        assert!(allocate_registers(&insts, 0, 1).is_err());
         assert!(reg_map.contains_key(&VReg(0)));
         assert!(reg_map.contains_key(&VReg(1)));
         assert!(reg_map.contains_key(&VReg(2)));
@@ -109,9 +104,120 @@ mod tests {
             LirInst::Halt,
         ];
 
-        let reg_map = allocate_registers(&insts, 2, 32);
+        let reg_map = allocate_registers(&insts, 2, 32).unwrap();
         assert_eq!(reg_map[&VReg(0)], PhysReg(0));
         assert_eq!(reg_map[&VReg(1)], PhysReg(1));
+    }
+
+    #[test]
+    fn allocation_preserves_live_values_through_copies() -> Result<(), CompileError> {
+        let instructions = [
+            LirInst::MovReg {
+                dest: VReg(2),
+                src: VReg(1),
+            },
+            LirInst::MovImm {
+                dest: VReg(3),
+                value: 9,
+            },
+            LirInst::MovReg {
+                dest: VReg(4),
+                src: VReg(2),
+            },
+            LirInst::Iadd {
+                dest: VReg(5),
+                src1: VReg(3),
+                src2: VReg(1),
+            },
+            LirInst::DeviceStore {
+                addr: VReg(0),
+                value: VReg(4),
+                width: MemWidth::W32,
+            },
+            LirInst::DeviceStore {
+                addr: VReg(0),
+                value: VReg(5),
+                width: MemWidth::W32,
+            },
+            LirInst::Halt,
+        ];
+        let mapping = allocate_registers(&instructions, 2, 6)?;
+        assert_eq!(mapping[&VReg(0)], PhysReg(0));
+        assert_eq!(mapping[&VReg(1)], PhysReg(1));
+
+        let mut registers = [0_u32; 6];
+        registers[0] = 32;
+        registers[1] = 17;
+        let mut writes = Vec::new();
+        for instruction in &instructions {
+            let index = |value| usize::from(mapping[&value].0);
+            match *instruction {
+                LirInst::MovImm { dest, value } => registers[index(dest)] = value,
+                LirInst::MovReg { dest, src } => registers[index(dest)] = registers[index(src)],
+                LirInst::Iadd { dest, src1, src2 } => {
+                    registers[index(dest)] =
+                        registers[index(src1)].wrapping_add(registers[index(src2)]);
+                }
+                LirInst::DeviceStore { addr, value, .. } => {
+                    writes.push((registers[index(addr)], registers[index(value)]));
+                }
+                LirInst::Halt => break,
+                _ => panic!("unsupported test instruction: {instruction:?}"),
+            }
+        }
+        assert_eq!(writes, [(32, 17), (32, 26)]);
+        assert!(matches!(
+            allocate_registers(&instructions, 2, 2),
+            Err(CompileError::RegAllocError { .. })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn loop_back_edges_preserve_parameter_values() -> Result<(), CompileError> {
+        let instructions = [
+            LirInst::Loop,
+            LirInst::MovReg {
+                dest: VReg(2),
+                src: VReg(1),
+            },
+            LirInst::DeviceStore {
+                addr: VReg(0),
+                value: VReg(2),
+                width: MemWidth::W32,
+            },
+            LirInst::MovImm {
+                dest: VReg(3),
+                value: 99,
+            },
+            LirInst::DeviceStore {
+                addr: VReg(0),
+                value: VReg(3),
+                width: MemWidth::W32,
+            },
+            LirInst::Endloop,
+        ];
+        let mapping = allocate_registers(&instructions, 2, 3)?;
+        let mut registers = [32_u32, 17, 0];
+        let mut writes = Vec::new();
+        for _ in 0..2 {
+            for instruction in &instructions {
+                let index = |value| usize::from(mapping[&value].0);
+                match *instruction {
+                    LirInst::MovReg { dest, src } => registers[index(dest)] = registers[index(src)],
+                    LirInst::MovImm { dest, value } => registers[index(dest)] = value,
+                    LirInst::DeviceStore { addr, value, .. } => {
+                        writes.push((registers[index(addr)], registers[index(value)]));
+                    }
+                    LirInst::Loop | LirInst::Endloop => {}
+                    _ => panic!("unsupported test instruction: {instruction:?}"),
+                }
+            }
+        }
+        assert_eq!(writes, [(32, 17), (32, 99), (32, 17), (32, 99)]);
+        assert_eq!(registers[0..2], [32, 17]);
+        assert_eq!(mapping[&VReg(2)], mapping[&VReg(3)]);
+        Ok(())
     }
 
     #[test]

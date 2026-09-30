@@ -1,11 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! LIR to WAVE instruction emission.
-//!
-//! Converts LIR instructions with physical registers to WAVE encoded
-//! instruction words. Uses wave-decode's opcode and field definitions
-//! for bit-accurate encoding.
+//! LIR to WAVE instruction emission. Converts LIR instructions with physical registers to WAVE
+//! encoded instruction words. Uses wave-decode's opcode and field definitions for bit-accurate
+//! encoding.
 
 use wave_decode::opcodes::{
     CmpOp, ControlOp, FUnaryOp, MemWidth as DecodeMemWidth, MiscOp, Opcode, SyncOp,
@@ -13,10 +11,11 @@ use wave_decode::opcodes::{
     RS1_SHIFT, SYNC_MODIFIER_OFFSET,
 };
 
+use crate::diagnostics::CompileError;
 use crate::lir::instruction::LirInst;
 use crate::lir::operand::{MemWidth, PhysReg, VReg};
 
-/// An encoded WAVE instruction (4 or 8 bytes).
+/// An encoded WAVE instruction, 4 or 8 bytes.
 #[derive(Debug, Clone)]
 pub struct EncodedInst {
     /// First instruction word.
@@ -36,14 +35,20 @@ impl EncodedInst {
         }
     }
 
-    /// Encode to bytes (little-endian).
+    /// Encode to bytes, little-endian.
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.word0.to_le_bytes().to_vec();
-        if let Some(w1) = self.word1 {
-            bytes.extend_from_slice(&w1.to_le_bytes());
-        }
+        let mut bytes = Vec::with_capacity(self.size());
+        self.append_to(&mut bytes);
         bytes
+    }
+
+    /// Append the instruction's little-endian words to a buffer.
+    pub(crate) fn append_to(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.word0.to_le_bytes());
+        if let Some(word) = self.word1 {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
     }
 }
 
@@ -52,11 +57,14 @@ pub type RegMap = std::collections::HashMap<VReg, PhysReg>;
 
 /// Emit a LIR instruction as encoded WAVE bytes using the register mapping.
 ///
-/// For instructions that still use `VReg`s (before register allocation),
+/// For instructions that still use `VReg`s, before register allocation,
 /// the `VReg` number is used directly as the physical register index.
-#[must_use]
-pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+///
+/// # Errors
+///
+/// Returns a register allocation error if an unmapped register exceeds 255.
+pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::Iadd { .. }
         | LirInst::Isub { .. }
         | LirInst::Imul { .. }
@@ -85,14 +93,14 @@ pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Shr { .. }
         | LirInst::Sar { .. }
         | LirInst::CvtF32I32 { .. }
-        | LirInst::CvtI32F32 { .. } => emit_alu(inst, reg_map),
+        | LirInst::CvtI32F32 { .. } => emit_alu(inst, reg_map)?,
         LirInst::MovImm { .. } | LirInst::MovReg { .. } | LirInst::MovSr { .. } => {
-            emit_mov(inst, reg_map)
+            emit_mov(inst, reg_map)?
         }
         LirInst::LocalLoad { .. }
         | LirInst::LocalStore { .. }
         | LirInst::DeviceLoad { .. }
-        | LirInst::DeviceStore { .. } => emit_memory(inst, reg_map),
+        | LirInst::DeviceStore { .. } => emit_memory(inst, reg_map)?,
         LirInst::IcmpEq { .. }
         | LirInst::IcmpNe { .. }
         | LirInst::IcmpLt { .. }
@@ -102,7 +110,7 @@ pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::UcmpLt { .. }
         | LirInst::FcmpEq { .. }
         | LirInst::FcmpLt { .. }
-        | LirInst::FcmpGt { .. } => emit_compare(inst, reg_map),
+        | LirInst::FcmpGt { .. } => emit_compare(inst, reg_map)?,
         LirInst::If { .. }
         | LirInst::Else
         | LirInst::Endif
@@ -112,17 +120,17 @@ pub fn emit_instruction(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Endloop
         | LirInst::Barrier
         | LirInst::Halt => emit_control(inst, reg_map),
-    }
+    })
 }
 
-fn emit_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_alu(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::Iadd { .. }
         | LirInst::Isub { .. }
         | LirInst::Imul { .. }
         | LirInst::Idiv { .. }
         | LirInst::Imod { .. }
-        | LirInst::Ineg { .. } => emit_int_alu(inst, reg_map),
+        | LirInst::Ineg { .. } => emit_int_alu(inst, reg_map)?,
         LirInst::Fadd { .. }
         | LirInst::Fsub { .. }
         | LirInst::Fmul { .. }
@@ -136,92 +144,92 @@ fn emit_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         | LirInst::Fexp2 { .. }
         | LirInst::Flog2 { .. }
         | LirInst::Fmin { .. }
-        | LirInst::Fmax { .. } => emit_float_alu(inst, reg_map),
+        | LirInst::Fmax { .. } => emit_float_alu(inst, reg_map)?,
         LirInst::And { .. }
         | LirInst::Or { .. }
         | LirInst::Xor { .. }
         | LirInst::Not { .. }
         | LirInst::Shl { .. }
         | LirInst::Shr { .. }
-        | LirInst::Sar { .. } => emit_bitwise_alu(inst, reg_map),
+        | LirInst::Sar { .. } => emit_bitwise_alu(inst, reg_map)?,
         LirInst::CvtF32I32 { dest, src } => {
             let word0 =
-                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 0);
+                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map)?, reg(*src, reg_map)?, 0);
             EncodedInst { word0, word1: None }
         }
         LirInst::CvtI32F32 { dest, src } => {
             let word0 =
-                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map), reg(*src, reg_map), 2);
+                encode_base_word_no_rs2(Opcode::Cvt, reg(*dest, reg_map)?, reg(*src, reg_map)?, 2);
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_int_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_int_alu(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::Iadd { dest, src1, src2 } => encode_alu3(
             Opcode::Iadd,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Isub { dest, src1, src2 } => encode_alu3(
             Opcode::Isub,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Imul { dest, src1, src2 } => encode_alu3(
             Opcode::Imul,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Idiv { dest, src1, src2 } => encode_alu3(
             Opcode::Idiv,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Imod { dest, src1, src2 } => encode_alu3(
             Opcode::Imod,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Ineg { dest, src } => {
-            encode_alu2(Opcode::Ineg, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_alu2(Opcode::Ineg, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_float_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_float_alu(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::Fadd { dest, src1, src2 } => encode_alu3(
             Opcode::Fadd,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Fsub { dest, src1, src2 } => encode_alu3(
             Opcode::Fsub,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Fmul { dest, src1, src2 } => encode_alu3(
             Opcode::Fmul,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Fdiv { dest, src1, src2 } => encode_alu3(
             Opcode::Fdiv,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Fma {
             dest,
@@ -230,100 +238,100 @@ fn emit_float_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
             src3,
         } => {
             let word0 =
-                encode_base_word_no_rs2(Opcode::Fma, reg(*dest, reg_map), reg(*src1, reg_map), 0);
-            let word1 = (u32::from(reg(*src2, reg_map)) << EXTENDED_RS2_SHIFT)
-                | (u32::from(reg(*src3, reg_map)) << EXTENDED_RS3_SHIFT);
+                encode_base_word_no_rs2(Opcode::Fma, reg(*dest, reg_map)?, reg(*src1, reg_map)?, 0);
+            let word1 = (u32::from(reg(*src2, reg_map)?) << EXTENDED_RS2_SHIFT)
+                | (u32::from(reg(*src3, reg_map)?) << EXTENDED_RS3_SHIFT);
             EncodedInst {
                 word0,
                 word1: Some(word1),
             }
         }
         LirInst::Fneg { dest, src } => {
-            encode_alu2(Opcode::Fneg, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_alu2(Opcode::Fneg, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fabs { dest, src } => {
-            encode_alu2(Opcode::Fabs, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_alu2(Opcode::Fabs, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fsqrt { dest, src } => {
-            encode_alu2(Opcode::Fsqrt, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_alu2(Opcode::Fsqrt, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fsin { dest, src } => {
-            encode_funary(FUnaryOp::Fsin, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_funary(FUnaryOp::Fsin, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fcos { dest, src } => {
-            encode_funary(FUnaryOp::Fcos, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_funary(FUnaryOp::Fcos, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fexp2 { dest, src } => {
-            encode_funary(FUnaryOp::Fexp2, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_funary(FUnaryOp::Fexp2, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Flog2 { dest, src } => {
-            encode_funary(FUnaryOp::Flog2, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_funary(FUnaryOp::Flog2, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Fmin { dest, src1, src2 } => encode_alu3(
             Opcode::Fmin,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Fmax { dest, src1, src2 } => encode_alu3(
             Opcode::Fmax,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_bitwise_alu(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_bitwise_alu(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::And { dest, src1, src2 } => encode_alu3(
             Opcode::And,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Or { dest, src1, src2 } => encode_alu3(
             Opcode::Or,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Xor { dest, src1, src2 } => encode_alu3(
             Opcode::Xor,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Not { dest, src } => {
-            encode_alu2(Opcode::Not, reg(*dest, reg_map), reg(*src, reg_map))
+            encode_alu2(Opcode::Not, reg(*dest, reg_map)?, reg(*src, reg_map)?)
         }
         LirInst::Shl { dest, src1, src2 } => encode_alu3(
             Opcode::Shl,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Shr { dest, src1, src2 } => encode_alu3(
             Opcode::Shr,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::Sar { dest, src1, src2 } => encode_alu3(
             Opcode::Sar,
-            reg(*dest, reg_map),
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::MovImm { dest, value } => {
-            let word0 = encode_misc_word(MiscOp::MovImm as u8, reg(*dest, reg_map), 0);
+            let word0 = encode_misc_word(MiscOp::MovImm as u8, reg(*dest, reg_map)?, 0);
             EncodedInst {
                 word0,
                 word1: Some(*value),
@@ -331,125 +339,125 @@ fn emit_mov(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
         }
         LirInst::MovReg { dest, src } => {
             let word0 =
-                encode_misc_word(MiscOp::Mov as u8, reg(*dest, reg_map), reg(*src, reg_map));
+                encode_misc_word(MiscOp::Mov as u8, reg(*dest, reg_map)?, reg(*src, reg_map)?);
             EncodedInst { word0, word1: None }
         }
         LirInst::MovSr { dest, sr } => {
-            let word0 = encode_misc_word(MiscOp::MovSr as u8, reg(*dest, reg_map), sr.index());
+            let word0 = encode_misc_word(MiscOp::MovSr as u8, reg(*dest, reg_map)?, sr.index());
             EncodedInst { word0, word1: None }
         }
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_memory(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_memory(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::LocalLoad { dest, addr, width } => encode_mem(
             Opcode::LocalLoad,
-            reg(*dest, reg_map),
-            reg(*addr, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*addr, reg_map)?,
             0,
             lir_width_to_decode(*width),
         ),
         LirInst::LocalStore { addr, value, width } => encode_mem(
             Opcode::LocalStore,
             0,
-            reg(*addr, reg_map),
-            reg(*value, reg_map),
+            reg(*addr, reg_map)?,
+            reg(*value, reg_map)?,
             lir_width_to_decode(*width),
         ),
         LirInst::DeviceLoad { dest, addr, width } => encode_mem(
             Opcode::DeviceLoad,
-            reg(*dest, reg_map),
-            reg(*addr, reg_map),
+            reg(*dest, reg_map)?,
+            reg(*addr, reg_map)?,
             0,
             lir_width_to_decode(*width),
         ),
         LirInst::DeviceStore { addr, value, width } => encode_mem(
             Opcode::DeviceStore,
             0,
-            reg(*addr, reg_map),
-            reg(*value, reg_map),
+            reg(*addr, reg_map)?,
+            reg(*value, reg_map)?,
             lir_width_to_decode(*width),
         ),
         _ => unreachable!(),
-    }
+    })
 }
 
-fn emit_compare(inst: &LirInst, reg_map: &RegMap) -> EncodedInst {
-    match inst {
+fn emit_compare(inst: &LirInst, reg_map: &RegMap) -> Result<EncodedInst, CompileError> {
+    Ok(match inst {
         LirInst::IcmpEq { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Eq,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::IcmpNe { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Ne,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::IcmpLt { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Lt,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::IcmpLe { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Le,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::IcmpGt { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Gt,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::IcmpGe { dest, src1, src2 } => encode_cmp(
             Opcode::Icmp,
             CmpOp::Ge,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::UcmpLt { dest, src1, src2 } => encode_cmp(
             Opcode::Ucmp,
             CmpOp::Lt,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::FcmpEq { dest, src1, src2 } => encode_cmp(
             Opcode::Fcmp,
             CmpOp::Eq,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::FcmpLt { dest, src1, src2 } => encode_cmp(
             Opcode::Fcmp,
             CmpOp::Lt,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         LirInst::FcmpGt { dest, src1, src2 } => encode_cmp(
             Opcode::Fcmp,
             CmpOp::Gt,
             dest.0,
-            reg(*src1, reg_map),
-            reg(*src2, reg_map),
+            reg(*src1, reg_map)?,
+            reg(*src2, reg_map)?,
         ),
         _ => unreachable!(),
-    }
+    })
 }
 
 fn emit_control(inst: &LirInst, _reg_map: &RegMap) -> EncodedInst {
@@ -494,11 +502,16 @@ fn emit_control(inst: &LirInst, _reg_map: &RegMap) -> EncodedInst {
     }
 }
 
-fn reg(vreg: VReg, map: &RegMap) -> u8 {
-    map.get(&vreg)
-        .map_or(u8::try_from(vreg.0).expect("vreg index exceeds u8"), |p| {
-            p.0
-        })
+fn reg(vreg: VReg, map: &RegMap) -> Result<u8, CompileError> {
+    if let Some(physical) = map.get(&vreg) {
+        return Ok(physical.0);
+    }
+    u8::try_from(vreg.0).map_err(|_| CompileError::RegAllocError {
+        message: format!(
+            "virtual register {} has no physical register mapping",
+            vreg.0
+        ),
+    })
 }
 
 fn encode_base_word_no_rs2(opcode: Opcode, rd: u8, rs1: u8, modifier: u8) -> u32 {
@@ -587,7 +600,7 @@ mod tests {
             src1: VReg(3),
             src2: VReg(4),
         };
-        let encoded = emit_instruction(&inst, &empty_map());
+        let encoded = emit_instruction(&inst, &empty_map()).unwrap();
         assert!(encoded.word1.is_some());
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Iadd as u32);
@@ -604,7 +617,7 @@ mod tests {
             value: VReg(5),
             width: MemWidth::W32,
         };
-        let encoded = emit_instruction(&inst, &empty_map());
+        let encoded = emit_instruction(&inst, &empty_map()).unwrap();
         let rs1 = (encoded.word0 >> RS1_SHIFT) & 0xFF;
         assert_eq!(rs1, 3);
         assert!(encoded.word1.is_some());
@@ -618,7 +631,7 @@ mod tests {
             dest: VReg(5),
             value: 0x1234_5678,
         };
-        let encoded = emit_instruction(&inst, &empty_map());
+        let encoded = emit_instruction(&inst, &empty_map()).unwrap();
         assert!(encoded.word1.is_some());
         assert_eq!(encoded.word1.unwrap(), 0x1234_5678);
     }
@@ -626,10 +639,10 @@ mod tests {
     #[test]
     fn test_emit_halt() {
         let inst = LirInst::Halt;
-        let encoded = emit_instruction(&inst, &empty_map());
+        let encoded = emit_instruction(&inst, &empty_map()).unwrap();
         let opcode = (encoded.word0 >> OPCODE_SHIFT) & 0xFF;
         assert_eq!(opcode, Opcode::Control as u32);
-        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & u32::from(MODIFIER_MASK);
+        let modifier = (encoded.word0 >> MODIFIER_SHIFT) & MODIFIER_MASK;
         assert_eq!(
             modifier,
             u32::from(SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET)
@@ -641,12 +654,12 @@ mod tests {
         let if_inst = LirInst::If {
             pred: crate::lir::operand::PReg(1),
         };
-        let encoded_if = emit_instruction(&if_inst, &empty_map());
+        let encoded_if = emit_instruction(&if_inst, &empty_map()).unwrap();
         let modifier = (encoded_if.word0 >> MODIFIER_SHIFT) & 0x0F;
         assert_eq!(modifier, ControlOp::If as u32);
 
         let endif_inst = LirInst::Endif;
-        let encoded_endif = emit_instruction(&endif_inst, &empty_map());
+        let encoded_endif = emit_instruction(&endif_inst, &empty_map()).unwrap();
         let modifier = (encoded_endif.word0 >> MODIFIER_SHIFT) & 0x0F;
         assert_eq!(modifier, ControlOp::Endif as u32);
     }
@@ -663,12 +676,38 @@ mod tests {
             src1: VReg(0),
             src2: VReg(1),
         };
-        let encoded = emit_instruction(&inst, &map);
+        let encoded = emit_instruction(&inst, &map).unwrap();
         let rd = (encoded.word0 >> RD_SHIFT) & 0xFF;
         let rs1 = (encoded.word0 >> RS1_SHIFT) & 0xFF;
         assert_eq!(rd, 12);
         assert_eq!(rs1, 10);
         let rs2 = (encoded.word1.unwrap() >> EXTENDED_RS2_SHIFT) & 0xFF;
         assert_eq!(rs2, 11);
+    }
+    #[test]
+    fn mapped_virtual_register_can_exceed_the_physical_range() {
+        let instruction = LirInst::MovImm {
+            dest: VReg(1024),
+            value: 7,
+        };
+        let mapping = RegMap::from([(VReg(1024), PhysReg(5))]);
+        let encoded = emit_instruction(&instruction, &mapping).unwrap();
+        let decoded = wave_decode::decode_at(&encoded.to_bytes(), 0).unwrap();
+        assert!(matches!(
+            decoded.operation,
+            wave_decode::Operation::MovImm { rd: 5, imm: 7 }
+        ));
+    }
+
+    #[test]
+    fn unmapped_large_virtual_register_returns_an_error() {
+        let instruction = LirInst::MovImm {
+            dest: VReg(1024),
+            value: 7,
+        };
+        assert!(matches!(
+            emit_instruction(&instruction, &RegMap::new()),
+            Err(CompileError::RegAllocError { .. })
+        ));
     }
 }

@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! High-Level Intermediate Representation (HIR) for WAVE GPU kernels.
-//!
-//! HIR is the first language-independent representation produced by all
-//! frontends. It preserves structured control flow and high-level types.
+//! High-Level Intermediate Representation, HIR, for WAVE GPU kernels. HIR is the first language-
+//! independent representation produced by all frontends. It preserves structured control flow
+//! and high-level types.
 
 pub mod expr;
 pub mod kernel;

@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! LIR instruction definitions mapping 1:1 to WAVE ISA instructions.
-//!
-//! LIR uses virtual registers (`VReg`) and predicate registers (`PReg`).
-//! After register allocation, `VReg`s are replaced with physical registers.
+//! LIR instruction definitions mapping 1:1 to WAVE ISA instructions. LIR uses virtual registers,
+//! `VReg`, and predicate registers, `PReg`. After register allocation, `VReg`s are replaced with
+//! physical registers.
 
 use super::operand::{MemWidth, PReg, SpecialReg, VReg};
 
@@ -72,29 +71,29 @@ pub enum LirInst {
     Not { dest: VReg, src: VReg },
     /// Shift left.
     Shl { dest: VReg, src1: VReg, src2: VReg },
-    /// Shift right (logical).
+    /// Shift right, logical.
     Shr { dest: VReg, src1: VReg, src2: VReg },
-    /// Shift right (arithmetic).
+    /// Shift right, arithmetic.
     Sar { dest: VReg, src1: VReg, src2: VReg },
-    /// Load from local (shared) memory.
+    /// Load from local, shared, memory.
     LocalLoad {
         dest: VReg,
         addr: VReg,
         width: MemWidth,
     },
-    /// Store to local (shared) memory.
+    /// Store to local, shared, memory.
     LocalStore {
         addr: VReg,
         value: VReg,
         width: MemWidth,
     },
-    /// Load from device (global) memory.
+    /// Load from device, global, memory.
     DeviceLoad {
         dest: VReg,
         addr: VReg,
         width: MemWidth,
     },
-    /// Store to device (global) memory.
+    /// Store to device, global, memory.
     DeviceStore {
         addr: VReg,
         value: VReg,
@@ -124,7 +123,7 @@ pub enum LirInst {
     CvtF32I32 { dest: VReg, src: VReg },
     /// Convert int to float.
     CvtI32F32 { dest: VReg, src: VReg },
-    /// Conditional (structured if).
+    /// Conditional, structured if.
     If { pred: PReg },
     /// Else branch.
     Else,
@@ -190,7 +189,12 @@ impl LirInst {
     /// Returns all `VReg`s used as source operands.
     #[must_use]
     pub fn src_vregs(&self) -> Vec<VReg> {
-        match self {
+        self.src_vreg_iter().collect()
+    }
+
+    /// Iterate over source operands without allocating.
+    pub(crate) fn src_vreg_iter(&self) -> impl Iterator<Item = VReg> + '_ {
+        let operands = match self {
             Self::Iadd { src1, src2, .. }
             | Self::Isub { src1, src2, .. }
             | Self::Imul { src1, src2, .. }
@@ -217,10 +221,10 @@ impl LirInst {
             | Self::UcmpLt { src1, src2, .. }
             | Self::FcmpEq { src1, src2, .. }
             | Self::FcmpLt { src1, src2, .. }
-            | Self::FcmpGt { src1, src2, .. } => vec![*src1, *src2],
+            | Self::FcmpGt { src1, src2, .. } => [Some(*src1), Some(*src2), None],
             Self::Fma {
                 src1, src2, src3, ..
-            } => vec![*src1, *src2, *src3],
+            } => [Some(*src1), Some(*src2), Some(*src3)],
             Self::Ineg { src, .. }
             | Self::Fneg { src, .. }
             | Self::Fabs { src, .. }
@@ -232,10 +236,12 @@ impl LirInst {
             | Self::Not { src, .. }
             | Self::MovReg { src, .. }
             | Self::CvtF32I32 { src, .. }
-            | Self::CvtI32F32 { src, .. } => vec![*src],
-            Self::LocalLoad { addr, .. } | Self::DeviceLoad { addr, .. } => vec![*addr],
+            | Self::CvtI32F32 { src, .. } => [Some(*src), None, None],
+            Self::LocalLoad { addr, .. } | Self::DeviceLoad { addr, .. } => {
+                [Some(*addr), None, None]
+            }
             Self::LocalStore { addr, value, .. } | Self::DeviceStore { addr, value, .. } => {
-                vec![*addr, *value]
+                [Some(*addr), Some(*value), None]
             }
             Self::MovImm { .. }
             | Self::MovSr { .. }
@@ -247,11 +253,12 @@ impl LirInst {
             | Self::Continue { .. }
             | Self::Endloop
             | Self::Barrier
-            | Self::Halt => vec![],
-        }
+            | Self::Halt => [None, None, None],
+        };
+        operands.into_iter().flatten()
     }
 
-    /// Returns true if this is a move instruction (used for coalescing).
+    /// Returns true if this is a move instruction, used for coalescing.
     #[must_use]
     pub fn is_move(&self) -> bool {
         matches!(self, Self::MovReg { .. })

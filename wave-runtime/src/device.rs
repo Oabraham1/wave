@@ -1,12 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! GPU detection and device enumeration for the WAVE runtime.
-//!
-//! Probes the system for available GPU hardware. The `detect_gpu` function
-//! returns the single best device for backwards compatibility. The
-//! `enumerate_devices` function returns all available GPUs with detailed
-//! capability information for multi-GPU workloads.
+//! Detect available GPUs and their capabilities.
 
 use crate::error::RuntimeError;
 use std::fmt;
@@ -42,50 +37,49 @@ impl fmt::Display for GpuVendor {
 /// Hardware capability flags for a GPU device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceCapabilities {
-    /// Supports 16-bit float (half precision).
+    /// Supports 16-bit float, half precision.
     pub f16: bool,
     /// Supports bfloat16.
     pub bf16: bool,
-    /// Supports matrix multiply-accumulate (tensor cores / matrix units).
+    /// Supports matrix multiply-accumulate, tensor cores / matrix units.
     pub mma: bool,
 }
 
 /// Detailed GPU device information for multi-device workloads.
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
-    /// Zero-based device index (unique across all vendors).
+    /// Zero-based device index, unique across all vendors.
     pub id: usize,
     /// Hardware vendor.
     pub vendor: GpuVendor,
     /// Human-readable model name.
     pub name: String,
-    /// Device memory in bytes (0 if unknown).
+    /// Device memory in bytes, 0 if unknown.
     pub memory_bytes: u64,
-    /// SIMD width (wave/warp size).
+    /// SIMD width, wave/warp size.
     pub wave_width: u32,
     /// Maximum general-purpose registers per thread.
     pub max_registers: u32,
-    /// Scratchpad (shared/threadgroup) memory in bytes.
+    /// Scratchpad, shared/threadgroup, memory in bytes.
     pub scratchpad_bytes: u32,
     /// Hardware capability flags.
     pub capabilities: DeviceCapabilities,
 }
 
 impl fmt::Display for DeviceInfo {
-    #[allow(clippy::cast_precision_loss)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "[{}] {} ({}, {:.0} MB)",
+            "[{}] {} ({}, {} MB)",
             self.id,
             self.name,
             self.vendor,
-            self.memory_bytes as f64 / (1024.0 * 1024.0)
+            self.memory_bytes / (1024 * 1024)
         )
     }
 }
 
-/// Detected GPU device (legacy single-device API).
+/// Detected GPU device.
 #[derive(Debug, Clone)]
 pub struct Device {
     /// Hardware vendor.
@@ -368,8 +362,8 @@ fn enumerate_intel(next_id: &mut usize) -> Vec<DeviceInfo> {
 
 /// Detect the best available GPU on the system.
 ///
-/// Checks in order: Metal (macOS), CUDA (nvidia-smi), `ROCm` (rocminfo),
-/// oneAPI (sycl-ls). Falls back to the WAVE emulator if no GPU is found.
+/// Checks Metal on macOS, CUDA through `nvidia-smi`, `ROCm` through `rocminfo`,
+/// oneAPI, sycl-ls. Falls back to the WAVE emulator if no GPU is found.
 ///
 /// # Errors
 ///
@@ -390,7 +384,7 @@ mod tests {
     #[test]
     fn test_detect_gpu_returns_device() {
         let device = detect_gpu().unwrap();
-        assert!(!device.name.is_empty());
+        assert_ne!(device.name, "");
     }
 
     #[test]

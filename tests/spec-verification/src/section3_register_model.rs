@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Section 3: Register Model tests
-//!
-//! Verifies GPR read/write, predicate registers, special registers, and register typing.
+//! Section 3: Register Model tests Verifies GPR read/write, predicate registers, special
+//! registers, and register typing.
 
 use crate::harness::*;
 
@@ -110,7 +109,12 @@ fn test_gpr_preserves_bits() -> TestResult {
                 let value = read_u32(&result.device_memory, i * 4);
                 if value != exp {
                     passed = false;
-                    details = format!("Offset {}: got 0x{:08x}, expected 0x{:08x}", i * 4, value, exp);
+                    details = format!(
+                        "Offset {}: got 0x{:08x}, expected 0x{:08x}",
+                        i * 4,
+                        value,
+                        exp
+                    );
                     break;
                 }
             }
@@ -139,7 +143,7 @@ fn test_gpr_preserves_bits() -> TestResult {
     }
 }
 
-/// Spec Section 3.5: At least 4 predicate registers (p0-p3).
+/// Spec Section 3.5: At least 4 predicate registers, p0-p3.
 fn test_predicate_registers() -> TestResult {
     const SOURCE: &str = r#"
 ; Section: 3.5 Predicate Registers
@@ -179,9 +183,9 @@ fn test_predicate_registers() -> TestResult {
 
     match run_test(SOURCE, [1, 1, 1], [1, 1, 1], &config, None) {
         Ok(result) => {
-            let p1_result = read_u32(&result.device_memory, 0);  // Should be 1
-            let p2_result = read_u32(&result.device_memory, 4);  // Should be 1
-            let p3_result = read_u32(&result.device_memory, 8);  // Should be 0
+            let p1_result = read_u32(&result.device_memory, 0); // Should be 1
+            let p2_result = read_u32(&result.device_memory, 4); // Should be 1
+            let p3_result = read_u32(&result.device_memory, 8); // Should be 0
 
             let passed = p1_result == 1 && p2_result == 1 && p3_result == 0;
 
@@ -194,7 +198,7 @@ fn test_predicate_registers() -> TestResult {
                     "p1=true, p2=true, p3=false (correct)".to_string()
                 } else {
                     format!(
-                        "p1={}, p2={}, p3={} (expected 1, 1, 0)",
+                        "p1={}, p2={}, p3={}; expected 1, 1, 0",
                         p1_result, p2_result, p3_result
                     )
                 },
@@ -228,7 +232,7 @@ fn test_predicate_independence() -> TestResult {
     ; Set p1 = true
     icmp_eq p1, r0, r1
 
-    ; Set p2 = false (should not affect p1)
+    ; Set p2 = false ; p1 stays unchanged
     icmp_eq p2, r0, r2
 
     ; Verify p1 is still true
@@ -320,13 +324,10 @@ fn test_special_registers_thread_id() -> TestResult {
                 spec_claim: "Thread ID special registers work".to_string(),
                 passed,
                 details: if passed {
-                    format!(
-                        "tid=({},{},{}), lane={}",
-                        tid_x, tid_y, tid_z, lane_id
-                    )
+                    format!("tid=({},{},{}), lane={}", tid_x, tid_y, tid_z, lane_id)
                 } else {
                     format!(
-                        "tid=({},{},{}), lane={} (expected all 0)",
+                        "tid=({},{},{}), lane={}; expected all 0",
                         tid_x, tid_y, tid_z, lane_id
                     )
                 },
@@ -395,7 +396,7 @@ fn test_special_registers_workgroup() -> TestResult {
                 spec_claim: "Workgroup special registers work".to_string(),
                 passed,
                 details: format!(
-                    "wg_id={}, wg_size={}, grid_size={} (expected 0, 4, 2)",
+                    "wg_id={}, wg_size={}, grid_size={}; expected 0, 4, 2",
                     wg_id, wg_size, grid_size
                 ),
                 cycles: result.cycles,
@@ -464,10 +465,7 @@ fn test_mov_imm_full_range() -> TestResult {
                 details: if passed {
                     "All 32-bit values loaded correctly".to_string()
                 } else {
-                    format!(
-                        "Memory: {}",
-                        format_memory_u32(&result.device_memory, 0, 4)
-                    )
+                    format!("Memory: {}", format_memory_u32(&result.device_memory, 0, 4))
                 },
                 cycles: result.cycles,
             }

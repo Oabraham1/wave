@@ -23,24 +23,24 @@ from .types import f16, f32, f64, i32, u32
 __version__ = "0.1.2"
 
 __all__ = [
-    "WaveArray",
-    "array",
-    "ones",
-    "zeros",
     "DeviceInfo",
-    "device",
     "DistributedDataParallel",
+    "WaveArray",
     "allreduce_average",
+    "array",
+    "device",
     "enumerate_devices",
-    "gather_shards",
-    "replicate",
-    "shard_tensor",
-    "kernel",
     "f16",
     "f32",
     "f64",
+    "gather_shards",
     "i32",
+    "kernel",
+    "ones",
+    "replicate",
+    "shard_tensor",
     "u32",
+    "zeros",
 ]
 
 

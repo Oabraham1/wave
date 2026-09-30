@@ -1,17 +1,14 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI entry point for the WAVE SYCL backend. Reads a WBIN binary file, translates
-//!
-//! it to SYCL C++ using the `wave_sycl::compile` API, and writes the resulting source
-//! to an output file or stdout.
+//! Translate WBIN files into SYCL C++ from the command line.
 
 use clap::Parser;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "wave-sycl")]
 #[command(
     about = "WAVE SYCL backend - translates WAVE binary (.wbin) to Intel SYCL kernel source (.cpp)"
@@ -24,34 +21,16 @@ struct Cli {
     output: Option<PathBuf>,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
-    let wbin_data = match fs::read(&cli.input) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("error: cannot read '{}': {e}", cli.input.display());
-            process::exit(1);
-        }
-    };
-
-    let sycl = match wave_sycl::compile(&wbin_data) {
-        Ok(sycl) => sycl,
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
-    };
-
-    match cli.output {
-        Some(path) => {
-            if let Err(e) = fs::write(&path, &sycl) {
-                eprintln!("error: cannot write '{}': {e}", path.display());
-                process::exit(1);
-            }
-        }
-        None => {
-            print!("{sycl}");
-        }
+    let wbin_data = fs::read(&cli.input)
+        .map_err(|error| format!("cannot read '{}': {error}", cli.input.display()))?;
+    let sycl = wave_sycl::compile(&wbin_data)?;
+    if let Some(path) = cli.output {
+        fs::write(&path, &sycl)
+            .map_err(|error| format!("cannot write '{}': {error}", path.display()))?;
+    } else {
+        io::stdout().lock().write_all(sycl.as_bytes())?;
     }
+    Ok(())
 }

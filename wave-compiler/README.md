@@ -2,7 +2,7 @@
 
 Multi-language GPU kernel compiler targeting the WAVE ISA.
 
-Compiles GPU kernels written in Python, Rust, C++, or TypeScript into WAVE binary files (.wbin). Includes an SSA-based intermediate representation, optimization passes, and a Chaitin-Briggs register allocator.
+Compiles supported Python, Rust, C++, and TypeScript kernel syntax into WAVE `.wbin` files. Uses SSA for optimization and interference graph coloring for register allocation.
 
 ## Build
 
@@ -23,11 +23,11 @@ wave-compiler input.ts -o output.wbin --lang typescript
 
 Source code passes through five stages:
 
-1. **Frontend** - Language-specific parser produces HIR (High-Level IR)
+1. **Frontend** - Language-specific parser produces HIR, High-Level IR
 2. **HIR → MIR** - Lowering to SSA form with phi nodes and CFG
 3. **Optimization** - DCE, CSE, SCCP, LICM, strength reduction, mem2reg, loop unrolling, CFG simplification
 4. **MIR → LIR** - Instruction selection with structured control flow emission
-5. **Register Allocation + Emission** - Chaitin-Briggs graph coloring, WAVE binary encoding
+5. **Register Allocation + Emission** - Bounded graph coloring and WAVE binary encoding. Allocation errors if live values cannot fit; the active path does not insert spills.
 
 ## License
 

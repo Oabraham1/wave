@@ -1,10 +1,9 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Error and warning types with source spans. Uses ariadne for pretty-printed
-//!
-//! diagnostics with color coding and source context. All assembler errors carry
-//! byte offsets to enable precise error location reporting.
+//! Error and warning types with source spans. Uses ariadne for pretty-printed diagnostics with
+//! color coding and source context. All assembler errors carry byte offsets to enable precise
+//! error location reporting.
 
 use crate::ast::Span;
 use ariadne::{Color, Label, Report, ReportKind, Source};
@@ -65,7 +64,7 @@ pub enum AssemblerError {
     #[error("expected label operand")]
     ExpectedLabel { span: Span },
 
-    #[error("expected scope specifier (.wave, .workgroup, .device, .system)")]
+    #[error("expected scope: .wave, .workgroup, .device, or .system")]
     ExpectedScope { span: Span },
 
     #[error("kernel '{name}' not closed with .end")]
@@ -73,6 +72,10 @@ pub enum AssemblerError {
 
     #[error("instruction outside kernel")]
     InstructionOutsideKernel { span: Span },
+
+    /// A binary section or offset exceeds the WBIN 32-bit size limit.
+    #[error("binary exceeds the WBIN 32-bit size limit")]
+    BinaryTooLarge,
 
     #[error("I/O error: {message}")]
     IoError { message: String },
@@ -101,7 +104,7 @@ impl AssemblerError {
             | Self::ExpectedScope { span }
             | Self::UnclosedKernel { span, .. }
             | Self::InstructionOutsideKernel { span } => Some(*span),
-            Self::IoError { .. } => None,
+            Self::IoError { .. } | Self::BinaryTooLarge => None,
         }
     }
 }
@@ -111,6 +114,7 @@ pub enum AssemblerWarning {
     RegisterCountExceeds32 { count: u32, span: Span },
 }
 
+#[derive(Debug)]
 pub struct DiagnosticEmitter<'a> {
     source_name: &'a str,
     source: &'a str,
@@ -136,7 +140,7 @@ impl<'a> DiagnosticEmitter<'a> {
             .with_label(
                 Label::new((self.source_name, span.start..span.end))
                     .with_color(Color::Red)
-                    .with_message(self.error_hint(error)),
+                    .with_message(Self::error_hint(error)),
             )
             .finish();
 
@@ -162,7 +166,7 @@ impl<'a> DiagnosticEmitter<'a> {
         }
     }
 
-    fn error_hint(&self, error: &AssemblerError) -> String {
+    fn error_hint(error: &AssemblerError) -> String {
         match error {
             AssemblerError::UnexpectedCharacter { char, .. } => {
                 format!("unexpected '{char}'")
@@ -208,6 +212,9 @@ impl<'a> DiagnosticEmitter<'a> {
                 "must be inside .kernel block".into()
             }
             AssemblerError::IoError { message } => message.clone(),
+            AssemblerError::BinaryTooLarge => {
+                "reduce the binary below the 32-bit WBIN size limit".into()
+            }
         }
     }
 }

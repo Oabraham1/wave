@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Public API for the WAVE HIP backend. Provides `compile()` to translate a complete
-//!
-//! WBIN binary file into HIP C++ source text, and `compile_kernel()` for translating
-//! a single kernel's code section. Targets AMD GPUs via ROCm/HIP with support for
-//! both RDNA (wavefront 32) and CDNA (wavefront 64) architectures.
+//! Translate WBIN files or individual WAVE kernels into HIP C++.
 
 pub mod codegen;
 pub mod control_flow;
@@ -39,7 +35,7 @@ pub enum CompileError {
 ///
 /// # Errors
 ///
-/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels,
+/// Returns `CompileError` if the WBIN file cannot be parsed, contains no kernels
 /// or contains unsupported instructions.
 pub fn compile(wbin_data: &[u8]) -> Result<String, CompileError> {
     let wbin = WbinFile::parse(wbin_data)?;

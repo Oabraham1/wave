@@ -1,12 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Instruction executor. Decodes instructions from binary, dispatches to appropriate
-//!
-//! handlers, and executes operations across active threads in a wave. Handles ALU
-//! operations, memory access, control flow, wave operations, and atomics.
+//! Execute decoded instructions across the active threads in a wave.
 
-// ControlFlowManager is now in Wave, not Executor
 use crate::decoder::{
     AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, DecodedInstruction,
     Decoder, F16Op, F16PackedOp, F64DivSqrtOp, F64Op, FUnaryOp, MemWidth, MiscOp, Opcode, SyncOp,
@@ -18,7 +14,9 @@ use crate::stats::{ExecutionStats, InstructionCategory, TraceWriter};
 use crate::wave::Wave;
 use crate::EmulatorError;
 use half::f16;
+use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Executor<'a> {
     decoder: Decoder<'a>,
     trace: TraceWriter,
@@ -26,6 +24,7 @@ pub struct Executor<'a> {
 }
 
 impl<'a> Executor<'a> {
+    #[must_use]
     pub fn new(code: &'a [u8], trace_enabled: bool, workgroup_id: [u32; 3]) -> Self {
         Self {
             decoder: Decoder::new(code),
@@ -34,6 +33,11 @@ impl<'a> Executor<'a> {
         }
     }
 
+    /// Execute one instruction for a wave.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid instructions, memory accesses, control flow, or unsupported operations.
     pub fn step(
         &mut self,
         wave: &mut Wave,
@@ -90,7 +94,7 @@ impl<'a> Executor<'a> {
         let is_halt = is_control_sync && inst.modifier == SyncOp::Halt as u8 + SYNC_MODIFIER_OFFSET;
 
         if inst.is_predicated() {
-            let pred_mask = self.compute_predicate_mask(wave, inst.pred_reg, inst.pred_neg);
+            let pred_mask = Self::compute_predicate_mask(wave, inst.pred_reg, inst.pred_neg);
 
             if is_halt {
                 wave.active_mask &= !pred_mask;
@@ -107,7 +111,23 @@ impl<'a> Executor<'a> {
             }
         }
 
-        let result = match inst.opcode {
+        let result = self.execute_operation(wave, inst, local_memory, device_memory, stats);
+
+        if inst.is_predicated() && !is_control_sync {
+            wave.active_mask = original_mask;
+        }
+
+        result
+    }
+    fn execute_operation(
+        &mut self,
+        wave: &mut Wave,
+        inst: &DecodedInstruction,
+        local_memory: &mut LocalMemory,
+        device_memory: &mut DeviceMemory,
+        stats: &mut ExecutionStats,
+    ) -> Result<ExecuteResult, EmulatorError> {
+        let category = match inst.opcode {
             Opcode::Iadd
             | Opcode::Isub
             | Opcode::Imul
@@ -118,14 +138,12 @@ impl<'a> Executor<'a> {
             | Opcode::Iabs
             | Opcode::Imin
             | Opcode::Imax => {
-                self.execute_integer_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_integer_op(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::Imad | Opcode::Iclamp => {
-                self.execute_integer_extended(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_integer_extended(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::And
             | Opcode::Or
@@ -134,14 +152,12 @@ impl<'a> Executor<'a> {
             | Opcode::Shl
             | Opcode::Shr
             | Opcode::Sar => {
-                self.execute_bitwise_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_bitwise_op(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::BitOps => {
-                self.execute_bit_ops(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_bit_ops(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::Fadd
             | Opcode::Fsub
@@ -152,100 +168,117 @@ impl<'a> Executor<'a> {
             | Opcode::Fmin
             | Opcode::Fmax
             | Opcode::Fsqrt => {
-                self.execute_float_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_float_op(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::Fma | Opcode::Fclamp => {
-                self.execute_float_extended(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_float_extended(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::FUnaryOps => {
-                self.execute_float_unary(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_float_unary(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::F16Ops | Opcode::F16PackedOps => {
-                self.execute_f16_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_f16_op(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::Bf16Ops | Opcode::Bf16PackedOps => {
-                self.execute_bf16_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_bf16_op(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::F64Ops | Opcode::F64DivSqrt => {
-                self.execute_f64_op(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_f64_op(wave, inst);
+                InstructionCategory::Float
             }
             Opcode::Icmp | Opcode::Ucmp | Opcode::Fcmp => {
-                self.execute_compare(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_compare(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::Select => {
-                self.execute_select(wave, inst);
-                stats.record_instruction(InstructionCategory::Integer);
-                Ok(ExecuteResult::Continue)
+                Self::execute_select(wave, inst);
+                InstructionCategory::Integer
             }
             Opcode::Cvt => {
-                self.execute_convert(wave, inst);
-                stats.record_instruction(InstructionCategory::Float);
-                Ok(ExecuteResult::Continue)
+                Self::execute_convert(wave, inst);
+                InstructionCategory::Float
             }
+            Opcode::WaveOp => {
+                Self::execute_wave_op(wave, inst);
+                InstructionCategory::WaveOp
+            }
+            Opcode::Control => return self.execute_control(wave, inst, stats),
+            Opcode::Misc => {
+                Self::execute_misc_op(wave, inst);
+                stats.record_instruction(InstructionCategory::Control);
+                return Ok(ExecuteResult::Continue);
+            }
+            Opcode::LocalLoad
+            | Opcode::LocalStore
+            | Opcode::DeviceLoad
+            | Opcode::DeviceStore
+            | Opcode::LocalAtomic
+            | Opcode::DeviceAtomic
+            | Opcode::Mma => {
+                return Self::execute_memory(wave, inst, local_memory, device_memory, stats)
+            }
+        };
+        stats.record_instruction(category);
+        Ok(ExecuteResult::Continue)
+    }
+
+    fn execute_memory(
+        wave: &mut Wave,
+        inst: &DecodedInstruction,
+        local_memory: &mut LocalMemory,
+        device_memory: &mut DeviceMemory,
+        stats: &mut ExecutionStats,
+    ) -> Result<ExecuteResult, EmulatorError> {
+        match inst.opcode {
             Opcode::LocalLoad => {
-                self.execute_local_load(wave, inst, local_memory, stats)?;
+                Self::execute_local_load(wave, inst, local_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::LocalStore => {
-                self.execute_local_store(wave, inst, local_memory, stats)?;
+                Self::execute_local_store(wave, inst, local_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::DeviceLoad => {
-                self.execute_device_load(wave, inst, device_memory, stats)?;
+                Self::execute_device_load(wave, inst, device_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::DeviceStore => {
-                self.execute_device_store(wave, inst, device_memory, stats)?;
+                Self::execute_device_store(wave, inst, device_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::LocalAtomic => {
-                self.execute_local_atomic(wave, inst, local_memory, stats)?;
+                Self::execute_local_atomic(wave, inst, local_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::DeviceAtomic => {
-                self.execute_device_atomic(wave, inst, device_memory, stats)?;
-                Ok(ExecuteResult::Continue)
-            }
-            Opcode::WaveOp => {
-                self.execute_wave_op(wave, inst);
-                stats.record_instruction(InstructionCategory::WaveOp);
+                Self::execute_device_atomic(wave, inst, device_memory, stats)?;
                 Ok(ExecuteResult::Continue)
             }
             Opcode::Mma => {
-                self.execute_mma(wave, inst, local_memory)?;
+                Self::execute_mma(wave, inst, local_memory)?;
                 stats.record_instruction(InstructionCategory::Float);
                 Ok(ExecuteResult::Continue)
             }
-            Opcode::Control => self.execute_control(wave, inst, stats),
-            Opcode::Misc => {
-                self.execute_misc_op(wave, inst)?;
-                stats.record_instruction(InstructionCategory::Control);
-                Ok(ExecuteResult::Continue)
-            }
-        };
-
-        if inst.is_predicated() && !is_control_sync {
-            wave.active_mask = original_mask;
+            _ => unreachable!("execute_operation routes only memory and matrix operations here"),
         }
-
-        result
     }
 
-    fn compute_predicate_mask(&self, wave: &Wave, pred_reg: u8, negated: bool) -> u64 {
+    fn low_half(value: u32) -> u16 {
+        let [a, b, ..] = value.to_le_bytes();
+        u16::from_le_bytes([a, b])
+    }
+
+    fn low_word(value: impl Into<u128>) -> u32 {
+        let [a, b, c, d, ..] = value.into().to_le_bytes();
+        u32::from_le_bytes([a, b, c, d])
+    }
+
+    fn compute_predicate_mask(wave: &Wave, pred_reg: u8, negated: bool) -> u64 {
         let mut mask: u64 = 0;
         for lane in 0..wave.wave_width {
             if wave.is_thread_active(lane) {
@@ -259,7 +292,7 @@ impl<'a> Executor<'a> {
         mask
     }
 
-    fn execute_integer_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_integer_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -274,27 +307,31 @@ impl<'a> Executor<'a> {
                 Opcode::Isub => rs1.wrapping_sub(rs2),
                 Opcode::Imul => rs1.wrapping_mul(rs2),
                 Opcode::ImulHi => {
-                    let wide = (rs1 as i64).wrapping_mul(rs2 as i64);
-                    (wide >> 32) as u32
+                    let wide = i64::from(rs1).wrapping_mul(i64::from(rs2));
+                    Self::low_word((wide >> 32).cast_unsigned())
                 }
                 Opcode::Idiv => {
                     if rs2 == 0 {
                         0
                     } else {
-                        (rs1 as i32).wrapping_div(rs2 as i32) as u32
+                        rs1.cast_signed()
+                            .wrapping_div(rs2.cast_signed())
+                            .cast_unsigned()
                     }
                 }
                 Opcode::Imod => {
                     if rs2 == 0 {
                         0
                     } else {
-                        (rs1 as i32).wrapping_rem(rs2 as i32) as u32
+                        rs1.cast_signed()
+                            .wrapping_rem(rs2.cast_signed())
+                            .cast_unsigned()
                     }
                 }
-                Opcode::Ineg => (-(rs1 as i32)) as u32,
-                Opcode::Iabs => (rs1 as i32).unsigned_abs(),
-                Opcode::Imin => (rs1 as i32).min(rs2 as i32) as u32,
-                Opcode::Imax => (rs1 as i32).max(rs2 as i32) as u32,
+                Opcode::Ineg => rs1.cast_signed().wrapping_neg().cast_unsigned(),
+                Opcode::Iabs => rs1.cast_signed().unsigned_abs(),
+                Opcode::Imin => rs1.cast_signed().min(rs2.cast_signed()).cast_unsigned(),
+                Opcode::Imax => rs1.cast_signed().max(rs2.cast_signed()).cast_unsigned(),
                 _ => 0,
             };
 
@@ -302,7 +339,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_integer_extended(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_integer_extended(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -316,10 +353,10 @@ impl<'a> Executor<'a> {
             let result = match inst.opcode {
                 Opcode::Imad => rs1.wrapping_mul(rs2).wrapping_add(rs3),
                 Opcode::Iclamp => {
-                    let val = rs1 as i32;
-                    let lo = rs2 as i32;
-                    let hi = rs3 as i32;
-                    val.clamp(lo, hi) as u32
+                    let val = rs1.cast_signed();
+                    let lo = rs2.cast_signed();
+                    let hi = rs3.cast_signed();
+                    val.clamp(lo, hi).cast_unsigned()
                 }
                 _ => 0,
             };
@@ -328,7 +365,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_bitwise_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_bitwise_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -345,7 +382,7 @@ impl<'a> Executor<'a> {
                 Opcode::Not => !rs1,
                 Opcode::Shl => rs1.wrapping_shl(rs2 & 0x1F),
                 Opcode::Shr => rs1.wrapping_shr(rs2 & 0x1F),
-                Opcode::Sar => ((rs1 as i32).wrapping_shr(rs2 & 0x1F)) as u32,
+                Opcode::Sar => rs1.cast_signed().wrapping_shr(rs2 & 0x1F).cast_unsigned(),
                 _ => 0,
             };
 
@@ -353,7 +390,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_bit_ops(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_bit_ops(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -401,7 +438,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_float_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_float_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -434,7 +471,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_float_extended(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_float_extended(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -455,7 +492,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_float_unary(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_float_unary(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -484,7 +521,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_f16_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_f16_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -496,9 +533,9 @@ impl<'a> Executor<'a> {
             let rs3_bits = thread.read_register(inst.rs3);
 
             let result = if inst.opcode == Opcode::F16Ops {
-                let a = f16::from_bits(rs1_bits as u16);
-                let b = f16::from_bits(rs2_bits as u16);
-                let c = f16::from_bits(rs3_bits as u16);
+                let a = f16::from_bits(Self::low_half(rs1_bits));
+                let b = f16::from_bits(Self::low_half(rs2_bits));
+                let c = f16::from_bits(Self::low_half(rs3_bits));
 
                 let r = match inst.modifier {
                     m if m == F16Op::Hadd as u8 => f16::from_f32(a.to_f32() + b.to_f32()),
@@ -511,11 +548,11 @@ impl<'a> Executor<'a> {
                 };
                 u32::from(r.to_bits())
             } else {
-                let a_lo = f16::from_bits(rs1_bits as u16);
+                let a_lo = f16::from_bits(Self::low_half(rs1_bits));
                 let a_hi = f16::from_bits((rs1_bits >> 16) as u16);
-                let b_lo = f16::from_bits(rs2_bits as u16);
+                let b_lo = f16::from_bits(Self::low_half(rs2_bits));
                 let b_hi = f16::from_bits((rs2_bits >> 16) as u16);
-                let c_lo = f16::from_bits(rs3_bits as u16);
+                let c_lo = f16::from_bits(Self::low_half(rs3_bits));
                 let c_hi = f16::from_bits((rs3_bits >> 16) as u16);
 
                 let (r_lo, r_hi) = match inst.modifier {
@@ -548,7 +585,7 @@ impl<'a> Executor<'a> {
         (val.to_bits() >> 16) as u16
     }
 
-    fn execute_bf16_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_bf16_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -560,9 +597,9 @@ impl<'a> Executor<'a> {
             let rs3_bits = thread.read_register(inst.rs3);
 
             let result = if inst.opcode == Opcode::Bf16Ops {
-                let a = Self::bf16_to_f32(rs1_bits as u16);
-                let b = Self::bf16_to_f32(rs2_bits as u16);
-                let c = Self::bf16_to_f32(rs3_bits as u16);
+                let a = Self::bf16_to_f32(Self::low_half(rs1_bits));
+                let b = Self::bf16_to_f32(Self::low_half(rs2_bits));
+                let c = Self::bf16_to_f32(Self::low_half(rs3_bits));
 
                 let r = match inst.modifier {
                     m if m == Bf16Op::Badd as u8 => Self::f32_to_bf16(a + b),
@@ -573,11 +610,11 @@ impl<'a> Executor<'a> {
                 };
                 u32::from(r)
             } else {
-                let a_lo = Self::bf16_to_f32(rs1_bits as u16);
+                let a_lo = Self::bf16_to_f32(Self::low_half(rs1_bits));
                 let a_hi = Self::bf16_to_f32((rs1_bits >> 16) as u16);
-                let b_lo = Self::bf16_to_f32(rs2_bits as u16);
+                let b_lo = Self::bf16_to_f32(Self::low_half(rs2_bits));
                 let b_hi = Self::bf16_to_f32((rs2_bits >> 16) as u16);
-                let c_lo = Self::bf16_to_f32(rs3_bits as u16);
+                let c_lo = Self::bf16_to_f32(Self::low_half(rs3_bits));
                 let c_hi = Self::bf16_to_f32((rs3_bits >> 16) as u16);
 
                 let (r_lo, r_hi) = match inst.modifier {
@@ -602,7 +639,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_f64_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_f64_op(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -639,12 +676,13 @@ impl<'a> Executor<'a> {
             };
 
             let bits = result.to_bits();
-            thread.write_register(inst.rd, bits as u32);
+            thread.write_register(inst.rd, Self::low_word(bits));
             thread.write_register(inst.rd + 1, (bits >> 32) as u32);
         }
     }
 
-    fn execute_compare(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    // WAVE floating comparison instructions require exact IEEE equality.
+    fn execute_compare(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -656,8 +694,8 @@ impl<'a> Executor<'a> {
 
             let result = match inst.opcode {
                 Opcode::Icmp => {
-                    let a = rs1 as i32;
-                    let b = rs2 as i32;
+                    let a = rs1.cast_signed();
+                    let b = rs2.cast_signed();
                     match inst.modifier {
                         m if m == CmpOp::Eq as u8 => a == b,
                         m if m == CmpOp::Ne as u8 => a != b,
@@ -677,8 +715,12 @@ impl<'a> Executor<'a> {
                     let a = f32::from_bits(rs1);
                     let b = f32::from_bits(rs2);
                     match inst.modifier {
-                        m if m == CmpOp::Eq as u8 => a == b,
-                        m if m == CmpOp::Ne as u8 => a != b,
+                        m if m == CmpOp::Eq as u8 => {
+                            a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal)
+                        }
+                        m if m == CmpOp::Ne as u8 => {
+                            a.partial_cmp(&b) != Some(std::cmp::Ordering::Equal)
+                        }
                         m if m == CmpOp::Lt as u8 => a < b,
                         m if m == CmpOp::Le as u8 => a <= b,
                         m if m == CmpOp::Gt as u8 => a > b,
@@ -694,7 +736,7 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_select(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_select(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -710,7 +752,30 @@ impl<'a> Executor<'a> {
         }
     }
 
-    fn execute_convert(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    // WAVE conversion instructions narrow, round, and saturate numeric values.
+    fn saturating_i32(value: f32) -> i32 {
+        value.to_i32().unwrap_or_else(|| {
+            if value.is_nan() {
+                0
+            } else if value.is_sign_negative() {
+                i32::MIN
+            } else {
+                i32::MAX
+            }
+        })
+    }
+
+    fn saturating_u32(value: f32) -> u32 {
+        value.to_u32().unwrap_or_else(|| {
+            if value.is_nan() || value.is_sign_negative() {
+                0
+            } else {
+                u32::MAX
+            }
+        })
+    }
+
+    fn execute_convert(wave: &mut Wave, inst: &DecodedInstruction) {
         for lane in 0..wave.wave_width {
             if !wave.is_thread_active(lane) {
                 continue;
@@ -720,27 +785,42 @@ impl<'a> Executor<'a> {
             let rs1 = thread.read_register(inst.rs1);
 
             let result = match inst.modifier {
-                m if m == CvtType::F32I32 as u8 => ((rs1 as i32) as f32).to_bits(),
-                m if m == CvtType::F32U32 as u8 => (rs1 as f32).to_bits(),
-                m if m == CvtType::I32F32 as u8 => f32::from_bits(rs1) as i32 as u32,
-                m if m == CvtType::U32F32 as u8 => f32::from_bits(rs1) as u32,
-                m if m == CvtType::F32F16 as u8 => f16::from_bits(rs1 as u16).to_f32().to_bits(),
+                m if m == CvtType::F32I32 as u8 => rs1
+                    .cast_signed()
+                    .to_f32()
+                    .expect("i32 values fit the f32 exponent range")
+                    .to_bits(),
+                m if m == CvtType::F32U32 as u8 => rs1
+                    .to_f32()
+                    .expect("u32 values fit the f32 exponent range")
+                    .to_bits(),
+                m if m == CvtType::I32F32 as u8 => {
+                    Self::saturating_i32(f32::from_bits(rs1)).cast_unsigned()
+                }
+                m if m == CvtType::U32F32 as u8 => Self::saturating_u32(f32::from_bits(rs1)),
+                m if m == CvtType::F32F16 as u8 => {
+                    f16::from_bits(Self::low_half(rs1)).to_f32().to_bits()
+                }
                 m if m == CvtType::F16F32 as u8 => {
                     u32::from(f16::from_f32(f32::from_bits(rs1)).to_bits())
                 }
                 m if m == CvtType::F32F64 as u8 => {
                     let rs1_hi = thread.read_register(inst.rs1 + 1);
                     let d = f64::from_bits((u64::from(rs1_hi) << 32) | u64::from(rs1));
-                    (d as f32).to_bits()
+                    d.to_f32()
+                        .expect("f64 to f32 conversion supports every float value")
+                        .to_bits()
                 }
                 m if m == CvtType::F64F32 as u8 => {
                     let f = f32::from_bits(rs1);
                     let d = f64::from(f);
                     let bits = d.to_bits();
                     thread.write_register(inst.rd + 1, (bits >> 32) as u32);
-                    bits as u32
+                    Self::low_word(bits)
                 }
-                m if m == CvtType::F32Bf16 as u8 => Self::bf16_to_f32(rs1 as u16).to_bits(),
+                m if m == CvtType::F32Bf16 as u8 => {
+                    Self::bf16_to_f32(Self::low_half(rs1)).to_bits()
+                }
                 m if m == CvtType::Bf16F32 as u8 => {
                     u32::from(Self::f32_to_bf16(f32::from_bits(rs1)))
                 }
@@ -752,13 +832,12 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_local_load(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         local_memory: &mut LocalMemory,
         stats: &mut ExecutionStats,
     ) -> Result<(), EmulatorError> {
-        let width = match inst.modifier {
+        let width: u32 = match inst.modifier {
             m if m == MemWidth::U8 as u8 => 1,
             m if m == MemWidth::U16 as u8 => 2,
             m if m == MemWidth::U32 as u8 => 4,
@@ -780,14 +859,14 @@ impl<'a> Executor<'a> {
                 4 => local_memory.read_u32(addr)?,
                 8 => {
                     let val = local_memory.read_u64(addr)?;
-                    thread.write_register(inst.rd + 1, (val >> 32) as u32);
-                    val as u32
+                    thread.write_register(inst.rd + 1, Self::low_word(val >> 32));
+                    Self::low_word(val)
                 }
                 _ => 0,
             };
 
             thread.write_register(inst.rd, value);
-            stats.record_local_load(width as u64);
+            stats.record_local_load(u64::from(width));
         }
 
         stats.record_instruction(InstructionCategory::Memory);
@@ -795,13 +874,12 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_local_store(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         local_memory: &mut LocalMemory,
         stats: &mut ExecutionStats,
     ) -> Result<(), EmulatorError> {
-        let width = match inst.modifier {
+        let width: u32 = match inst.modifier {
             m if m == MemWidth::U8 as u8 => 1,
             m if m == MemWidth::U16 as u8 => 2,
             m if m == MemWidth::U32 as u8 => 4,
@@ -819,8 +897,8 @@ impl<'a> Executor<'a> {
             let value = thread.read_register(inst.rs2);
 
             match width {
-                1 => local_memory.write_u8(addr, value as u8)?,
-                2 => local_memory.write_u16(addr, value as u16)?,
+                1 => local_memory.write_u8(addr, value.to_le_bytes()[0])?,
+                2 => local_memory.write_u16(addr, Self::low_half(value))?,
                 4 => local_memory.write_u32(addr, value)?,
                 8 => {
                     let hi = thread.read_register(inst.rs2 + 1);
@@ -830,7 +908,7 @@ impl<'a> Executor<'a> {
                 _ => {}
             }
 
-            stats.record_local_store(width as u64);
+            stats.record_local_store(u64::from(width));
         }
 
         stats.record_instruction(InstructionCategory::Memory);
@@ -838,13 +916,12 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_device_load(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         device_memory: &mut DeviceMemory,
         stats: &mut ExecutionStats,
     ) -> Result<(), EmulatorError> {
-        let width = match inst.modifier {
+        let width: u32 = match inst.modifier {
             m if m == MemWidth::U8 as u8 => 1,
             m if m == MemWidth::U16 as u8 => 2,
             m if m == MemWidth::U32 as u8 => 4,
@@ -876,20 +953,20 @@ impl<'a> Executor<'a> {
                 }
                 8 => {
                     let val = device_memory.read_u64(addr)?;
-                    thread.write_register(inst.rd, val as u32);
-                    thread.write_register(inst.rd + 1, (val >> 32) as u32);
+                    thread.write_register(inst.rd, Self::low_word(val));
+                    thread.write_register(inst.rd + 1, Self::low_word(val >> 32));
                 }
                 16 => {
                     let val = device_memory.read_u128(addr)?;
-                    thread.write_register(inst.rd, val as u32);
-                    thread.write_register(inst.rd + 1, (val >> 32) as u32);
-                    thread.write_register(inst.rd + 2, (val >> 64) as u32);
+                    thread.write_register(inst.rd, Self::low_word(val));
+                    thread.write_register(inst.rd + 1, Self::low_word(val >> 32));
+                    thread.write_register(inst.rd + 2, Self::low_word(val >> 64));
                     thread.write_register(inst.rd + 3, (val >> 96) as u32);
                 }
                 _ => {}
             }
 
-            stats.record_device_load(width as u64);
+            stats.record_device_load(u64::from(width));
         }
 
         stats.record_instruction(InstructionCategory::Memory);
@@ -897,13 +974,12 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_device_store(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         device_memory: &mut DeviceMemory,
         stats: &mut ExecutionStats,
     ) -> Result<(), EmulatorError> {
-        let width = match inst.modifier {
+        let width: u32 = match inst.modifier {
             m if m == MemWidth::U8 as u8 => 1,
             m if m == MemWidth::U16 as u8 => 2,
             m if m == MemWidth::U32 as u8 => 4,
@@ -922,8 +998,8 @@ impl<'a> Executor<'a> {
             let value = thread.read_register(inst.rs2);
 
             match width {
-                1 => device_memory.write_u8(addr, value as u8)?,
-                2 => device_memory.write_u16(addr, value as u16)?,
+                1 => device_memory.write_u8(addr, value.to_le_bytes()[0])?,
+                2 => device_memory.write_u16(addr, Self::low_half(value))?,
                 4 => device_memory.write_u32(addr, value)?,
                 8 => {
                     let hi = thread.read_register(inst.rs2 + 1);
@@ -944,7 +1020,7 @@ impl<'a> Executor<'a> {
                 _ => {}
             }
 
-            stats.record_device_store(width as u64);
+            stats.record_device_store(u64::from(width));
         }
 
         stats.record_instruction(InstructionCategory::Memory);
@@ -952,7 +1028,6 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_local_atomic(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         local_memory: &mut LocalMemory,
@@ -979,8 +1054,8 @@ impl<'a> Executor<'a> {
                 m if m == AtomicOp::Xor as u8 => local_memory.atomic_xor(addr, value)?,
                 m if m == AtomicOp::Exchange as u8 => local_memory.atomic_exchange(addr, value)?,
                 _ => {
-                    let expected = thread.read_register(inst.rs3);
-                    local_memory.atomic_cas(addr, expected, value)?
+                    let desired = thread.read_register(inst.rs3);
+                    local_memory.atomic_cas(addr, value, desired)?
                 }
             };
 
@@ -996,7 +1071,6 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_device_atomic(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         device_memory: &mut DeviceMemory,
@@ -1023,8 +1097,8 @@ impl<'a> Executor<'a> {
                 m if m == AtomicOp::Xor as u8 => device_memory.atomic_xor(addr, value)?,
                 m if m == AtomicOp::Exchange as u8 => device_memory.atomic_exchange(addr, value)?,
                 _ => {
-                    let expected = thread.read_register(inst.rs3);
-                    device_memory.atomic_cas(addr, expected, value)?
+                    let desired = thread.read_register(inst.rs3);
+                    device_memory.atomic_cas(addr, value, desired)?
                 }
             };
 
@@ -1039,7 +1113,7 @@ impl<'a> Executor<'a> {
         Ok(())
     }
 
-    fn execute_wave_op(&self, wave: &mut Wave, inst: &DecodedInstruction) {
+    fn execute_wave_op(wave: &mut Wave, inst: &DecodedInstruction) {
         if inst.is_wave_reduce() {
             let reduce_mod = inst.modifier - 8;
             match reduce_mod {
@@ -1097,38 +1171,29 @@ impl<'a> Executor<'a> {
         stats.record_instruction(InstructionCategory::Control);
 
         if inst.is_sync_op() {
-            return self.execute_sync_op(wave, inst);
+            return Ok(Self::execute_sync_op(wave, inst));
         }
 
         self.execute_control_flow(wave, inst, stats)
     }
 
-    fn execute_sync_op(
-        &self,
-        wave: &mut Wave,
-        inst: &DecodedInstruction,
-    ) -> Result<ExecuteResult, EmulatorError> {
+    fn execute_sync_op(wave: &mut Wave, inst: &DecodedInstruction) -> ExecuteResult {
         let sync_mod = inst.modifier.saturating_sub(SYNC_MODIFIER_OFFSET);
         match sync_mod {
             m if m == SyncOp::Return as u8 => {
                 if let Some(return_pc) = wave.pop_call() {
-                    Ok(ExecuteResult::Jump(return_pc))
+                    ExecuteResult::Jump(return_pc)
                 } else {
-                    Ok(ExecuteResult::Halt)
+                    ExecuteResult::Halt
                 }
             }
-            m if m == SyncOp::Halt as u8 => Ok(ExecuteResult::Halt),
-            m if m == SyncOp::Barrier as u8 => Ok(ExecuteResult::Barrier),
-            m if m == SyncOp::Nop as u8 || m == SyncOp::Wait as u8 => Ok(ExecuteResult::Continue),
-            _ => Ok(ExecuteResult::Continue),
+            m if m == SyncOp::Halt as u8 => ExecuteResult::Halt,
+            m if m == SyncOp::Barrier as u8 => ExecuteResult::Barrier,
+            _ => ExecuteResult::Continue,
         }
     }
 
-    fn execute_misc_op(
-        &self,
-        wave: &mut Wave,
-        inst: &DecodedInstruction,
-    ) -> Result<ExecuteResult, EmulatorError> {
+    fn execute_misc_op(wave: &mut Wave, inst: &DecodedInstruction) -> ExecuteResult {
         match inst.modifier {
             m if m == MiscOp::Mov as u8 => {
                 for lane in 0..wave.wave_width {
@@ -1157,8 +1222,10 @@ impl<'a> Executor<'a> {
             }
             _ => {}
         }
-        Ok(ExecuteResult::Continue)
+        ExecuteResult::Continue
     }
+
+    // The match keeps structured control flow transitions together.
 
     fn execute_control_flow(
         &mut self,
@@ -1168,14 +1235,7 @@ impl<'a> Executor<'a> {
     ) -> Result<ExecuteResult, EmulatorError> {
         match inst.modifier {
             m if m == ControlOp::If as u8 => {
-                let mut pred_mask: u64 = 0;
-                for lane in 0..wave.wave_width {
-                    if wave.is_thread_active(lane) {
-                        if wave.threads[lane as usize].read_predicate(inst.rs1) {
-                            pred_mask |= 1u64 << lane;
-                        }
-                    }
-                }
+                let pred_mask = Self::compute_predicate_mask(wave, inst.rs1, false);
 
                 let then_mask = wave.active_mask & pred_mask;
                 let else_mask = wave.active_mask & !pred_mask;
@@ -1207,14 +1267,7 @@ impl<'a> Executor<'a> {
                 Ok(ExecuteResult::Continue)
             }
             m if m == ControlOp::Break as u8 => {
-                let mut pred_mask: u64 = 0;
-                for lane in 0..wave.wave_width {
-                    if wave.is_thread_active(lane) {
-                        if wave.threads[lane as usize].read_predicate(inst.rs1) {
-                            pred_mask |= 1u64 << lane;
-                        }
-                    }
-                }
+                let pred_mask = Self::compute_predicate_mask(wave, inst.rs1, false);
 
                 if self.trace.is_enabled() {
                     eprintln!(
@@ -1235,14 +1288,7 @@ impl<'a> Executor<'a> {
                 Ok(ExecuteResult::Continue)
             }
             m if m == ControlOp::Continue as u8 => {
-                let mut pred_mask: u64 = 0;
-                for lane in 0..wave.wave_width {
-                    if wave.is_thread_active(lane) {
-                        if wave.threads[lane as usize].read_predicate(inst.rs1) {
-                            pred_mask |= 1u64 << lane;
-                        }
-                    }
-                }
+                let pred_mask = Self::compute_predicate_mask(wave, inst.rs1, false);
 
                 let (new_mask, jump) = wave
                     .control_flow
@@ -1285,7 +1331,6 @@ impl<'a> Executor<'a> {
     }
 
     fn execute_mma(
-        &self,
         wave: &mut Wave,
         inst: &DecodedInstruction,
         local_memory: &mut LocalMemory,
@@ -1437,10 +1482,96 @@ mod tests {
         code
     }
 
+    fn single_lane_wave() -> Wave {
+        Wave::new(crate::wave::WaveConfig {
+            wave_width: 1,
+            register_count: 32,
+            wave_id: 0,
+            workgroup_id: [0; 3],
+            workgroup_size: [1; 3],
+            grid_size: [1; 3],
+            base_thread_index: 0,
+            total_threads_in_workgroup: 1,
+            num_waves: 1,
+        })
+    }
+
+    #[test]
+    fn float_to_integer_saturates_and_truncates() {
+        for (value, signed, unsigned) in [
+            (f32::NAN, 0, 0),
+            (f32::INFINITY, i32::MAX, u32::MAX),
+            (f32::NEG_INFINITY, i32::MIN, 0),
+            (-1.75, -1, 0),
+            (1.75, 1, 1),
+            (-0.0, 0, 0),
+            (2_147_483_648.0, i32::MAX, 2_147_483_648),
+            (4_294_967_296.0, i32::MAX, u32::MAX),
+        ] {
+            for (conversion, expected) in [
+                (CvtType::I32F32, signed.cast_unsigned()),
+                (CvtType::U32F32, unsigned),
+            ] {
+                let code = encode_word0(Opcode::Cvt as u8, 2, 1, conversion as u8, 0);
+                let inst = Decoder::new(&code).decode_at(0).unwrap();
+                let mut wave = single_lane_wave();
+                wave.threads[0].write_register(1, value.to_bits());
+                Executor::execute_convert(&mut wave, &inst);
+                assert_eq!(wave.threads[0].read_register(2), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn float_comparison_preserves_nan_and_signed_zero() {
+        for (a, b, equal, unequal) in [
+            (0.0_f32, -0.0_f32, true, false),
+            (f32::NAN, f32::NAN, false, true),
+            (1.0, f32::from_bits(1.0_f32.to_bits() + 1), false, true),
+            (f32::INFINITY, f32::INFINITY, true, false),
+        ] {
+            for (op, expected) in [(CmpOp::Eq, equal), (CmpOp::Ne, unequal)] {
+                let code = encode_with_rs2(Opcode::Fcmp as u8, 1, 1, 2, op as u8, 0);
+                let inst = Decoder::new(&code).decode_at(0).unwrap();
+                let mut wave = single_lane_wave();
+                wave.threads[0].write_register(1, a.to_bits());
+                wave.threads[0].write_register(2, b.to_bits());
+                Executor::execute_compare(&mut wave, &inst);
+                assert_eq!(wave.threads[0].read_predicate(1), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn integer_to_float_rounds_to_nearest_even() {
+        let code = encode_word0(Opcode::Cvt as u8, 2, 1, CvtType::F32U32 as u8, 0);
+        let inst = Decoder::new(&code).decode_at(0).unwrap();
+        let mut wave = single_lane_wave();
+        for (value, expected) in [
+            (16_777_217, 16_777_216.0_f32),
+            (16_777_219, 16_777_220.0),
+            (u32::MAX, 4_294_967_296.0),
+        ] {
+            wave.threads[0].write_register(1, value);
+            Executor::execute_convert(&mut wave, &inst);
+            assert_eq!(wave.threads[0].read_register(2), expected.to_bits());
+        }
+    }
+
     #[test]
     fn test_executor_iadd() {
         let code = encode_with_rs2(0x00, 3, 1, 2, 0, 0);
-        let mut wave = Wave::new(4, 32, 0, [0, 0, 0], [4, 1, 1], [1, 1, 1], 0, 4, 1);
+        let mut wave = Wave::new(crate::wave::WaveConfig {
+            wave_width: 4,
+            register_count: 32,
+            wave_id: 0,
+            workgroup_id: [0, 0, 0],
+            workgroup_size: [4, 1, 1],
+            grid_size: [1, 1, 1],
+            base_thread_index: 0,
+            total_threads_in_workgroup: 4,
+            num_waves: 1,
+        });
 
         for i in 0..4 {
             wave.threads[i].write_register(1, 10);
@@ -1463,8 +1594,18 @@ mod tests {
 
     #[test]
     fn test_executor_mov_imm() {
-        let code = encode_extended_imm(0x41, 5, 0, MiscOp::MovImm as u8, 0, 0xDEADBEEF);
-        let mut wave = Wave::new(4, 32, 0, [0, 0, 0], [4, 1, 1], [1, 1, 1], 0, 4, 1);
+        let code = encode_extended_imm(0x41, 5, 0, MiscOp::MovImm as u8, 0, 0xDEAD_BEEF);
+        let mut wave = Wave::new(crate::wave::WaveConfig {
+            wave_width: 4,
+            register_count: 32,
+            wave_id: 0,
+            workgroup_id: [0, 0, 0],
+            workgroup_size: [4, 1, 1],
+            grid_size: [1, 1, 1],
+            base_thread_index: 0,
+            total_threads_in_workgroup: 4,
+            num_waves: 1,
+        });
 
         let mut executor = Executor::new(&code, false, [0, 0, 0]);
         let mut local_memory = LocalMemory::new(1024);
@@ -1476,14 +1617,24 @@ mod tests {
             .unwrap();
 
         for i in 0..4 {
-            assert_eq!(wave.threads[i].read_register(5), 0xDEADBEEF);
+            assert_eq!(wave.threads[i].read_register(5), 0xDEAD_BEEF);
         }
     }
 
     #[test]
     fn test_executor_respects_active_mask() {
         let code = encode_with_rs2(0x00, 3, 1, 2, 0, 0);
-        let mut wave = Wave::new(4, 32, 0, [0, 0, 0], [4, 1, 1], [1, 1, 1], 0, 4, 1);
+        let mut wave = Wave::new(crate::wave::WaveConfig {
+            wave_width: 4,
+            register_count: 32,
+            wave_id: 0,
+            workgroup_id: [0, 0, 0],
+            workgroup_size: [4, 1, 1],
+            grid_size: [1, 1, 1],
+            base_thread_index: 0,
+            total_threads_in_workgroup: 4,
+            num_waves: 1,
+        });
 
         wave.active_mask = 0b0101;
 

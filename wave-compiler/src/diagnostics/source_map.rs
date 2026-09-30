@@ -1,13 +1,12 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Source location tracking for error messages.
-//!
-//! Maps byte offsets in compiled code back to source file positions
-//! for user-facing error reporting.
+//! Source location tracking for error messages. Maps byte offsets in compiled code back to
+//! source file positions for user-facing error reporting.
 
 use super::error::SourceLoc;
 
+#[derive(Debug)]
 /// Maps source code positions to line/column numbers.
 pub struct SourceMap {
     source: String,
@@ -39,17 +38,15 @@ impl SourceMap {
             .saturating_sub(1);
         let col = offset - self.line_starts[line];
         SourceLoc {
-            #[allow(clippy::cast_possible_truncation)]
-            line: (line + 1) as u32,
-            #[allow(clippy::cast_possible_truncation)]
-            col: (col + 1) as u32,
+            line: line + 1,
+            col: col.saturating_add(1),
         }
     }
 
-    /// Get a line of source code by line number (1-based).
+    /// Get a line of source code by line number, 1-based.
     #[must_use]
-    pub fn get_line(&self, line: u32) -> Option<&str> {
-        let idx = (line as usize).checked_sub(1)?;
+    pub fn get_line(&self, line: usize) -> Option<&str> {
+        let idx = line.checked_sub(1)?;
         let start = *self.line_starts.get(idx)?;
         let end = self
             .line_starts

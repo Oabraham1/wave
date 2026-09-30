@@ -1,12 +1,12 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Abstract syntax tree types. The parser produces a Program containing
-//!
-//! Statement nodes (labels, instructions, directives). Each node carries a
-//! Span for error reporting. Operands distinguish registers, immediates, labels.
+//! Abstract syntax tree types. The parser produces a Program containing Statement nodes, labels,
+//! instructions, directives. Each node carries a Span for error reporting. Operands distinguish
+//! registers, immediates, labels.
 
 use crate::opcodes::{CacheHint, Scope};
+use num_traits::ToPrimitive;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
@@ -117,8 +117,9 @@ impl Immediate {
         match self {
             Self::Integer(v) => u32::try_from(v)
                 .ok()
-                .or_else(|| i32::try_from(v).ok().map(|i| i as u32)),
-            Self::Float(f) => Some(f.to_bits() as u32),
+                .or_else(|| i32::try_from(v).ok().map(i32::cast_unsigned)),
+            // Float immediates occupy one 32-bit register.
+            Self::Float(f) => f.to_f32().map(f32::to_bits),
         }
     }
 

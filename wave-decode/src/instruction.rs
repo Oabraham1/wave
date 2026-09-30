@@ -1,9 +1,8 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Decoded instruction types. Represents WAVE instructions in a structured
-//!
-//! format suitable for disassembly and emulation.
+//! Decoded instruction types. Represents WAVE instructions in a structured format suitable for
+//! disassembly and emulation.
 
 use crate::opcodes::{
     AtomicOp, Bf16Op, Bf16PackedOp, BitOpType, CmpOp, ControlOp, CvtType, F16Op, F16PackedOp,
@@ -16,11 +15,11 @@ use crate::opcodes::{
 pub struct DecodedInstruction {
     /// Byte offset from start of code section
     pub offset: u32,
-    /// Size of instruction in bytes (4 or 8)
+    /// Size of instruction in bytes, 4 or 8
     pub size: u8,
     /// The decoded operation
     pub operation: Operation,
-    /// Predicate register (0 = unpredicated, 1-3 = p1-p3)
+    /// Predicate register, 0 = unpredicated, 1-3 = p1-p3
     pub predicate: u8,
     /// Whether predicate is negated
     pub predicate_negated: bool,
@@ -631,9 +630,9 @@ pub fn extract_opcode_modifier(instruction: &DecodedInstruction) -> (Opcode, Opt
         Operation::DeviceStore { width, .. } => (Opcode::DeviceStore, Some(*width as u8)),
 
         Operation::LocalAtomic { op, .. } => (Opcode::LocalAtomic, Some(*op as u8)),
-        Operation::LocalAtomicCas { .. } => (Opcode::LocalAtomic, None),
+        Operation::LocalAtomicCas { .. } => (Opcode::LocalAtomic, Some(8)),
         Operation::DeviceAtomic { op, .. } => (Opcode::DeviceAtomic, Some(*op as u8)),
-        Operation::DeviceAtomicCas { .. } => (Opcode::DeviceAtomic, None),
+        Operation::DeviceAtomicCas { .. } => (Opcode::DeviceAtomic, Some(8)),
 
         Operation::WaveOp { op, .. } | Operation::WaveVote { op, .. } => {
             (Opcode::WaveOp, Some(*op as u8))
@@ -671,5 +670,45 @@ pub fn extract_opcode_modifier(instruction: &DecodedInstruction) -> (Opcode, Opt
         Operation::Unknown { opcode, .. } => {
             Opcode::from_u8(*opcode).map_or((Opcode::Control, None), |op| (op, None))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_opcode_modifier, Operation};
+    use crate::{decode_at, DecodeError, Opcode, Scope};
+
+    #[test]
+    fn decoded_cas_preserves_raw_modifier_and_operand_order() -> Result<(), DecodeError> {
+        let cases = [
+            (
+                [0x80, 0x02, 0x01, 0x3c, 0x00, 0x00, 0x04, 0x03],
+                Opcode::LocalAtomic,
+                Operation::LocalAtomicCas {
+                    rd: Some(1),
+                    addr: 2,
+                    expected: 3,
+                    desired: 4,
+                },
+            ),
+            (
+                [0x80, 0x02, 0x01, 0x3d, 0x02, 0x00, 0x04, 0x03],
+                Opcode::DeviceAtomic,
+                Operation::DeviceAtomicCas {
+                    rd: Some(1),
+                    addr: 2,
+                    expected: 3,
+                    desired: 4,
+                    scope: Scope::Device,
+                },
+            ),
+        ];
+        for (bytes, opcode, operation) in cases {
+            let instruction = decode_at(&bytes, 0)?;
+            assert_eq!(instruction.operation, operation);
+            assert_eq!(instruction.size, 8);
+            assert_eq!(extract_opcode_modifier(&instruction), (opcode, Some(8)));
+        }
+        Ok(())
     }
 }

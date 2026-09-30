@@ -1,18 +1,15 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! CLI for the WAVE compiler.
-//!
-//! Compiles GPU kernel source files to WAVE binary (.wbin) format.
+//! CLI for the WAVE compiler. Compiles GPU kernel source files to WBIN format.
 
 use clap::Parser;
 use std::fs;
-use std::process;
 
 use wave_compiler::driver::config::{CompilerConfig, Language, OptLevel};
 use wave_compiler::driver::pipeline::compile_source;
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 #[command(name = "wave-compiler")]
 #[command(about = "Compile GPU kernel source to WAVE binary")]
 struct Cli {
@@ -23,11 +20,11 @@ struct Cli {
     #[arg(short, long)]
     output: String,
 
-    /// Source language (python, rust, cpp, typescript).
+    /// Source language, python, rust, cpp, typescript.
     #[arg(long)]
     lang: String,
 
-    /// Optimization level (0, 1, 2, 3).
+    /// Optimization level, 0, 1, 2, 3.
     #[arg(short = 'O', long, default_value = "0")]
     opt_level: String,
 
@@ -35,7 +32,7 @@ struct Cli {
     #[arg(long, default_value = "256")]
     max_registers: u32,
 
-    /// Wave width (SIMD lanes).
+    /// Wave width, SIMD lanes.
     #[arg(long, default_value = "32")]
     wave_width: u32,
 
@@ -52,19 +49,12 @@ struct Cli {
     dump_lir: bool,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
-    let language = Language::from_str_opt(&cli.lang).unwrap_or_else(|| {
-        eprintln!("error: unknown language '{}'", cli.lang);
-        process::exit(1);
-    });
-
-    let opt_level = OptLevel::from_str_opt(&cli.opt_level).unwrap_or_else(|| {
-        eprintln!("error: unknown optimization level '{}'", cli.opt_level);
-        process::exit(1);
-    });
-
+    let language = Language::from_str_opt(&cli.lang)
+        .ok_or_else(|| format!("unknown language '{}'", cli.lang))?;
+    let opt_level = OptLevel::from_str_opt(&cli.opt_level)
+        .ok_or_else(|| format!("unknown optimization level '{}'", cli.opt_level))?;
     let config = CompilerConfig {
         language,
         opt_level,
@@ -74,30 +64,18 @@ fn main() {
         dump_mir: cli.dump_mir,
         dump_lir: cli.dump_lir,
     };
-
-    let source = fs::read_to_string(&cli.input).unwrap_or_else(|e| {
-        eprintln!("error: cannot read '{}': {}", cli.input, e);
-        process::exit(1);
-    });
-
-    match compile_source(&source, &config) {
-        Ok(binary) => {
-            fs::write(&cli.output, &binary).unwrap_or_else(|e| {
-                eprintln!("error: cannot write '{}': {}", cli.output, e);
-                process::exit(1);
-            });
-            eprintln!(
-                "compiled {} -> {} ({} bytes)",
-                cli.input,
-                cli.output,
-                binary.len()
-            );
-        }
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
-    }
+    let source = fs::read_to_string(&cli.input)
+        .map_err(|error| format!("cannot read '{}': {error}", cli.input))?;
+    let binary = compile_source(&source, &config)?;
+    fs::write(&cli.output, &binary)
+        .map_err(|error| format!("cannot write '{}': {error}", cli.output))?;
+    eprintln!(
+        "compiled {} -> {}: {} bytes",
+        cli.input,
+        cli.output,
+        binary.len()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

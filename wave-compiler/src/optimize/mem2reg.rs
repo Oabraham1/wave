@@ -1,20 +1,18 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Memory-to-register promotion pass (SSA construction).
-//!
-//! Promotes local memory load/store pairs to register operations by
-//! identifying variables that can live in registers. Inserts phi nodes
-//! at dominance frontiers where needed.
+//! Forward private stores to matching loads within a block. Memory writes and calls invalidate
+//! available values.
 
 use std::collections::HashMap;
 
 use super::pass::Pass;
 use crate::hir::types::AddressSpace;
-use crate::mir::function::MirFunction;
+use crate::mir::function::{resolve_value, MirFunction};
 use crate::mir::instruction::MirInst;
 use crate::mir::value::ValueId;
 
+#[derive(Debug)]
 /// Memory-to-register promotion pass.
 pub struct Mem2Reg;
 
@@ -24,44 +22,39 @@ impl Pass for Mem2Reg {
     }
 
     fn run(&self, func: &mut MirFunction) -> bool {
-        let mut local_stores: HashMap<ValueId, ValueId> = HashMap::new();
-        let mut promotable_loads: Vec<(usize, usize, ValueId, ValueId)> = Vec::new();
-        let mut changed = false;
-
-        for (block_idx, block) in func.blocks.iter().enumerate() {
-            for (inst_idx, inst) in block.instructions.iter().enumerate() {
+        let mut replacements = HashMap::new();
+        for block in &mut func.blocks {
+            let mut local_stores: HashMap<ValueId, ValueId> = HashMap::new();
+            block.instructions.retain_mut(|inst| {
+                inst.map_operands(|value| resolve_value(value, &replacements));
                 match inst {
-                    MirInst::Store {
-                        addr,
-                        value,
-                        space: AddressSpace::Private,
-                    } => {
-                        local_stores.insert(*addr, *value);
+                    MirInst::Store { addr, value, space } => {
+                        local_stores.clear();
+                        if *space == AddressSpace::Private {
+                            local_stores.insert(*addr, *value);
+                        }
                     }
                     MirInst::Load {
                         dest,
                         addr,
                         space: AddressSpace::Private,
-                        ..
+                        ty,
                     } => {
-                        if let Some(&stored_val) = local_stores.get(addr) {
-                            promotable_loads.push((block_idx, inst_idx, *dest, stored_val));
+                        if let Some(&stored) = local_stores.get(addr) {
+                            if func.value_types.get(&stored) == Some(ty) {
+                                replacements.insert(*dest, stored);
+                                return false;
+                            }
                         }
                     }
+                    other if other.has_side_effects() => local_stores.clear(),
                     _ => {}
                 }
-            }
+                true
+            });
         }
-
-        for (block_idx, inst_idx, dest, replacement_value) in promotable_loads.into_iter().rev() {
-            func.blocks[block_idx].instructions[inst_idx] = MirInst::Const {
-                dest,
-                value: crate::mir::instruction::ConstValue::U32(replacement_value.index()),
-            };
-            changed = true;
-        }
-
-        changed
+        func.replace_uses(&replacements);
+        !replacements.is_empty()
     }
 }
 
@@ -91,6 +84,7 @@ mod tests {
         bb.terminator = Terminator::Return;
         func.blocks.push(bb);
 
+        func.set_type(ValueId(1), MirType::I32);
         let pass = Mem2Reg;
         assert!(pass.run(&mut func));
     }
@@ -113,6 +107,7 @@ mod tests {
         bb.terminator = Terminator::Return;
         func.blocks.push(bb);
 
+        func.set_type(ValueId(1), MirType::I32);
         let pass = Mem2Reg;
         assert!(!pass.run(&mut func));
     }

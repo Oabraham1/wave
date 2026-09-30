@@ -1,234 +1,158 @@
 ---
-title: Backends
-description: How the four WAVE backends translate .wbin binaries to Metal, PTX, HIP, and SYCL.
+title: "Backends"
+description: "Translate WAVE binaries to Metal, PTX, HIP, and SYCL."
 ---
 
-Each WAVE backend reads a `.wbin` binary and translates it into vendor-native GPU code that can be compiled and dispatched by the vendor's own toolchain.
+Each backend reads `.wbin` and emits input for a vendor compiler. The vendor toolchain produces executable GPU code.
 
-## Backend Summary
+## Backend summary
 
-| | wave-metal | wave-ptx | wave-hip | wave-sycl |
-|---|---|---|---|---|
-| **Output format** | Metal Shading Language (MSL) | PTX assembly | HIP C++ | SYCL C++ |
-| **Target hardware** | Apple M1-M4, A-series | NVIDIA Turing+ (SM 75+) | AMD RDNA / CDNA | Intel Xe / Arc |
-| **Vendor toolchain** | `metallib` / Xcode | `ptxas` / CUDA toolkit | `hipcc` / ROCm | `dpcpp` / oneAPI |
-| **Wave width** | 32 (fixed) | 32 (warpSize) | 64 (RDNA: 32/64) | varies (subgroup) |
-| **F64 support** | No | Yes | Yes | Yes |
+| Backend | Output | Target | Toolchain |
+|---|---|---|---|
+| `wave-metal` | Metal Shading Language | Apple GPUs | Metal compiler and runtime |
+| `wave-ptx` | PTX assembly | NVIDIA GPUs | CUDA `ptxas` |
+| `wave-hip` | HIP C++ | AMD RDNA and CDNA GPUs | ROCm `hipcc` |
+| `wave-sycl` | SYCL C++ | Intel Xe and Arc GPUs | oneAPI DPC++ |
 
-## wave-metal (Apple)
+## wave-metal: Apple
 
-The Metal backend generates MSL compute kernel functions.
+The Metal backend emits MSL compute functions.
 
-### Register Mapping
+### Register mapping
 
-WAVE's 32 general-purpose registers map to local `uint32_t` variables:
+Kernel metadata determines the number of local `uint` registers. Floating-point operations reinterpret their bits with `as_type<float>`.
 
-```cpp
-uint32_t r0 = 0, r1 = 0, r2 = 0, /* ... */ r31 = 0;
-```
+### Memory mapping
 
-Floating-point operations use `as_type<float>()` for bitwise reinterpretation between `uint32_t` and `float`, preserving WAVE's untyped register model.
+Local memory uses a `threadgroup` byte array sized from kernel metadata. Device memory uses one `device` byte-buffer parameter. Instructions access that allocation through byte offsets.
 
-### Memory Mapping
+### Wave operations
 
-- **Local (shared) memory** maps to `threadgroup uint8_t shared_mem[N]`, where `N` is the local memory size declared in the `.wbin` metadata. Loads and stores use pointer casts at the access site.
-- **Device (global) memory** maps to `device uint8_t* buf [[buffer(0)]]` passed as a kernel argument. The backend generates byte-addressed loads and stores with explicit casts to the target type.
-
-### Wave Operations
-
-WAVE wave-level operations map to Metal's SIMD-group functions:
-
-| WAVE instruction | MSL function |
+| WAVE instruction | MSL operation |
 |---|---|
-| `wave_shuffle` | `simd_shuffle()` |
-| `wave_reduce_add` | `simd_sum()` |
-| `wave_ballot` | `simd_ballot()` |
-| `wave_broadcast` | `simd_broadcast()` |
+| `wave_shuffle` | `simd_shuffle` |
+| `wave_shuffle_xor` | `simd_shuffle_xor` |
+| `wave_reduce_add` | `simd_sum` |
+| `wave_ballot` | SIMD-group ballot |
+| `wave_broadcast` | `simd_broadcast` |
 
 ### Synchronization
 
-Barriers translate to `threadgroup_barrier(mem_flags::mem_threadgroup)` for local memory scope and `threadgroup_barrier(mem_flags::mem_device)` for device memory scope.
+A barrier emits `threadgroup_barrier` with both threadgroup and device memory flags. Fences emit `atomic_thread_fence` at SIMD-group, threadgroup, or device scope with sequentially consistent ordering. System-scope fences are rejected.
 
 ### Limitations
 
-- **No F64 support.** Apple GPUs do not support double-precision floating-point arithmetic. Kernels using `f64` types will fail at the Metal backend with a diagnostic error.
-- **Fixed wave width of 32.** Metal SIMD-groups are always 32 lanes wide. The backend hardcodes this value rather than querying it at runtime.
-- **Buffer binding model.** Device memory is passed via Metal buffer bindings (`[[buffer(N)]]`), which limits the number of distinct device memory arguments.
+The backend uses 32-lane wave behavior. Other widths require compatible lowering. Metal does not provide the double-precision arithmetic needed by WAVE `f64` operations. Calls requiring function extraction are rejected.
 
-## wave-ptx (NVIDIA)
+## wave-ptx: NVIDIA
 
-The PTX backend generates PTX assembly text targeting SM 75 (Turing) or later.
+The PTX backend emits assembly for the selected shader model. The measurement suite targets SM 75.
 
-### Register Mapping
+### Register mapping
 
-WAVE registers map to PTX virtual registers with type-specific prefixes:
+WAVE register bits use `.b32` registers. Floating-point operations move those bits to `.f32` registers. Wide values combine consecutive WAVE registers into 64-bit temporaries.
 
-| WAVE type | PTX register | PTX type |
-|---|---|---|
-| `i32` / `u32` | `%r0` - `%r31` | `.b32` |
-| `f32` | `%f0` - `%f31` | `.f32` |
-| `f64` | `%rd0` - `%rd31` | `.b64` |
-
-Float bitcasting uses `mov.b32` to reinterpret between integer and float register types without conversion:
-
-```
-mov.b32 %f0, %r0;   // reinterpret uint32 as float
+```text
+mov.b32 %f0, %r0;
 ```
 
-### Memory Mapping
+Separate floating-point addition, subtraction, and multiplication use explicit rounding modifiers to preserve their rounding boundaries. Fused multiply-add remains an explicit operation.
 
-- **Local (shared) memory** maps to `.shared .b8 shared_mem[N];` in the PTX `.shared` state space.
-- **Device (global) memory** uses 64-bit addressing with `ld.global` and `st.global` instructions:
+### Memory mapping
 
-```
-ld.global.b32 %r0, [%rd0];       // load 32 bits from global address in %rd0
-st.global.b32 [%rd0], %r1;       // store 32 bits to global address
-```
+Local memory uses a PTX `.shared` allocation. Device accesses add WAVE byte offsets to the 64-bit device-memory base pointer and use `ld.global` or `st.global`.
 
-### Atomic Operations
+### Atomic operations
 
-PTX atomics use the `atom.global` and `atom.shared` instructions with explicit scope:
-
-```
-atom.global.add.u32 %r0, [%rd0], %r1;   // global atomic add
-atom.shared.cas.b32 %r0, [%r2], %r3, %r4;  // shared CAS
-```
-
-PTX does not provide `atom.sub`. The backend emits `neg` followed by `atom.add` as an equivalent sequence.
+Local and device atomics use `atom.shared` and `atom.global`. Subtraction negates the operand before atomic addition. Compare-and-swap supplies separate expected and desired operands.
 
 ### Limitations
 
-- **SM 75+ required.** The backend uses features introduced in Turing (e.g., uniform registers, independent thread scheduling). Older GPUs are not supported.
-- **No atomic subtract.** Implemented as negate-then-add, which is functionally equivalent but uses two instructions.
+The selected PTX version and shader model constrain the available instructions. The vendor assembler checks whether the generated program is valid for that target.
 
-## wave-hip (AMD)
+## wave-hip: AMD
 
-The HIP backend generates HIP C++ kernel functions compilable with `hipcc`.
+The HIP backend emits C++ kernels compiled with `hipcc`.
 
-### Register Mapping
+### Register mapping
 
-WAVE registers map to local `uint32_t` variables, identical to the Metal approach:
+WAVE registers become local `uint32_t` values. `__uint_as_float` and `__float_as_uint` reinterpret binary32 values.
 
-```cpp
-uint32_t r0 = 0, r1 = 0, /* ... */ r31 = 0;
-```
+### Memory mapping
 
-Float bitcasting uses AMD-specific intrinsics:
+Local memory uses a dynamically sized shared allocation whose size is supplied at launch. Device memory uses a byte-pointer argument.
 
-```cpp
-float f = __uint_as_float(r0);    // uint32 → float
-uint32_t u = __float_as_uint(f);  // float → uint32
-```
+### Wave operations
 
-### Memory Mapping
-
-- **Local (shared) memory** maps to dynamically-sized shared memory declared with `extern __shared__ uint8_t shared_mem[];`. The actual size is set at kernel launch.
-- **Device (global) memory** is passed as a raw pointer parameter (`uint8_t* __restrict__ buf`).
-
-### Wave Operations
-
-WAVE wave-level operations map to HIP intrinsics:
-
-| WAVE instruction | HIP function |
+| WAVE instruction | HIP operation |
 |---|---|
-| `wave_shuffle` | `__shfl()` |
-| `wave_ballot` | `__ballot()` |
-| `wave_reduce_add` | Manual shuffle-tree reduction |
-| `wave_broadcast` | `__shfl(val, src_lane)` |
+| `wave_shuffle` | `__shfl` |
+| `wave_shuffle_xor` | `__shfl_xor` |
+| `wave_ballot` | `__ballot` |
+| `wave_reduce_add` | Shuffle-tree reduction |
+| `wave_broadcast` | Shuffle from a shared source lane |
 
-The backend uses `warpSize` rather than hardcoding the wave width, allowing correct execution on both RDNA (wave32/wave64 configurable) and CDNA (wave64) hardware.
+The backend queries `warpSize`. A kernel's collective algorithm must still support the resulting 32- or 64-lane grouping.
 
 ### Synchronization
 
-Barriers map to `__syncthreads()` for workgroup scope. The backend does not currently emit wave-level barriers as AMD hardware provides implicit wave-level synchrony.
+Workgroup barriers use `__syncthreads`. Fences use `__threadfence_block`, `__threadfence`, or `__threadfence_system` according to scope.
 
 ### Limitations
 
-- **Wave reduce is emulated.** HIP does not expose a single-instruction wave reduce. The backend generates a butterfly reduction tree using `__shfl_xor()`.
-- **RDNA vs. CDNA wave width.** While the backend uses `warpSize` for correctness, performance tuning may differ between wave32 (RDNA) and wave64 (CDNA) modes.
+Reduction lowering uses a sequence of shuffle and arithmetic operations. Register allocation and scheduling depend on the target compiler. RDNA and CDNA wave widths can change the communication pattern and resource cost.
 
-## wave-sycl (Intel)
+## wave-sycl: Intel
 
-The SYCL backend generates SYCL C++ kernel functions targeting the oneAPI DPC++ compiler.
+The SYCL backend emits a launch function that submits a kernel through a SYCL queue.
 
-### Register Mapping
+### Register mapping
 
-WAVE registers map to local `uint32_t` variables:
+Local `uint32_t` values hold WAVE registers. `sycl::bit_cast` reinterprets floating-point bits.
 
-```cpp
-uint32_t r0 = 0, r1 = 0, /* ... */ r31 = 0;
-```
+### Memory mapping
 
-Float bitcasting uses the SYCL standard library:
+A `local_accessor<uint8_t, 1>` supplies workgroup-local memory. A USM byte pointer supplies device memory. The generated launch function constructs the command group and dispatch dimensions.
 
-```cpp
-float f = sycl::bit_cast<float>(r0);
-uint32_t u = sycl::bit_cast<uint32_t>(f);
-```
+### Wave operations
 
-### Memory Mapping
+Sub-group operations implement lane selection, shifts, XOR permutation, and reduction. The kernel obtains its sub-group from `nd_item::get_sub_group`.
 
-- **Local (shared) memory** maps to `sycl::local_accessor<uint8_t, 1>` bound during command group submission. The accessor is passed to the kernel as a parameter.
-- **Device (global) memory** uses SYCL Unified Shared Memory (USM) pointers (`uint8_t*`), allocated with `sycl::malloc_device()` and passed directly to the kernel.
+### Atomic operations
 
-### Wave Operations
-
-WAVE wave-level operations map to SYCL sub-group functions:
-
-| WAVE instruction | SYCL function |
-|---|---|
-| `wave_shuffle` | `sycl::select_from_group(sg, val, lane)` |
-| `wave_reduce_add` | `sycl::reduce_over_group(sg, val, sycl::plus<>())` |
-| `wave_ballot` | `sycl::group_ballot(sg, pred)` |
-| `wave_broadcast` | `sycl::group_broadcast(sg, val, lane)` |
-
-### Atomic Operations
-
-SYCL atomics use `sycl::atomic_ref` with explicit memory order and scope:
-
-```cpp
-sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
-                 sycl::memory_scope::device,
-                 sycl::access::address_space::global_space> ref(buf[offset]);
-ref.fetch_add(val);
-```
-
-Memory fences use `sycl::atomic_fence()` with configurable scope matching WAVE's four-level scoping model (wave, workgroup, device, system).
+The backend uses `atomic_ref` for memory updates and `atomic_fence` for scoped ordering.
 
 ### Limitations
 
-- **Sub-group size variability.** Intel GPUs support multiple sub-group sizes (8, 16, 32). The backend requests a specific size via `[[intel::reqd_sub_group_size(N)]]` but the actual size depends on the target hardware.
-- **Local memory model.** SYCL's accessor-based local memory model differs from the raw pointer model used by Metal, PTX, and HIP. The backend must manage accessor creation during command group submission, which adds complexity to the host-side dispatch code.
+The generated kernel does not request a fixed subgroup size. The target chooses it, so kernels must use compatible collective algorithms. Local-memory accessors also require host-side command-group construction.
 
-## Cross-Backend Comparison
+## Cross-backend comparison
 
-### Float Bitcasting
-
-Every backend must reinterpret `uint32_t` register values as `float` without numeric conversion. Each uses a different mechanism:
+### Float bitcasting
 
 | Backend | Mechanism |
 |---|---|
-| wave-metal | `as_type<float>(r)` |
-| wave-ptx | `mov.b32 %f, %r` |
-| wave-hip | `__uint_as_float(r)` |
-| wave-sycl | `sycl::bit_cast<float>(r)` |
+| Metal | `as_type<float>` |
+| PTX | `mov.b32` |
+| HIP | `__uint_as_float` |
+| SYCL | `bit_cast<float>` |
 
-### Shared Memory Declaration
+### Shared memory declaration
 
-| Backend | Declaration |
+| Backend | Storage |
 |---|---|
-| wave-metal | `threadgroup uint8_t shared_mem[N]` |
-| wave-ptx | `.shared .b8 shared_mem[N]` |
-| wave-hip | `extern __shared__ uint8_t shared_mem[]` |
-| wave-sycl | `sycl::local_accessor<uint8_t, 1>` |
+| Metal | `threadgroup` byte array |
+| PTX | `.shared` byte allocation |
+| HIP | Dynamic `__shared__` byte allocation |
+| SYCL | `local_accessor` |
 
-### Barrier Instructions
+### Barrier instructions
 
-| Backend | Instruction |
+| Backend | Operation |
 |---|---|
-| wave-metal | `threadgroup_barrier(mem_flags::mem_threadgroup)` |
-| wave-ptx | `bar.sync 0` |
-| wave-hip | `__syncthreads()` |
-| wave-sycl | `sycl::group_barrier(wg)` |
+| Metal | `threadgroup_barrier` |
+| PTX | `bar.sync 0` |
+| HIP | `__syncthreads` |
+| SYCL | `group_barrier` |
 
-**Next:** [Emulator](/architecture/emulator/) for how `wave-emu` executes `.wbin` binaries without a GPU.
+See [Emulator](/architecture/emulator/) for CPU execution of the same binary format.

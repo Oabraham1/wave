@@ -1,11 +1,7 @@
 // Copyright 2026 Ojima Abraham
 // SPDX-License-Identifier: Apache-2.0
 
-//! Live variable analysis using backward dataflow iteration.
-//!
-//! Computes live-in and live-out sets for each basic block. A value is
-//! live at a program point if it may be used before being redefined.
-//! Used by the register allocator and dead code elimination.
+//! Compute live-in and live-out values for each block using backward dataflow analysis.
 
 use std::collections::{HashMap, HashSet};
 
@@ -13,6 +9,7 @@ use super::cfg::Cfg;
 use crate::mir::function::MirFunction;
 use crate::mir::value::{BlockId, ValueId};
 
+#[derive(Debug)]
 /// Result of live variable analysis.
 pub struct LivenessInfo {
     /// Values live on entry to each block.
@@ -45,7 +42,7 @@ impl LivenessInfo {
             }
 
             for inst in &block.instructions {
-                for operand in inst.operands() {
+                for operand in inst.operand_iter() {
                     if !defs.contains(&operand) {
                         uses.insert(operand);
                     }
@@ -55,7 +52,7 @@ impl LivenessInfo {
                 }
             }
 
-            for operand in block.terminator.operands() {
+            for operand in block.terminator.operand_iter() {
                 if !defs.contains(&operand) {
                     uses.insert(operand);
                 }
@@ -65,24 +62,40 @@ impl LivenessInfo {
             def_sets.insert(block.id, defs);
         }
 
+        let mut edge_uses: HashMap<(BlockId, BlockId), HashSet<ValueId>> = HashMap::new();
+        for block in &func.blocks {
+            for phi in &block.phis {
+                for &(predecessor, value) in &phi.incoming {
+                    edge_uses
+                        .entry((predecessor, block.id))
+                        .or_default()
+                        .insert(value);
+                }
+            }
+        }
+
         let mut changed = true;
         while changed {
             changed = false;
             for &bid in cfg.blocks.iter().rev() {
                 let mut new_out: HashSet<ValueId> = HashSet::new();
                 for succ in cfg.succs(bid) {
+                    if let Some(values) = edge_uses.get(&(bid, *succ)) {
+                        new_out.extend(values);
+                    }
                     if let Some(live) = live_in.get(succ) {
                         new_out.extend(live);
                     }
                 }
 
-                let uses = use_sets.get(&bid).cloned().unwrap_or_default();
-                let defs = def_sets.get(&bid).cloned().unwrap_or_default();
-
-                let new_in: HashSet<ValueId> = uses
-                    .union(&new_out.difference(&defs).copied().collect())
-                    .copied()
-                    .collect();
+                let mut new_in = use_sets.get(&bid).cloned().unwrap_or_default();
+                let defs = def_sets.get(&bid);
+                new_in.extend(
+                    new_out
+                        .iter()
+                        .filter(|value| !defs.is_some_and(|defined| defined.contains(value)))
+                        .copied(),
+                );
 
                 if new_in != *live_in.get(&bid).unwrap_or(&HashSet::new()) {
                     live_in.insert(bid, new_in);

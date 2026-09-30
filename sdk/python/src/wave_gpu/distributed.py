@@ -10,13 +10,15 @@ M-series) all operations are no-ops that preserve correctness so the
 same training code runs everywhere.
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from __future__ import annotations
+
+from typing import Any, Callable
 
 from .array import WaveArray
 from .device import DeviceInfo, detect_gpu
 
 
-def enumerate_devices() -> List[DeviceInfo]:
+def enumerate_devices() -> list[DeviceInfo]:
     """Return all available GPU devices.
 
     On macOS returns a single Metal device. On Linux enumerates all
@@ -31,7 +33,7 @@ def shard_tensor(
     data: WaveArray,
     n_devices: int,
     dim: int = 0,
-) -> List[WaveArray]:
+) -> list[WaveArray]:
     """Split a WaveArray into n_devices contiguous chunks.
 
     The last shard absorbs any remainder elements when the array length
@@ -40,7 +42,7 @@ def shard_tensor(
     """
     n = len(data)
     chunk = n // n_devices
-    shards: List[WaveArray] = []
+    shards: list[WaveArray] = []
 
     for i in range(n_devices):
         start = i * chunk
@@ -50,16 +52,16 @@ def shard_tensor(
     return shards
 
 
-def gather_shards(shards: List[WaveArray]) -> WaveArray:
+def gather_shards(shards: list[WaveArray]) -> WaveArray:
     """Reassemble sharded arrays into one WaveArray."""
-    combined: List[float] = []
+    combined: list[float] = []
     for shard in shards:
         combined.extend(shard.data)
     dtype = shards[0].dtype if shards else "f32"
     return WaveArray(combined, dtype=dtype)
 
 
-def allreduce_average(buffers: List[WaveArray]) -> None:
+def allreduce_average(buffers: list[WaveArray]) -> None:
     """Average corresponding elements across all buffers in place.
 
     After this call every buffer in the list contains identical values
@@ -85,7 +87,7 @@ def allreduce_average(buffers: List[WaveArray]) -> None:
         buf.data = list(averaged)
 
 
-def replicate(data: WaveArray, n_devices: int) -> List[WaveArray]:
+def replicate(data: WaveArray, n_devices: int) -> list[WaveArray]:
     """Create n_devices copies of a WaveArray (for weight replication)."""
     return [WaveArray(list(data.data), dtype=data.dtype) for _ in range(n_devices)]
 
@@ -103,22 +105,22 @@ class DistributedDataParallel:
     def __init__(
         self,
         forward_fn: Callable[..., WaveArray],
-        params: Dict[str, WaveArray],
-        devices: Optional[List[DeviceInfo]] = None,
+        params: dict[str, WaveArray],
+        devices: list[DeviceInfo] | None = None,
     ) -> None:
         self._forward_fn = forward_fn
         self._params = params
         self._devices = devices if devices is not None else enumerate_devices()
         self._n_devices = len(self._devices)
 
-        self._param_replicas: Dict[str, List[WaveArray]] = {}
+        self._param_replicas: dict[str, list[WaveArray]] = {}
         for name, param in self._params.items():
             self._param_replicas[name] = replicate(param, self._n_devices)
 
-        self._grad_buffers: Dict[str, List[WaveArray]] = {}
+        self._grad_buffers: dict[str, list[WaveArray]] = {}
 
     @property
-    def devices(self) -> List[DeviceInfo]:
+    def devices(self) -> list[DeviceInfo]:
         """The devices this model is distributed across."""
         return list(self._devices)
 
@@ -135,7 +137,7 @@ class DistributedDataParallel:
         """
         shards = shard_tensor(batch, self._n_devices, dim=0)
 
-        outputs: List[WaveArray] = []
+        outputs: list[WaveArray] = []
         for i, shard in enumerate(shards):
             device_params = {
                 name: replicas[i] for name, replicas in self._param_replicas.items()
@@ -145,7 +147,7 @@ class DistributedDataParallel:
 
         return gather_shards(outputs)
 
-    def backward(self, grad_buffers: Dict[str, List[WaveArray]]) -> None:
+    def backward(self, grad_buffers: dict[str, list[WaveArray]]) -> None:
         """Average gradients across devices via all-reduce.
 
         Each key maps a parameter name to a list of per-device gradient
@@ -156,9 +158,9 @@ class DistributedDataParallel:
             allreduce_average(grads)
             self._grad_buffers[name] = grads
 
-    def get_averaged_gradients(self) -> Dict[str, WaveArray]:
+    def get_averaged_gradients(self) -> dict[str, WaveArray]:
         """Return the most recent averaged gradients (one per parameter)."""
-        result: Dict[str, WaveArray] = {}
+        result: dict[str, WaveArray] = {}
         for name, grads in self._grad_buffers.items():
             if grads:
                 result[name] = grads[0]

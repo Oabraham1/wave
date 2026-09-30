@@ -98,14 +98,14 @@ def main() -> None:
     print(f"{'Devices':>8} {'Samples/sec':>14} {'Speedup':>10}")
     print("-" * 36)
 
-    baseline = None
+    single_device_throughput = None
     for n in [1, 2, 4, 8]:
         if n > args.max_devices:
             break
         throughput = run_benchmark(n, args.batch_size, args.iters)
-        if baseline is None:
-            baseline = throughput
-        speedup = throughput / baseline
+        if single_device_throughput is None:
+            single_device_throughput = throughput
+        speedup = throughput / single_device_throughput
         print(f"{n:>8} {throughput:>14.1f} {speedup:>10.2f}x")
 
 

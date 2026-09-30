@@ -8,7 +8,7 @@ use wave_gpu::{array, device, kernel};
 #[test]
 fn test_device_detection() {
     let dev = device::detect().unwrap();
-    assert!(!dev.name.is_empty());
+    assert_ne!(dev.name, "");
 }
 
 #[test]
@@ -27,26 +27,26 @@ fn test_array_zeros() {
 
 #[test]
 fn test_compile_kernel() {
-    let source = r#"
+    let source = r"
 @kernel
 def vector_add(a: Buffer[f32], b: Buffer[f32], out: Buffer[f32], n: u32):
     gid = thread_id()
     if gid < n:
         out[gid] = a[gid] + b[gid]
-"#;
+";
     let result = kernel::compile(source, kernel::Language::Python);
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_vector_add_emulator() {
-    let source = r#"
+    let source = r"
 @kernel
 def vector_add(a: Buffer[f32], b: Buffer[f32], out: Buffer[f32], n: u32):
     gid = thread_id()
     if gid < n:
         out[gid] = a[gid] + b[gid]
-"#;
+";
     let dev = device::Device {
         vendor: device::GpuVendor::Emulator,
         name: "Test Emulator".into(),

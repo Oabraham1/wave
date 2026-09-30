@@ -3,9 +3,11 @@
 
 """Kernel decorator and compilation for the WAVE Python SDK."""
 
+from __future__ import annotations
+
 import inspect
 import textwrap
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable
 
 from .array import WaveArray
 from .runtime import CompiledKernel
@@ -17,7 +19,7 @@ class KernelWrapper:
     def __init__(self, func: Callable[..., Any]) -> None:
         self._func = func
         self._source = textwrap.dedent(inspect.getsource(func))
-        self._compiled: Optional[CompiledKernel] = None
+        self._compiled: CompiledKernel | None = None
 
     def _ensure_compiled(self) -> CompiledKernel:
         if self._compiled is None:
@@ -27,14 +29,14 @@ class KernelWrapper:
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         """Launch the kernel with the given arguments.
 
-        Buffer arguments (WaveArray) are passed as device buffers.
-        Scalar arguments (int) are passed as kernel parameters.
+        WaveArray arguments are passed as device buffers.
+        Integer arguments are passed as kernel parameters.
         """
         grid = kwargs.get("grid", (1, 1, 1))
         workgroup = kwargs.get("workgroup", (256, 1, 1))
 
-        buffers: List[WaveArray] = []
-        scalars: List[int] = []
+        buffers: list[WaveArray] = []
+        scalars: list[int] = []
 
         for arg in args:
             if isinstance(arg, WaveArray):

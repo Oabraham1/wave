@@ -1,9 +1,9 @@
 ---
-title: Rust API Reference
-description: Complete API reference for the wave_sdk Rust crate.
+title: "Rust API reference"
+description: "API reference for the wave_gpu Rust crate."
 ---
 
-The `wave_sdk` crate provides Rust bindings for WAVE GPU compute. It exposes device buffer management, device detection, and kernel compilation and dispatch.
+The `wave-gpu` crate is imported as `wave_gpu`. It provides host buffers, device detection, kernel compilation, and dispatch.
 
 ## Installation
 
@@ -11,12 +11,12 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-wave_sdk = "0.1"
+wave-gpu = "0.1"
 ```
 
-## `wave_sdk::array`
+## `wave_gpu::array`
 
-Buffer creation and device memory management.
+Host buffer creation and decoding.
 
 ### Types
 
@@ -37,80 +37,86 @@ Represents the element type of a device buffer.
 #### `DeviceBuffer`
 
 ```rust
-pub struct DeviceBuffer { /* opaque */ }
+pub struct DeviceBuffer {
+    pub data: Vec<u8>,
+    pub count: usize,
+    pub element_type: ElementType,
+}
 ```
 
-A handle to a device-resident buffer. Created via the free functions in this module.
+A host buffer passed to the runtime for dispatch.
 
-**Fields (read-only):**
+Fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `count` | `usize` | Number of elements in the buffer. |
+| `data` | `Vec<u8>` | Little-endian element bytes. |
+| `count` | `usize` | Number of elements. |
+| `element_type` | `ElementType` | Element format. |
 
-**Methods:**
+Methods:
 
-##### `to_f32(&self) -> Vec<f32>`
+##### `to_f32(&self) -> Result<Vec<f32>, RuntimeError>`
 
-Copy buffer contents to a host `Vec<f32>`. Panics if the buffer element type is not `F32`.
+Decode the buffer as `f32` values. Returns a memory error for a different element type or invalid byte length.
 
 ```rust
-let buf = wave_sdk::array::from_f32(&[1.0, 2.0, 3.0]);
-let host: Vec<f32> = buf.to_f32();
+let buf = wave_gpu::array::from_f32(&[1.0, 2.0, 3.0]);
+let host: Vec<f32> = buf.to_f32()?;
 assert_eq!(host, vec![1.0, 2.0, 3.0]);
 ```
 
-##### `to_u32(&self) -> Vec<u32>`
+##### `to_u32(&self) -> Result<Vec<u32>, RuntimeError>`
 
-Copy buffer contents to a host `Vec<u32>`. Panics if the buffer element type is not `U32`.
+Decode the buffer as `u32` values. Returns a memory error for a different element type or invalid byte length.
 
 ```rust
-let buf = wave_sdk::array::from_u32(&[10, 20, 30]);
-let host: Vec<u32> = buf.to_u32();
+let buf = wave_gpu::array::from_u32(&[10, 20, 30]);
+let host: Vec<u32> = buf.to_u32()?;
 assert_eq!(host, vec![10, 20, 30]);
 ```
 
-### Free Functions
+### Free functions
 
 #### `from_f32(data: &[f32]) -> DeviceBuffer`
 
-Create a device buffer from a host `f32` slice. Copies the data to device memory.
+Create a host buffer from a host `f32` slice. Copies the data into host storage.
 
 ```rust
-let buf = wave_sdk::array::from_f32(&[1.0, 2.0, 3.0, 4.0]);
+let buf = wave_gpu::array::from_f32(&[1.0, 2.0, 3.0, 4.0]);
 assert_eq!(buf.count, 4);
 ```
 
 #### `zeros_f32(n: usize) -> DeviceBuffer`
 
-Create a device buffer of `n` zero-valued `f32` elements.
+Create a host buffer of `n` zero-valued `f32` elements.
 
 ```rust
-let buf = wave_sdk::array::zeros_f32(1024);
+let buf = wave_gpu::array::zeros_f32(1024);
 assert_eq!(buf.count, 1024);
 ```
 
 #### `from_u32(data: &[u32]) -> DeviceBuffer`
 
-Create a device buffer from a host `u32` slice. Copies the data to device memory.
+Create a host buffer from a host `u32` slice. Copies the data into host storage.
 
 ```rust
-let buf = wave_sdk::array::from_u32(&[0, 1, 2, 3]);
+let buf = wave_gpu::array::from_u32(&[0, 1, 2, 3]);
 assert_eq!(buf.count, 4);
 ```
 
 #### `zeros_u32(n: usize) -> DeviceBuffer`
 
-Create a device buffer of `n` zero-valued `u32` elements.
+Create a host buffer of `n` zero-valued `u32` elements.
 
 ```rust
-let buf = wave_sdk::array::zeros_u32(256);
+let buf = wave_gpu::array::zeros_u32(256);
 assert_eq!(buf.count, 256);
 ```
 
 ---
 
-## `wave_sdk::device`
+## `wave_gpu::device`
 
 GPU device detection and information.
 
@@ -120,10 +126,11 @@ GPU device detection and information.
 
 ```rust
 pub enum GpuVendor {
-    AMD,
-    NVIDIA,
+    Apple,
+    Nvidia,
+    Amd,
     Intel,
-    Unknown,
+    Emulator,
 }
 ```
 
@@ -138,16 +145,16 @@ pub struct Device {
 
 Information about a detected GPU device.
 
-### Free Functions
+### Free functions
 
-#### `detect() -> Option<Device>`
+#### `detect() -> Result<Device, RuntimeError>`
 
-Detect the first available GPU. Returns `None` if no supported GPU is found.
+Detect an available device. Uses the emulator when no GPU is found.
 
 ```rust
-use wave_sdk::device;
+use wave_gpu::device;
 
-if let Some(dev) = device::detect() {
+if let Ok(dev) = device::detect() {
     println!("Found GPU: {} ({:?})", dev.name, dev.vendor);
 } else {
     eprintln!("No GPU detected");
@@ -156,7 +163,7 @@ if let Some(dev) = device::detect() {
 
 ---
 
-## `wave_sdk::kernel`
+## `wave_gpu::kernel`
 
 Kernel compilation and dispatch.
 
@@ -183,18 +190,18 @@ pub struct CompiledKernel { /* opaque */ }
 
 A compiled WAVE kernel ready for dispatch.
 
-### Free Functions
+### Free functions
 
-#### `compile(source: &str, lang: Language) -> Result<CompiledKernel, String>`
+#### `compile(source: &str, lang: Language) -> Result<CompiledKernel, RuntimeError>`
 
-Compile a kernel from source code. Returns a `CompiledKernel` on success, or an error string describing the compilation failure.
+Compile a kernel from source code. Returns a `CompiledKernel` on success, or a `RuntimeError` describing the compilation failure.
 
 ```rust
-use wave_sdk::kernel::{compile, Language};
+use wave_gpu::kernel::{compile, Language};
 
 let source = r#"
 @wave_gpu.kernel
-def add(a: f32, b: f32, out: f32):
+def add(a: f32[:], b: f32[:], out: f32[:]):
     tid = thread_id()
     out[tid] = a[tid] + b[tid]
 "#;
@@ -202,42 +209,42 @@ def add(a: f32, b: f32, out: f32):
 let kernel = compile(source, Language::Python).expect("compilation failed");
 ```
 
-### `CompiledKernel` Methods
+### `CompiledKernel` methods
 
-#### `launch(&self, device: &Device, buffers: &[&DeviceBuffer], scalars: &[u32], grid: [u32; 3], workgroup: [u32; 3]) -> Result<(), String>`
+#### `launch(&mut self, device: &Device, buffers: &mut [&mut DeviceBuffer], scalars: &[u32], grid: [u32; 3], workgroup: [u32; 3]) -> Result<(), RuntimeError>`
 
 Dispatch the kernel on the given device.
 
 ```rust
-use wave_sdk::{array, device, kernel};
+use wave_gpu::{array, device, kernel};
 
 let dev = device::detect().expect("no GPU");
-let a = array::from_f32(&[1.0, 2.0, 3.0, 4.0]);
-let b = array::from_f32(&[5.0, 6.0, 7.0, 8.0]);
-let out = array::zeros_f32(4);
+let mut a = array::from_f32(&[1.0, 2.0, 3.0, 4.0]);
+let mut b = array::from_f32(&[5.0, 6.0, 7.0, 8.0]);
+let mut out = array::zeros_f32(4);
 
-let k = kernel::compile(src, kernel::Language::Python).unwrap();
+let mut k = kernel::compile(src, kernel::Language::Python).unwrap();
 
 k.launch(
     &dev,
-    &[&a, &b, &out],
+    &mut [&mut a, &mut b, &mut out],
     &[],              // no scalar arguments
-    [4, 1, 1],        // grid dimensions
+    [1, 1, 1],        // workgroup counts
     [4, 1, 1],        // workgroup dimensions
 ).expect("kernel launch failed");
 
-let result = out.to_f32();
+let result = out.to_f32()?;
 assert_eq!(result, vec![6.0, 8.0, 10.0, 12.0]);
 ```
 
-**Parameters:**
+Parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `device` | `&Device` | Target GPU device. |
-| `buffers` | `&[&DeviceBuffer]` | Device buffers bound as kernel arguments, in declaration order. |
-| `scalars` | `&[u32]` | Scalar values passed as kernel arguments (pushed as 32-bit constants). |
-| `grid` | `[u32; 3]` | Global grid dimensions `[x, y, z]`. |
+| `buffers` | `&mut [&mut DeviceBuffer]` | Device buffers bound as kernel arguments, in declaration order. |
+| `scalars` | `&[u32]` | Scalar values passed as kernel arguments; pushed as 32-bit constants. |
+| `grid` | `[u32; 3]` | Workgroup counts `[x, y, z]`. |
 | `workgroup` | `[u32; 3]` | Workgroup dimensions `[x, y, z]`. |
 
-**Returns:** `Ok(())` on success. `Err(String)` if dispatch fails (e.g., invalid grid dimensions, device error).
+Returns: `Ok(())` on success. `Err(RuntimeError)` if translation, buffer preparation, compilation, or execution fails.
